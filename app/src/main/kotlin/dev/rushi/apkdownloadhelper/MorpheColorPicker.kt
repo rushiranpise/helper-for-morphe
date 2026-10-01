@@ -36,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -273,7 +274,7 @@ internal fun AccentSwatchGrid(
         AccentSwatch(
             fill = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
             selected = selected == null,
-            label = "Default",
+            label = stringResource(R.string.default_label),
             description = "Keep the style's own accent",
             onClick = onClear,
             icon = Icons.Outlined.Close
@@ -293,7 +294,7 @@ internal fun AccentSwatchGrid(
         AccentSwatch(
             fill = selected?.takeIf { customSelected } ?: MaterialTheme.colorScheme.surfaceVariant,
             selected = customSelected,
-            label = "Custom",
+            label = stringResource(R.string.custom),
             description = "Custom colour",
             onClick = onCustomClick,
             icon = Icons.Outlined.Colorize
@@ -375,7 +376,7 @@ internal fun MorpheAccentPickerDialog(
     }
 
     MorpheDialog(
-        title = "Custom accent",
+        title = stringResource(R.string.custom_accent),
         onDismiss = onDismiss,
         actions = {
             MorpheDialogButton(
@@ -411,13 +412,13 @@ internal fun MorpheAccentPickerDialog(
         SaturationValuePanel(
             hsv = hsv,
             onChange = { saturation, value -> moveTo(hsv.copy(saturation = saturation, value = value)) },
-            contentDescription = "Shade"
+            contentDescription = stringResource(R.string.shade)
         )
 
         HueSlider(
             hue = hsv.hue,
             onChange = { moveTo(hsv.copy(hue = it)) },
-            contentDescription = "Hue"
+            contentDescription = stringResource(R.string.hue)
         )
 
         OutlinedTextField(
@@ -439,7 +440,7 @@ internal fun MorpheAccentPickerDialog(
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             isError = hexInput.isNotBlank() && !hexValid,
-            label = { Text("Hex colour") },
+            label = { Text(stringResource(R.string.hex_colour)) },
             placeholder = { Text("#RRGGBB") }
         )
     }

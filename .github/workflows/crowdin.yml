@@ -1,0 +1,159 @@
+name: Translations
+
+# Two halves of one job, on two different days, because they answer different questions. A push
+# that changes the source strings tells Crowdin what there is to translate, and that has to happen
+# while the change is still fresh. Translations arrive whenever a translator gets to them, which no
+# push can predict, so the download runs on a schedule and opens a pull request with whatever
+# changed - the one part of this that needs a person.
+#
+# Nothing here can push a translation into the tree on its own, which is deliberate: a locale
+# folder in this repository is a claim that the language is translated, and that claim is worth a
+# look before it is made.
+#
+# `CROWDIN_PROJECT_ID` is a repository *variable*, not a secret (Settings -> Secrets and variables
+# -> Actions -> Variables). Until it is set there, every job below is skipped: the project it names
+# has to be licensed on Crowdin first, and a workflow that fails on every push until then would
+# only be noise.
+on:
+  push:
+    branches: [master]
+    paths:
+      - app/src/main/res/values/strings.xml
+      - crowdin.yml
+      - .github/workflows/crowdin.yml
+  schedule:
+    # Nightly. Nothing here is urgent, and a run in the small hours cannot collide with a push.
+    - cron: '23 4 * * *'
+  workflow_dispatch:
+    inputs:
+      seed_translations:
+        description: >-
+          Also upload this repository's own translation files to Crowdin. For a language the
+          project does not have yet, whose folder this app already carries.
+        type: boolean
+        default: false
+
+jobs:
+  upload:
+    if: >-
+      vars.CROWDIN_PROJECT_ID != '' &&
+      (github.event_name == 'push' || inputs.seed_translations)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Send the source strings
+        uses: crowdin/github-action@v3
+        with:
+          config: crowdin.yml
+          project_id: ${{ vars.CROWDIN_PROJECT_ID }}
+          token: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+          upload_sources: true
+          # The repository is not where translations are written, so this is off for an ordinary
+          # run. It is turned on by hand for a language the project does not have yet, where the
+          # app's own folder is the only copy of that language anywhere: the files named by the
+          # translation pattern are read back in as its translations.
+          upload_translations: ${{ inputs.seed_translations }}
+          download_translations: false
+          create_pull_request: false
+
+  download:
+    # Not on a seeding run: that run exists to push a language up, and pulling straight back down
+    # in the same breath would only race the import it just asked for.
+    if: >-
+      vars.CROWDIN_PROJECT_ID != '' &&
+      github.event_name != 'push' && !inputs.seed_translations
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bring back whatever has been translated
+        uses: crowdin/github-action@v3
+        with:
+          config: crowdin.yml
+          project_id: ${{ vars.CROWDIN_PROJECT_ID }}
+          token: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+          # Without this Crowdin writes the source text into a language with no translation of its
+          # own, so the export claims languages are translated when they are still English.
+          skip_untranslated_strings: true
+          download_translations: true
+          upload_sources: false
+          localization_branch_name: l10n
+          push_translations: true
+          create_pull_request: true
+          pull_request_base_branch_name: master
+          pull_request_title: 'chore(i18n): new translations from Crowdin'
+          pull_request_body: >-
+            Translations that arrived in Crowdin since the last sync. Only
+            `app/src/main/res/values-*/strings.xml` changes, and the merge is
+            automatic once that is all it is.
+          commit_message: 'chore(i18n): new translations from Crowdin'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  merge:
+    # In the same workflow as the pull request it merges, and not in one of its own reacting to the
+    # pull request event: GitHub starts no runs for events caused by GITHUB_TOKEN, and the pull
+    # request is opened with that token, so a separate workflow would wait for an event that never
+    # arrives.
+    needs: download
+    if: >-
+      vars.CROWDIN_PROJECT_ID != '' &&
+      github.event_name != 'push' && !inputs.seed_translations
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Find the pull request the download opened
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          number=$(gh pr list --head l10n --state open --json number -q '.[0].number')
+          if [ -z "$number" ]; then
+            echo "nothing to merge"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          gh pr diff "$number" --name-only | sed '/^$/d' > changed.txt
+          cat changed.txt
+
+      - name: Check it before merging it
+        if: steps.pr.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          # A translation cannot break anything the way code can, but a pull request that touches
+          # something other than the locale folders is not a translation pull request.
+          bad=$(grep -vE '^app/src/main/res/values-[^/]+/strings\.xml$' changed.txt || true)
+          if [ -n "$bad" ]; then
+            echo "::error::this changes something other than the locale folders:"
+            echo "$bad"
+            exit 1
+          fi
+          # And a file with no strings in it would wipe a language rather than add to it.
+          while read -r f; do
+            [ -f "$f" ] || continue
+            n=$(grep -c '<string ' "$f" || true)
+            if [ "$n" -eq 0 ]; then
+              echo "::error::$f holds no strings"
+              exit 1
+            fi
+          done < changed.txt
+
+      - name: Merge it
+        if: steps.pr.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge ${{ steps.pr.outputs.number }} \
+            --squash --delete-branch \
+            --subject 'chore(i18n): new translations from Crowdin' \
+            --body 'Merged automatically: only translated strings.xml files changed.'

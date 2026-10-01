@@ -154,6 +154,7 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.DisposableEffect
@@ -2371,18 +2372,18 @@ private fun CaptchaBrowserScreen(
                 )
             }
             if (candidate.captchaUrl != null && !candidate.directDownload) {
-                InfoBox(title = "Solve the captcha", icon = Icons.Outlined.Shield) {
+                InfoBox(title = stringResource(R.string.solve_the_captcha), icon = Icons.Outlined.Shield) {
                     Text(
-                        text = "When the page starts the download, the file is captured and " +
+                        text = stringResource(R.string.when_the_page_starts_the_download) +
                             "returned to Morphe automatically.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             } else {
-                InfoBox(title = "Find the download link", icon = Icons.Outlined.OpenInBrowser) {
+                InfoBox(title = stringResource(R.string.find_the_download_link), icon = Icons.Outlined.OpenInBrowser) {
                     Text(
-                        text = "The app downloads the file once the page offers it.",
+                        text = stringResource(R.string.the_app_downloads_the_file_once),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -2557,7 +2558,7 @@ private fun HelperScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "Helper",
+                            text = stringResource(R.string.helper),
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground,
@@ -2610,7 +2611,7 @@ private fun HelperScreen(
                     )
                     HelperHeaderIconButton(
                         icon = Icons.Outlined.Settings,
-                        contentDescription = "Settings",
+                        contentDescription = stringResource(R.string.settings),
                         onClick = {
                             refreshHistory()
                             showSettings = true
@@ -2819,7 +2820,7 @@ private fun SourceHealthCard() {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Source health",
+                text = stringResource(R.string.source_health),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
@@ -3023,7 +3024,7 @@ private fun HistoryEntryCard(
                 }
             } else {
                 Text(
-                    text = "File no longer available (temporary hand-off files are cleaned up after Morphe copies them).",
+                    text = stringResource(R.string.file_no_longer_available_temporary_hand),
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -3034,7 +3035,7 @@ private fun HistoryEntryCard(
     val savedResult = entry.scanVerdict?.result
     if (showScanResult && savedResult != null) {
         MorpheDialog(
-            title = "Scan result",
+            title = stringResource(R.string.scan_result),
             onDismiss = { showScanResult = false },
             actions = {
                 HelperButton(
@@ -3108,7 +3109,7 @@ private fun HelperSettingsScreen(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
-                        text = "Settings",
+                        text = stringResource(R.string.settings),
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onBackground
@@ -3121,7 +3122,7 @@ private fun HelperSettingsScreen(
                 }
                 HelperHeaderIconButton(
                     icon = Icons.AutoMirrored.Outlined.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = stringResource(R.string.back),
                     onClick = onBack,
                     modifier = Modifier.align(Alignment.CenterStart)
                 )
@@ -3192,7 +3193,7 @@ private fun SystemTabContent(
 
     if (locationDialog) {
         SettingsChoiceDialog(
-            title = "Save downloads",
+            title = stringResource(R.string.save_downloads),
             choices = locations.map { SettingsChoice(it.icon(), it.title, it.description) },
             selectedIndex = locations.indexOf(settings.downloadLocation),
             onSelect = { index ->
@@ -3205,7 +3206,7 @@ private fun SystemTabContent(
 
     if (policyDialog) {
         SettingsChoiceDialog(
-            title = "Connection",
+            title = stringResource(R.string.connection),
             choices = policies.map { SettingsChoice(it.icon(), it.title, it.description) },
             selectedIndex = policies.indexOf(settings.networkPolicy),
             onSelect = { index ->
@@ -3218,7 +3219,7 @@ private fun SystemTabContent(
 
     if (fastModePolicyDialog) {
         SettingsChoiceDialog(
-            title = "Which version to fetch",
+            title = stringResource(R.string.which_version_to_fetch),
             choices = fastPolicies.map { policy ->
                 SettingsChoice(
                     icon = when (policy) {
@@ -3253,7 +3254,7 @@ private fun SystemTabContent(
                 })
         }
         SettingsChoiceDialog(
-            title = "Default source",
+            title = stringResource(R.string.default_source),
             choices = choices,
             selectedIndex = settings.preferredSource?.let { source -> choices.indexOfFirst { it.title == source.label } } ?: 0,
             onSelect = { index ->
@@ -3276,10 +3277,10 @@ private fun SystemTabContent(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingMedium)
     ) {
-        SettingsGroup(title = "Downloads & storage", icon = Icons.Outlined.SdStorage) {
+        SettingsGroup(title = stringResource(R.string.downloads_storage), icon = Icons.Outlined.SdStorage) {
             SettingsRow(
                 icon = settings.downloadLocation.icon(),
-                title = "Save downloads",
+                title = stringResource(R.string.save_downloads),
                 subtitle = settings.downloadLocation.description,
                 value = settings.downloadLocation.title,
                 onClick = { locationDialog = true }
@@ -3287,7 +3288,7 @@ private fun SystemTabContent(
             MorpheDivider()
             SettingsRow(
                 icon = Icons.Outlined.CleaningServices,
-                title = "Storage used",
+                title = stringResource(R.string.storage_used),
                 subtitle = "Helper cache ${cacheBytes.formatBytes()}  ·  Downloads copy ${downloadsBytes.formatBytes()}",
                 value = "Clear",
                 onClick = {
@@ -3300,7 +3301,7 @@ private fun SystemTabContent(
             MorpheDivider()
             SettingsSwitchItem(
                 icon = Icons.Outlined.DeleteOutline,
-                title = "Auto-clear after hand-off",
+                title = stringResource(R.string.auto_clear_after_hand_off),
                 subtitle = "Remove temporary APKs after handing off to Morphe, and clear old cache files on launch.",
                 checked = settings.deleteTemporaryAfterHandoff,
                 onToggle = {
@@ -3309,10 +3310,10 @@ private fun SystemTabContent(
             )
         }
 
-        SettingsGroup(title = "Sources", icon = Icons.Outlined.Dns) {
+        SettingsGroup(title = stringResource(R.string.sources), icon = Icons.Outlined.Dns) {
             SettingsRow(
                 icon = Icons.Outlined.Star,
-                title = "Default source",
+                title = stringResource(R.string.default_source),
                 subtitle = "Used first when a request is resolved",
                 value = settings.preferredSource?.label ?: "Automatic",
                 onClick = { sourceDialog = true }
@@ -3340,10 +3341,10 @@ private fun SystemTabContent(
             }
         }
 
-        SettingsGroup(title = "Connection", icon = Icons.Outlined.NetworkCheck) {
+        SettingsGroup(title = stringResource(R.string.connection), icon = Icons.Outlined.NetworkCheck) {
             SettingsRow(
                 icon = settings.networkPolicy.icon(),
-                title = "Network policy",
+                title = stringResource(R.string.network_policy),
                 subtitle = settings.networkPolicy.description,
                 value = settings.networkPolicy.title,
                 onClick = { policyDialog = true }
@@ -3351,7 +3352,7 @@ private fun SystemTabContent(
             MorpheDivider()
             SettingsSwitchItem(
                 icon = Icons.Outlined.Dns,
-                title = "AdGuard DNS",
+                title = stringResource(R.string.adguard_dns),
                 subtitle = "Blocks ads and trackers on download pages and in the captcha browser. " +
                     "Falls back to the system resolver whenever it fails.",
                 checked = settings.adGuardDns,
@@ -3361,10 +3362,10 @@ private fun SystemTabContent(
             )
         }
 
-        SettingsGroup(title = "Fast Mode", icon = Icons.Outlined.Bolt) {
+        SettingsGroup(title = stringResource(R.string.fast_mode), icon = Icons.Outlined.Bolt) {
             SettingsSwitchItem(
                 icon = Icons.Outlined.Bolt,
-                title = "Fast Mode",
+                title = stringResource(R.string.fast_mode),
                 subtitle = "Auto-fetch a version across sources and return it to Morphe automatically. " +
                     "Format differences are allowed.",
                 checked = settings.fastMode,
@@ -3376,7 +3377,7 @@ private fun SystemTabContent(
                 MorpheDivider()
                 SettingsRow(
                     icon = Icons.Outlined.Tune,
-                    title = "Which version to fetch",
+                    title = stringResource(R.string.which_version_to_fetch),
                     value = settings.fastModePolicy.title,
                     onClick = { fastModePolicyDialog = true }
                 )
@@ -3407,7 +3408,7 @@ private fun AppearanceTabContent(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingMedium)
     ) {
-        SettingsGroup(title = "Theme", icon = Icons.Outlined.Palette) {
+        SettingsGroup(title = stringResource(R.string.theme), icon = Icons.Outlined.Palette) {
             ThemeMode.entries.forEachIndexed { index, mode ->
                 if (index > 0) MorpheDivider()
                 SettingsRow(
@@ -3420,7 +3421,7 @@ private fun AppearanceTabContent(
             }
         }
 
-        SettingsGroup(title = "Colour style", icon = Icons.Outlined.ColorLens) {
+        SettingsGroup(title = stringResource(R.string.colour_style), icon = Icons.Outlined.ColorLens) {
             styles.forEachIndexed { index, style ->
                 if (index > 0) MorpheDivider()
                 SettingsRow(
@@ -3436,10 +3437,10 @@ private fun AppearanceTabContent(
         // Pure black only means anything behind dark content, so it is hidden
         // while the app is pinned to the light theme.
         if (settings.themeMode != ThemeMode.LIGHT) {
-            SettingsGroup(title = "Dark theme", icon = Icons.Outlined.DarkMode) {
+            SettingsGroup(title = stringResource(R.string.dark_theme), icon = Icons.Outlined.DarkMode) {
                 SettingsSwitchItem(
                     icon = Icons.Outlined.Contrast,
-                    title = "Pure black",
+                    title = stringResource(R.string.pure_black),
                     subtitle = "Paint backgrounds fully black instead of the theme's near-black. " +
                         "Saves power on OLED screens.",
                     checked = settings.pureBlackTheme,
@@ -3453,7 +3454,7 @@ private fun AppearanceTabContent(
         // Wallpaper colours are the accent, and the neutral style has none to
         // swap, so the grid is offered for the Morphe palette alone.
         if (settings.themeStyle == ThemeStyle.MORPHE) {
-            SettingsGroup(title = "Accent colour", icon = Icons.Outlined.Colorize) {
+            SettingsGroup(title = stringResource(R.string.accent_colour), icon = Icons.Outlined.Colorize) {
                 AccentGridSection {
                     AccentSwatchGrid(
                         colors = MorpheAccentPresets,
@@ -3501,10 +3502,10 @@ private fun AdvancedTabContent(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingMedium)
     ) {
-        SettingsGroup(title = "VirusTotal", icon = Icons.Outlined.Shield) {
+        SettingsGroup(title = stringResource(R.string.virustotal), icon = Icons.Outlined.Shield) {
             SettingsSwitchItem(
                 icon = Icons.Outlined.Shield,
-                title = "VirusTotal scanning",
+                title = stringResource(R.string.virustotal_scanning),
                 subtitle = "Scan downloaded files with VirusTotal before returning them to Morphe.",
                 checked = settings.virusTotalEnabled,
                 onToggle = {
@@ -3570,10 +3571,10 @@ private fun LogsTabContent(
             onShare = onShareHistoryEntry
         )
 
-        SettingsGroup(title = "Logging", icon = Icons.Outlined.BugReport) {
+        SettingsGroup(title = stringResource(R.string.logging), icon = Icons.Outlined.BugReport) {
             SettingsSwitchItem(
                 icon = Icons.Outlined.BugReport,
-                title = "Log to Logcat",
+                title = stringResource(R.string.log_to_logcat),
                 subtitle = "Write request, result, and source HTTP details to the system log (adb logcat) for debugging.",
                 checked = settings.logcatLogging,
                 onToggle = {
@@ -3606,7 +3607,7 @@ private fun ApiKeyEditor(
         verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingSmall)
     ) {
         Text(
-            text = "API key",
+            text = stringResource(R.string.api_key),
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurface
         )
@@ -3620,7 +3621,7 @@ private fun ApiKeyEditor(
             ),
             placeholder = {
                 Text(
-                    "Enter API key",
+                    stringResource(R.string.enter_api_key),
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                 )
             }
@@ -3648,7 +3649,7 @@ private fun ApiKeyEditor(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "How to get a free API key",
+                text = stringResource(R.string.how_to_get_a_free_api),
                 color = MaterialTheme.colorScheme.primary,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
@@ -3656,7 +3657,7 @@ private fun ApiKeyEditor(
             )
             Icon(
                 imageVector = Icons.Outlined.OpenInNew,
-                contentDescription = "Open VirusTotal API key guide",
+                contentDescription = stringResource(R.string.open_virustotal_api_key_guide),
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(16.dp)
             )
@@ -3989,7 +3990,7 @@ private fun SettingsDropdownCard(
             }
             Icon(
                 imageVector = Icons.Outlined.ArrowDropDown,
-                contentDescription = "Change default source",
+                contentDescription = stringResource(R.string.change_default_source),
                 tint = colors.primary,
                 modifier = Modifier.size(MorpheDefaults.IconSize)
             )
@@ -4026,12 +4027,12 @@ private fun SettingsStorageCard(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
-                        "Clear storage, cache & downloads",
+                        stringResource(R.string.clear_storage_cache_downloads),
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium
                     )
                     Text(
-                        text = "Removes both the cache copies and the visible Downloads copies.",
+                        text = stringResource(R.string.removes_both_the_cache_copies),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -4045,12 +4046,12 @@ private fun SettingsStorageCard(
             MorpheDivider(fullWidth = true)
             StorageInfoLine(
                 icon = Icons.Outlined.SdStorage,
-                label = "Helper cache",
+                label = stringResource(R.string.helper_cache),
                 sizeBytes = cacheBytes
             )
             StorageInfoLine(
                 icon = Icons.Outlined.FolderOpen,
-                label = "Downloads copy",
+                label = stringResource(R.string.downloads_copy),
                 sizeBytes = downloadsBytes
             )
         }
@@ -4196,7 +4197,7 @@ private fun SettingTextFieldRow(
                     color = colors.onSurface
                 ),
                 placeholder = {
-                    Text("Enter API key", color = colors.onSurfaceVariant.copy(alpha = 0.5f))
+                    Text(stringResource(R.string.enter_api_key), color = colors.onSurfaceVariant.copy(alpha = 0.5f))
                 }
             )
         }
@@ -4268,7 +4269,7 @@ private fun VirusTotalQuotaCard(apiKey: String) {
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "VirusTotal quota",
+                        stringResource(R.string.virustotal_quota),
                         fontWeight = FontWeight.Bold,
                         color = colors.onSurface
                     )
@@ -4281,7 +4282,7 @@ private fun VirusTotalQuotaCard(apiKey: String) {
                 } else {
                     Icon(
                         imageVector = Icons.Outlined.Refresh,
-                        contentDescription = "Refresh quota",
+                        contentDescription = stringResource(R.string.refresh_quota),
                         tint = colors.primary,
                         modifier = Modifier
                             .size(20.dp)
@@ -4310,7 +4311,7 @@ private fun VirusTotalQuotaCard(apiKey: String) {
                     QuotaBar("Per month", current.monthlyUsed, current.monthlyAllowed)
                 }
                 failed -> Text(
-                    text = "Couldn't load quota — check your API key.",
+                    text = stringResource(R.string.couldn_t_load_quota_check_your),
                     color = colors.error,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -4532,7 +4533,7 @@ private fun AppDisclaimerBanner() {
                 tint = SemanticTone.Warning.accent
             )
             Text(
-                text = "Patch index maintained by the community. Use at your own risk. " +
+                text = stringResource(R.string.patch_index_maintained_by_the_community) +
                     "Community bundles are maintained by their respective authors and are not " +
                     "individually verified. Morphe and the developer of this app are not " +
                     "responsible for third-party patches.",
@@ -4633,7 +4634,7 @@ private fun AppBrowserScreen(
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Text(
-                    text = "Find New Apps",
+                    text = stringResource(R.string.find_new_apps),
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
@@ -4662,7 +4663,7 @@ private fun AppBrowserScreen(
             }
             HelperHeaderIconButton(
                 icon = Icons.AutoMirrored.Outlined.ArrowBack,
-                contentDescription = "Back",
+                contentDescription = stringResource(R.string.back),
                 onClick = {
                     if (selected != null) selected = null else onBack()
                 },
@@ -4671,7 +4672,7 @@ private fun AppBrowserScreen(
             if (selected == null) {
                 HelperHeaderIconButton(
                     icon = Icons.Outlined.Refresh,
-                    contentDescription = "Refresh",
+                    contentDescription = stringResource(R.string.refresh),
                     onClick = { loadKey++ },
                     modifier = Modifier.align(Alignment.CenterEnd)
                 )
@@ -4696,7 +4697,7 @@ private fun AppBrowserScreen(
                 ),
                 placeholder = {
                     Text(
-                        "Search apps or packages",
+                        stringResource(R.string.search_apps_or_packages),
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                     )
                 },
@@ -4731,7 +4732,7 @@ private fun AppBrowserScreen(
                         )
                         Spacer(Modifier.width(MorpheDefaults.ContentPaddingSmall))
                         Text(
-                            "Loading app index…",
+                            stringResource(R.string.loading_app_index),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -4874,7 +4875,7 @@ private fun AppBrowserScreen(
                                 ) {
                                     ThemedIcon(
                                         icon = Icons.Outlined.KeyboardArrowUp,
-                                        contentDescription = "Go to top",
+                                        contentDescription = stringResource(R.string.go_to_top),
                                         tint = SemanticTone.Primary.content,
                                         modifier = Modifier.padding(12.dp)
                                     )
@@ -5107,7 +5108,7 @@ private fun AppDetailView(
                     trailingContent = {
                         HelperIconButton(
                             icon = Icons.Outlined.Storefront,
-                            contentDescription = "Open in Play Store",
+                            contentDescription = stringResource(R.string.open_in_play_store),
                             onClick = {
                                 context.openPlayStoreListing(app.packageName, playStoreUrl(app.packageName))
                             }
@@ -5237,8 +5238,8 @@ private fun AppSourceCard(
                     MorphePillButton(
                         onClick = { onAddToMorphe(addUrl) },
                         icon = Icons.Outlined.Add,
-                        contentDescription = "Add to Morphe",
-                        label = "Add to Morphe",
+                        contentDescription = stringResource(R.string.add_to_morphe),
+                        label = stringResource(R.string.add_to_morphe),
                         tone = SemanticTone.Primary,
                         modifier = Modifier.weight(1f)
                     )
@@ -5247,8 +5248,8 @@ private fun AppSourceCard(
                     MorphePillButton(
                         onClick = { onOpenUrl(webUrl) },
                         icon = Icons.Outlined.OpenInNew,
-                        contentDescription = "Open repo",
-                        label = "Open repo",
+                        contentDescription = stringResource(R.string.open_repo),
+                        label = stringResource(R.string.open_repo),
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -5260,7 +5261,7 @@ private fun AppSourceCard(
                 ) {
                     if (source.patches.isEmpty()) {
                         Text(
-                            "No patches listed for this source.",
+                            stringResource(R.string.no_patches_listed_for_this_source),
                             color = colors.onSurfaceVariant,
                             style = MaterialTheme.typography.bodySmall
                         )
@@ -5323,7 +5324,7 @@ private fun AppSourceCard(
                     if (mirrors.isNotEmpty()) {
                         MorpheDivider(fullWidth = true)
                         Text(
-                            text = "Same patches also provided by",
+                            text = stringResource(R.string.same_patches_also_provided_by),
                             color = colors.onSurfaceVariant,
                             style = MaterialTheme.typography.labelMedium
                         )
@@ -5456,7 +5457,7 @@ private fun ReuseOfferDialog(
         onDismissRequest = onDownloadNew,
         title = {
             Text(
-                text = "Use an existing APK?",
+                text = stringResource(R.string.use_an_existing_apk),
                 fontWeight = FontWeight.Bold
             )
         },
@@ -5466,7 +5467,7 @@ private fun ReuseOfferDialog(
                 verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingSmall)
             ) {
                 Text(
-                    text = "A previous download for this exact version is still available. Pick one to return to Morphe without downloading again.",
+                    text = stringResource(R.string.a_previous_download_for_this_exact),
                     style = MaterialTheme.typography.bodyMedium
                 )
                 options.forEach { option ->
@@ -5656,7 +5657,7 @@ private fun AppInfoHeader(
                     if (installed) {
                         Icon(
                             imageVector = Icons.Outlined.CheckCircle,
-                            contentDescription = "Installed",
+                            contentDescription = stringResource(R.string.installed),
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp)
                         )
@@ -5675,7 +5676,7 @@ private fun AppInfoHeader(
                     )
                     Icon(
                         imageVector = Icons.Outlined.ContentCopy,
-                        contentDescription = "Copy package",
+                        contentDescription = stringResource(R.string.copy_package),
                         tint = if (copied) {
                             MaterialTheme.colorScheme.primary
                         } else {
@@ -5705,7 +5706,7 @@ private fun AppInfoHeader(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             AppInfoStatCard(
-                label = "Version",
+                label = stringResource(R.string.version),
                 value = request.requestedVersionName ?: "Any",
                 subtext = request.versionCodeSummary?.let { "build $it" },
                 modifier = Modifier
@@ -5803,7 +5804,7 @@ private fun AppInfoFormatCard(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
-                        text = "Format",
+                        text = stringResource(R.string.format),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelSmall
                     )
@@ -5911,7 +5912,7 @@ private fun AppInfoArchCard(abis: List<String>) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "Architecture",
+                    text = stringResource(R.string.architecture),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.weight(1f)
@@ -6284,7 +6285,7 @@ private fun SourcePickerFlow(
                 }
                 Spacer(Modifier.weight(1f))
                 Text(
-                    text = "How it works",
+                    text = stringResource(R.string.how_it_works),
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
@@ -6599,7 +6600,7 @@ private fun SourceCard(
                 if (confirmed) {
                     Icon(
                         imageVector = Icons.Outlined.CheckCircle,
-                        contentDescription = "Available",
+                        contentDescription = stringResource(R.string.available),
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(14.dp)
                     )
@@ -6679,7 +6680,7 @@ private fun SelectedSourceBar(source: DownloadSource) {
                 verticalArrangement = Arrangement.spacedBy(1.dp)
             ) {
                 Text(
-                    text = "Selected source",
+                    text = stringResource(R.string.selected_source),
                     color = SemanticTone.Primary.content.copy(alpha = 0.75f),
                     style = MaterialTheme.typography.labelSmall
                 )
@@ -6693,7 +6694,7 @@ private fun SelectedSourceBar(source: DownloadSource) {
             }
             ThemedIcon(
                 icon = Icons.Outlined.CheckCircle,
-                contentDescription = "Selected",
+                contentDescription = stringResource(R.string.selected),
                 size = 22.dp
             )
         }
@@ -6718,12 +6719,12 @@ private fun SourceBottomBar(
         ) {
             SourceSquareButton(
                 icon = Icons.Outlined.Refresh,
-                contentDescription = "Refresh",
+                contentDescription = stringResource(R.string.refresh),
                 onClick = onRefresh
             )
             SourceSquareButton(
                 icon = Icons.Outlined.Close,
-                contentDescription = "Cancel",
+                contentDescription = stringResource(R.string.cancel),
                 onClick = onCancel
             )
             val primaryInteractionSource = remember { MutableInteractionSource() }
@@ -7235,7 +7236,7 @@ private fun DownloadHistorySection(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Download history",
+                text = stringResource(R.string.download_history),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
@@ -7306,7 +7307,7 @@ private fun RequestLogsCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Request logs",
+                text = stringResource(R.string.request_logs),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
@@ -7566,7 +7567,7 @@ private fun CheckingPickedFileState(state: UiState.CheckingPickedFile) {
         ) {
             CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Checking selected file")
+                Text(stringResource(R.string.checking_selected_file))
                 Text(
                     text = state.candidate.source.label,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -7603,7 +7604,7 @@ private fun FastModeCard(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    Text("Fast Mode", fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.fast_mode), fontWeight = FontWeight.Bold)
                     progress.sourceLabel?.let { source ->
                         Text(
                             text = source,
@@ -7632,11 +7633,14 @@ private fun FastModeCard(
             // bytes matched the source-published hash (not just the transient
             // post-download status line).
             if (progress.shaVerified) {
+                // Read outside the semantics block: that lambda is not a composable one, so a
+                // resource cannot be resolved inside it.
+                val verifiedLabel = stringResource(R.string.sha_256_verified)
                 MorpheStatusBadge(
                     text = null,
                     icon = Icons.Outlined.Verified,
                     tone = SemanticTone.Primary,
-                    modifier = Modifier.semantics { contentDescription = "SHA-256 verified" }
+                    modifier = Modifier.semantics { contentDescription = verifiedLabel }
                 )
             }
             if (progress.awaitingVersionChoice) {
@@ -7668,7 +7672,7 @@ private fun FastModeCard(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Requested",
+                                    text = stringResource(R.string.requested),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = SemanticTone.Primary.content.copy(alpha = 0.7f)
                                 )
@@ -7948,7 +7952,7 @@ private fun DownloadingState(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
-                    text = "Hand the downloaded file to Morphe now without waiting for VirusTotal.",
+                    text = stringResource(R.string.hand_the_downloaded_file_to_morphe),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -8081,11 +8085,14 @@ private fun ScanResultCard(
                     )
                 }
                 if (shaVerified) {
+                    // As above: Modifier.semantics takes a plain lambda, so the resource is read
+                    // before it rather than inside it.
+                    val verifiedLabel = stringResource(R.string.sha_256_verified)
                     MorpheStatusBadge(
                         text = null,
                         icon = Icons.Outlined.Verified,
                         tone = SemanticTone.Primary,
-                        modifier = Modifier.semantics { contentDescription = "SHA-256 verified" }
+                        modifier = Modifier.semantics { contentDescription = verifiedLabel }
                     )
                 }
             }
@@ -8140,14 +8147,14 @@ private fun ScanResultCard(
             }
             if (isMalicious) {
                 Text(
-                    text = "This file was flagged by antivirus engines. " +
+                    text = stringResource(R.string.this_file_was_flagged_by_antivirus) +
                         "Only proceed if you trust the source.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
                 )
             } else if (isError) {
                 Text(
-                    text = "The scan did not complete (network or VirusTotal queue). " +
+                    text = stringResource(R.string.the_scan_did_not_complete_network) +
                         "You can still proceed, or cancel to keep the file out of Morphe.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
@@ -8156,7 +8163,7 @@ private fun ScanResultCard(
             if (scanResult.apkResults.isNotEmpty()) {
                 MorpheDivider(modifier = Modifier.padding(vertical = 4.dp), fullWidth = true)
                 Text(
-                    text = "APK details",
+                    text = stringResource(R.string.apk_details),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold
                 )
@@ -8312,7 +8319,7 @@ private fun ScanMetaRows(scanResult: VirusTotalScanner.ScanResult) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "SHA-256",
+                    text = stringResource(R.string.sha_256),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(0.38f)
@@ -8325,7 +8332,7 @@ private fun ScanMetaRows(scanResult: VirusTotalScanner.ScanResult) {
                 )
                 ThemedIcon(
                     icon = if (hashCopied) Icons.Outlined.CheckCircle else Icons.Outlined.ContentCopy,
-                    contentDescription = "Copy SHA-256",
+                    contentDescription = stringResource(R.string.copy_sha_256),
                     size = 16.dp,
                     tint = if (hashCopied) {
                         MaterialTheme.colorScheme.primary
@@ -8345,7 +8352,7 @@ private fun ScanMetaRows(scanResult: VirusTotalScanner.ScanResult) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "Open in VirusTotal",
+                    text = stringResource(R.string.open_in_virustotal),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Medium,
@@ -8354,7 +8361,7 @@ private fun ScanMetaRows(scanResult: VirusTotalScanner.ScanResult) {
                 Spacer(modifier = Modifier.weight(0.5f))
                 ThemedIcon(
                     icon = Icons.Outlined.OpenInNew,
-                    contentDescription = "Open in VirusTotal",
+                    contentDescription = stringResource(R.string.open_in_virustotal),
                     size = 16.dp
                 )
             }
