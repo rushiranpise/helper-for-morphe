@@ -66,7 +66,7 @@ internal object AppLog {
     /** Plain-text export with request/device context, for the Share action. */
     @Synchronized
     fun exportText(): String = buildString {
-        append("Helper for Morphe v${BuildConfig.VERSION_NAME}\n")
+        append("Morphe Helper v${BuildConfig.VERSION_NAME}\n")
         append("Device: ${Build.MANUFACTURER} ${Build.MODEL} · Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})\n")
         requestSummary?.let { summary ->
             append("----\n")

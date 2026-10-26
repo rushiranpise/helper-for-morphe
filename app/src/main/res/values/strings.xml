@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Helper for Morphe</string>
+    <string name="app_name">Morphe Helper</string>
     <string name="a_previous_download_for_this_exact">A previous download for this exact version is still available. Pick one to return to Morphe without downloading again.</string>
     <string name="accent_colour">Accent colour</string>
     <string name="add_to_morphe">Add to Morphe</string>
@@ -36,7 +36,7 @@
     <string name="go_to_top">Go to top</string>
     <string name="hand_the_downloaded_file_to_morphe">Hand the downloaded file to Morphe now without waiting for VirusTotal.</string>
     <string name="helper">Helper</string>
-    <string name="helper_cache">Helper cache</string>
+    <string name="helper_cache">Morphe Helper cache</string>
     <string name="hex_colour">Hex colour</string>
     <string name="how_it_works">How it works</string>
     <string name="how_to_get_a_free_api">How to get a free API key</string>

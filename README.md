@@ -1,10 +1,10 @@
-# Helper for Morphe
+# Morphe Helper
 
 <p align="center">
-  <img src="docs/logo.png" alt="Helper for Morphe" width="180" />
+  <img src="docs/logo.png" alt="Morphe Helper" width="180" />
 </p>
 
-Helper for Morphe is a standalone Android helper app for finding and returning original APK files requested by [Morphe Manager](https://github.com/MorpheApp). It receives a package/version request through an Android intent, resolves a matching file from a supported APK source, downloads it when a direct download is available, and returns a readable `content://` URI back to the caller.
+Morphe Helper is a standalone Android helper app for finding and returning original APK files requested by [Morphe Manager](https://github.com/MorpheApp). It receives a package/version request through an Android intent, resolves a matching file from a supported APK source, downloads it when a direct download is available, and returns a readable `content://` URI back to the caller.
 
 This project is independent from the APK source websites listed below. Source availability, package versions, download formats, and region/device access can change at any time.
 
@@ -50,7 +50,7 @@ This project is independent from the APK source websites listed below. Source av
 - **Live speed + ETA** in both the progress notification and the in-app card (`45% · 5.9 MB/s · 0:52 left`), smoothed so readings stay stable.
 - Download progress is followed by distinct **extracting / scanning** phases with their own percent bars instead of sitting at a stuck 100%.
 - Files are validated against the source-published **SHA-256** when available (shown as a verified badge), and against the real APK manifest before handoff.
-- Downloads land in Helper's cache by default (honouring the auto-clear-after-handoff toggle) or as a visible copy in `Downloads/Helper for Morphe`. A storage card shows both sizes and clears each with one tap; a startup sweep clears stale cache and reports how much it freed.
+- Downloads land in Helper's cache by default (honouring the auto-clear-after-handoff toggle) or as a visible copy in `Downloads/Morphe Helper`. A storage card shows both sizes and clears each with one tap; a startup sweep clears stale cache and reports how much it freed.
 
 ### Find New Apps
 
@@ -67,7 +67,7 @@ This project is independent from the APK source websites listed below. Source av
 
 ## Helper Settings
 
-- **Save downloads**: cache (honouring auto-clear) or a visible copy in `Downloads/Helper for Morphe`; a storage card shows cache and Downloads sizes and clears both with one tap.
+- **Save downloads**: cache (honouring auto-clear) or a visible copy in `Downloads/Morphe Helper`; a storage card shows cache and Downloads sizes and clears both with one tap.
 - **Connection**: Wi-Fi only, mobile data only, or both.
 - **Sources**: toggle each APK source, or set a **default source**.
 - **Fast Mode**: enable auto-resolve and choose the version policy (Requested / Latest / Always ask).
@@ -176,7 +176,7 @@ APK hosting and indexing costs money. If this helper saves you time, consider su
 
 ## License
 
-Helper for Morphe is licensed under the GNU General Public License v3.0. See [LICENSE](LICENSE).
+Morphe Helper is licensed under the GNU General Public License v3.0. See [LICENSE](LICENSE).
 
 ## Notes
 
