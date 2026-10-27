@@ -57,6 +57,7 @@
     <string name="refresh">Refresh</string>
     <string name="refresh_quota">Refresh quota</string>
     <string name="removes_both_the_cache_copies">Removes both the cache copies and the visible Downloads copies.</string>
+    <string name="request_how_it_works">Pick a source, then how the version is chosen:\n\n• Manual opens the source\'s site so you pick the file yourself.\n• Recommended fetches exactly the version Morphe asked for.\n• Latest takes the newest version the source offers.\n• History lists every version it has, for you to choose.\n\nThe helper downloads the file, checks its package and version against Morphe\'s request, then hands it back without another tap from you. If a source gates the file behind a captcha, \&quot;Solve captcha in app\&quot; opens a real browser and captures whatever it downloads.</string>
     <string name="request_logs">Request logs</string>
     <string name="requested">Requested</string>
     <string name="same_patches_also_provided_by">Same patches also provided by</string>

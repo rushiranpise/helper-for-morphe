@@ -21,6 +21,38 @@ The row reads `Trusted: 0 of 1` before that and `Trusted: 1 of 1` after it. Noth
 
 From then on, whenever Morphe needs an original APK it cannot find installed, the download screen offers **Use a helper app** -> **Open helper**. That launches this app, which resolves the requested version, downloads it, checks it against Morphe's package/version/signature expectations and hands the file straight back.
 
+## Using the request screen
+
+When Morphe needs an original APK it opens this app with the package and version it wants. The **App info** card shows exactly what was asked for:
+
+| Row | Meaning |
+| --- | --- |
+| Version | The version Morphe asked for, marked `Unpatched` |
+| Format | `APK`, `APKS` or `XAPK`, as the source publishes it |
+| Architecture | Which CPU splits the source offers, when it publishes per-architecture builds |
+
+**Selected source** is where the file comes from. Tap **Download source** to switch to another enabled source; the number beside it is how many are available. Per-source reachability is checked in Settings -> Advanced.
+
+**Version type** decides which file is fetched:
+
+- **Manual** opens the source's website so you download the file yourself; the app then picks it up and returns it.
+- **Recommended** fetches exactly the version Morphe asked for. This is the usual choice.
+- **Latest** takes the newest version the source offers, and only hands it over when it really is newer than the requested version.
+- **History** lists every version the source publishes, so you can pick one.
+
+Each mode also has its own **About ... mode** card under the row, and the **How it works** card above explains the flow on the screen itself.
+
+**Fast Mode** (the bolt in the header) skips all of this: it walks your enabled sources on its own and returns the first file that matches. Settings -> System controls whether it fetches the requested version, the newest version, or asks each time.
+
+Whatever the route, the downloaded file is checked before it can be handed over:
+
+- the **package name** must be the one Morphe asked for;
+- the **version** must be the requested version (unless you picked a newer one deliberately);
+- variants Morphe cannot patch, such as APKMirror's `-SECONDARY` builds, are rejected;
+- the **version code** is enforced only in Fast Mode, where a mismatch asks before continuing.
+
+With VirusTotal enabled the file is also scanned, and the verdict is recorded in the history. Once it passes, the file is handed back and the cache is cleared according to your auto-clear setting. You do not need to do anything further in Morphe: the patch resumes by itself.
+
 ## Features
 
 ### Request handling

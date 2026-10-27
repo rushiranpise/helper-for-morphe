@@ -6362,12 +6362,7 @@ private fun SourcePickerFlow(
             // Keeping each in its own block means no block's content height changes
             // mid-animation, so the layout can never go stale.
             AnimatedExpand(visible = showHowItWorks) {
-                InfoCard(
-                    "Pick a source, then a version type. The helper finds the version, " +
-                        "downloads it, validates it against Morphe's request, and returns it. " +
-                        "If a source gates the file behind a captcha, tap \"Solve captcha in app\" " +
-                        " a real browser opens and any download it produces is captured back."
-                )
+                InfoCard(stringResource(R.string.request_how_it_works))
             }
             Box {
                 DropdownMenu(
