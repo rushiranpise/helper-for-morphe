@@ -2975,6 +2975,18 @@ private fun HistoryEntryCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
+            // A game that refuses to start after patching is usually missing this, so
+            // say it was inside the file and where Android expects it.
+            entry.obbContents?.let { obb ->
+                Text(
+                    text = "Includes game data (${obb.summary}). Install it to " +
+                        "Android/obb/${entry.packageName} if the app will not start.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
             entry.scanVerdict?.let { verdict ->
                 val verdictTone = when {
                     verdict.malicious -> SemanticTone.Error

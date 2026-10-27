@@ -27,7 +27,9 @@ internal data class DownloadHistoryEntry(
     val fileName: String,
     val fileKind: String,
     val uri: String,
-    val scanVerdict: ScanVerdict? = null
+    val scanVerdict: ScanVerdict? = null,
+    /** Expansion data found inside the handed-off container, when it carried any. */
+    val obbContents: ObbContents? = null
 )
 
 internal object DownloadHistoryStore {
@@ -71,6 +73,17 @@ internal fun Context.recordHandOff(
     uri: Uri,
     scanVerdict: ScanVerdict? = null
 ) {
+    val obb = obbContentsIn(file)
+    if (obb != null) {
+        // Worth a log line of its own: a game that will not start is otherwise
+        // indistinguishable from a bad patch, when the usual cause is this data
+        // never reaching Android/obb.
+        AppLog.record(
+            LogLevel.Info,
+            "${file.name} includes game data (${obb.summary}). Android loads it from " +
+                "Android/obb/${candidate.packageName}, which this app cannot write."
+        )
+    }
     DownloadHistoryStore.add(
         this,
         DownloadHistoryEntry(
@@ -82,7 +95,8 @@ internal fun Context.recordHandOff(
             fileName = file.name,
             fileKind = candidate.fileKind,
             uri = uri.toString(),
-            scanVerdict = scanVerdict
+            scanVerdict = scanVerdict,
+            obbContents = obb
         )
     )
 }

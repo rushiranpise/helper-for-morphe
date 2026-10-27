@@ -97,6 +97,7 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
 - Files are validated against the source-published **SHA-256** when available (shown as a verified badge), and against the real APK manifest before handoff.
 - Downloads land in Helper's cache by default (honouring the auto-clear-after-handoff toggle) or as a visible copy in `Downloads/Morphe Helper`. A storage card shows both sizes and clears each with one tap; a startup sweep clears stale cache and reports how much it freed.
 
+- **Game data (OBB) is reported, never installed.** Android serves expansion files only from `Android/obb/<package>/`, which no other app may write on Android 11 and later, so no helper can place them for you. When the file handed over carries them, the history entry says `Includes game data (2 files · 1.2 GB)` and the request log records it. Copy those files into `Android/obb/<package>/` if a patched game closes on launch. A bare `APK` never contains expansion data, so pick a container format (`XAPK`, `APKS`) for games that need it.
 ### Find New Apps
 
 - A **live community patch index** (fetched fresh from the morphe-archive JSON on every open — never cached) listing every app with available patches, shown when the request does not come from Morphe.
