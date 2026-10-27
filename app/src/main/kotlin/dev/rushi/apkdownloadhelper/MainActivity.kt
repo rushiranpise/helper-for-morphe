@@ -7596,8 +7596,15 @@ private fun CandidateInfoChips(request: HelperRequest, candidate: DownloadCandid
         if (!candidate.fileKind.equals("web", ignoreCase = true)) {
             MorpheStatusBadge(text = candidate.fileKind.uppercase(), tone = formatTone)
         }
-        candidate.variantLabel?.let { label ->
+        // APKMirror's own variant wording wins over the generic label: it names the
+        // DPI even when that is `nodpi`, which is what the site shows side by side.
+        (candidate.variantTag ?: candidate.variantLabel)?.let { label ->
             MorpheStatusBadge(text = label, tone = SemanticTone.Neutral)
+        }
+        // Only set when the release really offers more than one variant, so the
+        // badge identifies which of several otherwise identical cards this is.
+        candidate.variantNumber?.let { number ->
+            MorpheStatusBadge(text = "Variant $number", tone = SemanticTone.Neutral)
         }
     }
 }
@@ -8869,7 +8876,9 @@ internal data class ApkMirrorVariant(
     val fileKind: String,
     val arch: String?,
     val dpi: String?,
-    val isBundle: Boolean
+    val isBundle: Boolean,
+    /** Position of this row in the release page's variant table, 1-based. */
+    val number: Int = 0
 )
 
 internal data class UptodownVersionResponse(
@@ -8920,6 +8929,10 @@ internal data class DownloadCandidate(
     val formatMatches: Boolean,
     val note: String? = null,
     val variantLabel: String? = null,
+    /** Source's own wording for the variant (APKMirror's arch / DPI), for display. */
+    val variantTag: String? = null,
+    /** Which variant of the release this is, when the source offered several. */
+    val variantNumber: Int? = null,
     val files: List<CandidateDownloadFile> = emptyList(),
     // When set, the source gates the file behind a captcha/JS challenge that
     // only a real browser can pass. The card then offers a "Solve captcha in

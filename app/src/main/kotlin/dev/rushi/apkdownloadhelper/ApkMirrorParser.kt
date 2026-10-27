@@ -499,6 +499,10 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         }
         if (selectedVariants.isEmpty()) return emptyList()
 
+        // One release page can carry several variants (BUNDLE/APK, per-arch,
+        // per-dpi). Numbering them only matters when there is more than one, which
+        // is exactly the case where two cards can otherwise look identical.
+        val multiVariant = selectedVariants.size > 1
         return selectedVariants
             .mapNotNull { variant ->
                 apkMirrorDirectCandidateFromReleaseUrl(
@@ -506,7 +510,8 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
                     releaseUrl = releaseUrl,
                     versionName = versionName,
                     option = option,
-                    variant = variant
+                    variant = variant,
+                    variantNumber = variant?.number?.takeIf { multiVariant }
                 )
             }
             .distinctBy(DownloadCandidate::identityKey)
@@ -517,7 +522,8 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         releaseUrl: String,
         versionName: String?,
         option: CandidateOption,
-        variant: ApkMirrorVariant?
+        variant: ApkMirrorVariant?,
+        variantNumber: Int? = null
     ): DownloadCandidate? {
         val variantPageUrl = variant?.url ?: releaseUrl
         val variantDoc = if (variant == null) {
@@ -564,6 +570,8 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
             versionStatus = request.versionStatus(resolvedVersion, null),
             formatMatches = request.acceptsFormat(fileKind),
             variantLabel = variantLabel,
+            variantTag = variant?.uiTag(),
+            variantNumber = variantNumber,
             files = listOf(
                 CandidateDownloadFile(
                     url = finalUrl,
@@ -622,9 +630,17 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         note = note
     )
 
+    /**
+     * The release page's variant rows, numbered in the order it lists them.
+     *
+     * The table's own header row also carries `table-row headerFont` and is skipped
+     * by [apkMirrorVariantFromRow], so the number counts real variants rather than
+     * raw rows, and the first one is 1.
+     */
     private fun apkMirrorVariants(releaseDoc: Document): List<ApkMirrorVariant> =
         releaseDoc.select("div.table-row.headerFont")
             .mapNotNull(::apkMirrorVariantFromRow)
+            .mapIndexed { index, variant -> variant.copy(number = index + 1) }
 
     private fun apkMirrorSelectableVariants(
         request: HelperRequest,
@@ -682,6 +698,18 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
             isBundle = fileKind != "apk"
         )
     }
+
+    /**
+     * The variant as APKMirror's own table words it, for the card's badge: the
+     * architecture and the screen DPI, `nodpi` included.
+     *
+     * Kept apart from the label used for file names, which drops `nodpi` because a
+     * file name has no room to explain it.
+     */
+    private fun ApkMirrorVariant.uiTag(): String? = listOfNotNull(
+        arch?.trim()?.takeIf(String::isNotBlank)?.archDisplayLabel(),
+        dpi?.trim()?.takeIf(String::isNotBlank)
+    ).joinToString(" / ").takeIf(String::isNotBlank)
 
     private fun apkMirrorWantedVariantKinds(request: HelperRequest): List<String> {
         val requestedKinds = request.requestedFileKinds
