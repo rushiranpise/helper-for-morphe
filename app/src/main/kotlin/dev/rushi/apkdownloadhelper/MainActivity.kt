@@ -2554,6 +2554,15 @@ private fun HelperScreen(
         color = MaterialTheme.colorScheme.background
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
+        // A pushed screen covers the home, but the focus system has no idea: leaving
+        // the home composed let a D-pad keep driving the hidden screen underneath, so
+        // on a TV the settings page opened and then ignored every press (issue #22).
+        // Fade it out and drop it from the tree, leaving nothing focusable behind.
+        AnimatedVisibility(
+            visible = !showSettings && !showAppBrowser,
+            enter = fadeIn(tween(MorpheDefaults.ANIMATION_DURATION)),
+            exit = fadeOut(tween(MorpheDefaults.ANIMATION_DURATION))
+        ) {
         Column(modifier = Modifier.fillMaxSize()) {
             LazyColumn(
                 modifier = Modifier
@@ -2766,6 +2775,7 @@ private fun HelperScreen(
         val action = primaryAction
         if (action != null) {
             SourceBottomBar(action = action, onRefresh = onRefresh, onCancel = onCancel)
+        }
         }
         }
 

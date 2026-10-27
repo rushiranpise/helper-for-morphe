@@ -37,6 +37,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -1696,7 +1697,12 @@ internal fun MorpheFab(
  * underneath never shows through mid-slide.
  *
  * The tap handler swallows taps the pushed screen itself did not use, which keeps them from
- * reaching the still-composed screen below.
+ * reaching the screen below.
+ *
+ * Focus needs the same treatment, and it cannot be done here: keys walk the whole tree, so a
+ * screen left composed underneath keeps taking every D-pad press (on Android TV the settings
+ * page opened and then ignored the remote). Callers must therefore drop the covered screen
+ * from composition while this one is visible - see the home screen's `AnimatedVisibility`.
  */
 @Composable
 internal fun MorphePushedScreen(
