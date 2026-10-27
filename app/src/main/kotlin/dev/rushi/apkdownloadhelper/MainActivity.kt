@@ -4448,9 +4448,10 @@ private fun EmptyLaunchState(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)) {
         MorpheEmptyState(
-            message = "Open this helper from Morphe Manager when it asks for an original APK.",
+            message = stringResource(R.string.empty_launch_message),
             icon = Icons.Outlined.Download
         )
+        HelperSetupCard()
         HelperButton(
             text = "Open Morphe Manager",
             onClick = onOpenMorphe,
@@ -4463,6 +4464,65 @@ private fun EmptyLaunchState(
             icon = Icons.Outlined.Explore,
             modifier = Modifier.fillMaxWidth()
         )
+    }
+}
+
+/**
+ * The one-time step that decides whether the app works at all: Morphe only offers
+ * helpers the user has explicitly trusted, so a fresh install stays silent and the
+ * app looks broken. The path is spelled out rather than saying "enable it in
+ * Morphe", because that row sits well down a long settings page.
+ */
+@Composable
+private fun HelperSetupCard() {
+    val colors = MaterialTheme.colorScheme
+    SectionCard {
+        Column(
+            modifier = Modifier.padding(MorpheDefaults.ContentPadding),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Settings,
+                    contentDescription = null,
+                    tint = colors.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    text = stringResource(R.string.setup_title),
+                    color = colors.onSurface,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            listOf(
+                R.string.setup_step_open_settings,
+                R.string.setup_step_download_helper,
+                R.string.setup_step_trust
+            ).forEachIndexed { index, step ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "${index + 1}.",
+                        color = colors.primary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = stringResource(step),
+                        color = colors.onSurface,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+            Text(
+                text = stringResource(R.string.setup_footer),
+                color = colors.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
     }
 }
 

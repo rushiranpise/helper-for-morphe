@@ -8,6 +8,19 @@ Morphe Helper is a standalone Android helper app for finding and returning origi
 
 This project is independent from the APK source websites listed below. Source availability, package versions, download formats, and region/device access can change at any time.
 
+## Setup
+
+Installing the APK is only half of it. **Morphe only offers helpers you have explicitly trusted**, so a fresh install does nothing until this one-time step is done:
+
+1. Install Morphe Helper and open it once.
+2. Open **Morphe Manager** and choose **Settings** in the bottom navigation.
+3. Scroll to the **Files** section and tap **APK download helper**.
+4. Switch on **Morphe Helper**, then confirm **Trust** in the dialog that appears.
+
+The row reads `Trusted: 0 of 1` before that and `Trusted: 1 of 1` after it. Nothing else needs configuring: drive requests from Morphe, not from this app.
+
+From then on, whenever Morphe needs an original APK it cannot find installed, the download screen offers **Use a helper app** -> **Open helper**. That launches this app, which resolves the requested version, downloads it, checks it against Morphe's package/version/signature expectations and hands the file straight back.
+
 ## Features
 
 ### Request handling
