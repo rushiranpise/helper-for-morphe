@@ -48,6 +48,8 @@ internal data class HelperSettings(
     val virusTotalEnabled: Boolean = false,
     val virusTotalApiKey: String = "",
     val virusTotalScanMode: VirusTotalScanMode = VirusTotalScanMode.ASK,
+    /** Hand the file to Morphe without showing the result when a scan comes back clean. */
+    val virusTotalAutoProceed: Boolean = false,
     // Source opened by default when Helper launches (null = first enabled source).
     val preferredSource: DownloadSource? = null
 )
@@ -220,6 +222,7 @@ internal fun Context.loadHelperSettings(): HelperSettings {
         adGuardDns = prefs.getBoolean("adguard_dns", false),
         virusTotalEnabled = prefs.getBoolean("virus_total_enabled", false),
         virusTotalApiKey = prefs.getString("virus_total_api_key", "") ?: "",
+        virusTotalAutoProceed = prefs.getBoolean("virus_total_auto_proceed", false),
         virusTotalScanMode = enumValueOrDefault(
             prefs.getString("virus_total_scan_mode", null),
             VirusTotalScanMode.ASK
@@ -252,6 +255,7 @@ internal fun Context.saveHelperSettings(settings: HelperSettings) {
         .putBoolean("virus_total_enabled", settings.virusTotalEnabled)
         .putString("virus_total_api_key", settings.virusTotalApiKey)
         .putString("virus_total_scan_mode", settings.virusTotalScanMode.name)
+        .putBoolean("virus_total_auto_proceed", settings.virusTotalAutoProceed)
         .putString("preferred_source", settings.preferredSource?.name)
         .apply()
 }

@@ -218,6 +218,7 @@ import com.aurora.gplayapi.helpers.AppDetailsHelper
 import com.aurora.gplayapi.helpers.PurchaseHelper
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
+import dev.rushi.apkdownloadhelper.VirusTotalScanner.isEntirelyClean
 import dev.rushi.apkdownloadhelper.play.NativeDeviceInfoProvider
 import dev.rushi.apkdownloadhelper.play.PlayHttpClient
 import java.io.ByteArrayInputStream
@@ -1539,6 +1540,15 @@ class MainActivity : ComponentActivity() {
                 val scanResult = event.result
                 val isMalicious = scanResult is VirusTotalScanner.ScanResult.Malicious
                 val detail = scanResultDetail(scanResult)
+                // With the setting on, a scan that found nothing at all hands off on
+                // its own: the result card exists to make the user judge a verdict, and
+                // there is nothing to judge when every engine came back clean. Anything
+                // short of that still shows the card.
+                if (helperSettings.virusTotalAutoProceed && scanResult.isEntirelyClean()) {
+                    appendLog("VirusTotal found nothing; handing off without asking.", LogLevel.Info)
+                    proceedAfterScan()
+                    return
+                }
                 uiState = UiState.ScanResult(
                     candidate = event.candidate,
                     scanResult = scanResult,
@@ -3572,6 +3582,21 @@ private fun AdvancedTabContent(
                     apiKey = settings.virusTotalApiKey,
                     onApiKeyChange = { onSettingsChange(settings.copy(virusTotalApiKey = it)) }
                 )
+                if (settings.virusTotalScanMode != VirusTotalScanMode.NEVER) {
+                    MorpheDivider()
+                    SettingsSwitchItem(
+                        icon = Icons.Outlined.Verified,
+                        title = "Proceed automatically when clean",
+                        subtitle = "Hand off without showing the result when VirusTotal finds " +
+                            "nothing and every inner APK was scanned.",
+                        checked = settings.virusTotalAutoProceed,
+                        onToggle = {
+                            onSettingsChange(
+                                settings.copy(virusTotalAutoProceed = !settings.virusTotalAutoProceed)
+                            )
+                        }
+                    )
+                }
                 if (settings.virusTotalApiKey.isNotBlank()) {
                     MorpheDivider()
                     Box(modifier = Modifier.padding(MorpheDefaults.ContentPadding)) {

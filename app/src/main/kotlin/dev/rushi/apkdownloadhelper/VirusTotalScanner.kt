@@ -139,6 +139,20 @@ internal object VirusTotalScanner {
         val category: String
     )
 
+    /**
+     * True only when the scan found nothing at all: a clean verdict for the file and,
+     * for a bundle, no inner APK that was flagged or failed to scan.
+     *
+     * Deliberately strict. A "clean" bundle can still carry an inner APK that never
+     * got analysed, and deciding automatically on the strength of a partial scan is
+     * how a flagged split would reach Morphe without anyone looking.
+     */
+    fun ScanResult.isEntirelyClean(): Boolean = when (this) {
+        is ScanResult.Clean -> apkResults.all { it.detections == 0 && !it.failed }
+        is ScanResult.Malicious -> false
+        is ScanResult.Error -> false
+    }
+
     /** One inner APK's outcome inside a scanned bundle. */
     data class BundleApkResult(
         val name: String,
