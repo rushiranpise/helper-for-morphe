@@ -433,6 +433,8 @@ class MainActivity : ComponentActivity() {
                 if (captcha != null) {
                     CaptchaBrowserScreen(
                         candidate = captcha,
+                        requiredAppName = request?.appName,
+                        requiredVersion = request?.requestedVersionName,
                         onClose = ::closeCaptchaBrowser,
                         onDownloadCaptured = ::onBrowserDownloadCaptured
                     )
@@ -2225,6 +2227,8 @@ private fun HelperOutlinedButton(
 @Composable
 private fun CaptchaBrowserScreen(
     candidate: DownloadCandidate,
+    requiredAppName: String?,
+    requiredVersion: String?,
     onClose: () -> Unit,
     onDownloadCaptured: (BrowserDownloadCapture) -> Unit
 ) {
@@ -2356,11 +2360,25 @@ private fun CaptchaBrowserScreen(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    // The version Morphe actually needs, because on the captcha and
+                    // manual routes the candidate carries none of its own (it reads
+                    // "Manual"), and the page has to be searched for an exact version
+                    // string that is usually too long to remember.
+                    val wanted = requiredVersion?.takeIf { it.isNotBlank() }
+                    // Morphe names the app ("YouTube"); a manual candidate only knows
+                    // its package name, which is the fallback when no request came in.
+                    val appLabel = requiredAppName?.takeIf { it.isNotBlank() } ?: candidate.name
                     Text(
-                        text = candidate.versionDisplay,
+                        text = if (wanted != null) {
+                            "$appLabel · needs $wanted"
+                        } else {
+                            "$appLabel · ${candidate.versionDisplay}"
+                        },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
+                        // Two lines, so a long version string stays readable rather
+                        // than being cut down to its first few digits.
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
