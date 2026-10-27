@@ -109,6 +109,56 @@ internal fun String.archDisplayLabel(): String =
         trim()
     }
 
+/**
+ * Rank of an architecture label that names only ABIs this device cannot run.
+ *
+ * Lower ranks are better: an index into the device's own ABI preference comes first,
+ * then [ARCH_RANK_UNIVERSAL], then this.
+ */
+internal const val ARCH_RANK_MISMATCH = 100
+
+/** Rank of a label that does not pick an architecture at all. */
+internal const val ARCH_RANK_UNIVERSAL = 50
+
+/**
+ * How well a source's architecture label fits this device.
+ *
+ * A source that publishes `armeabi-v7a` and `arm64-v8a` builds of one version must
+ * not hand an arm64 phone the 32-bit one, so the caller ranks candidates with this
+ * instead of taking whichever row came first.
+ *
+ * Returns the ABI's position in [availableAbis] when the label names one the device
+ * runs, [ARCH_RANK_UNIVERSAL] when it names none in particular, and
+ * [ARCH_RANK_MISMATCH] when it names only others.
+ */
+internal fun archMatchRank(label: String?, availableAbis: List<String>): Int {
+    val normalized = label?.trim()?.lowercase(Locale.US).orEmpty()
+    if (normalized.isEmpty() || normalized.isUniversalArchLabel()) return ARCH_RANK_UNIVERSAL
+    val index = availableAbis
+        .map { it.trim().lowercase(Locale.US) }
+        .indexOfFirst { abi -> abi.isNotBlank() && normalized.namesAbi(abi) }
+    return if (index >= 0) index else ARCH_RANK_MISMATCH
+}
+
+/**
+ * Whether a free-text architecture cell mentions [abi].
+ *
+ * Sources spell these loosely (`arm64`, `v8a`, `+` joined lists), so the aliases
+ * matter more than an exact match.
+ */
+private fun String.namesAbi(abi: String): Boolean {
+    if (contains(abi)) return true
+    return when (abi) {
+        "arm64-v8a" -> contains("arm64") || contains("v8a")
+        "armeabi-v7a" -> contains("armeabi-v7a") || contains("v7a") || contains("armv7")
+        // Plain `armeabi` must not swallow the v7a wording above it.
+        "armeabi" -> contains("armeabi") && !contains("v7a")
+        "x86_64" -> contains("x86_64") || contains("x86-64")
+        "x86" -> !contains("x86_64") && !contains("x86-64") && contains("x86")
+        else -> false
+    }
+}
+
 internal fun String.isUniversalArchLabel(): Boolean {
     val normalizedLabel = lowercase(Locale.US)
     return "all architectures" in normalizedLabel ||

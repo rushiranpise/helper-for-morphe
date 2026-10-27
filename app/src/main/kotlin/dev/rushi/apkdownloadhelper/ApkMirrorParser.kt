@@ -652,25 +652,37 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
                 it.fileKind == kind &&
                     request.acceptsFormat(it.fileKind)
             }
-            typedVariants.filter { apkMirrorDpiMatches(it.dpi) }
-                .takeIf(List<ApkMirrorVariant>::isNotEmpty)
-                ?.let { return it }
-            typedVariants.takeIf(List<ApkMirrorVariant>::isNotEmpty)
-                ?.let { return it }
+            typedVariants.preferRunnableArch(request)?.let { return it }
         }
 
-        val acceptedVariants = variants.filter { request.acceptsFormat(it.fileKind) }
-        val dpiPreferred = acceptedVariants.filter { apkMirrorDpiMatches(it.dpi) }
-        val dpiAnyFormat = variants.filter { apkMirrorDpiMatches(it.dpi) }
-        return when {
-            dpiPreferred.isNotEmpty() -> dpiPreferred
-            acceptedVariants.isNotEmpty() -> acceptedVariants
-            dpiAnyFormat.isNotEmpty() -> dpiAnyFormat
-            // No variant matches the requested format (e.g. APKS requested but the
-            // release is only offered as an APKM bundle): offer the best variant
-            // anyway and let the UI flag the format mismatch, like other sources do.
-            else -> variants
+        // No variant matches the requested format (e.g. APKS requested but the
+        // release is only offered as an APKM bundle): offer the best variant anyway
+        // and let the UI flag the format mismatch, like other sources do.
+        variants.filter { request.acceptsFormat(it.fileKind) }
+            .preferRunnableArch(request)
+            ?.let { return it }
+        return variants.preferRunnableArch(request) ?: variants
+    }
+
+    /**
+     * The variants a device can actually run, best first, or null when empty.
+     *
+     * One release can carry both `arm64-v8a` and `armeabi-v7a` builds. Handing an
+     * arm64 phone the 32-bit one patches fine but installs a 32-bit app, so a build
+     * for another ABI is dropped whenever a runnable one exists - and kept only as a
+     * last resort, so a source that publishes nothing else still yields something.
+     */
+    private fun List<ApkMirrorVariant>.preferRunnableArch(
+        request: HelperRequest
+    ): List<ApkMirrorVariant>? {
+        if (isEmpty()) return null
+        val ranked = sortedBy { archMatchRank(it.arch, request.availableAbis) }
+        val runnable = ranked.filter {
+            archMatchRank(it.arch, request.availableAbis) < ARCH_RANK_MISMATCH
         }
+        val pool = runnable.ifEmpty { ranked }
+        val dpiPreferred = pool.filter { apkMirrorDpiMatches(it.dpi) }
+        return dpiPreferred.ifEmpty { pool }
     }
 
     private fun apkMirrorVariantFromRow(row: Element): ApkMirrorVariant? {
