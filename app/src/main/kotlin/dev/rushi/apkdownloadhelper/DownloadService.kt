@@ -259,6 +259,7 @@ internal class DownloadService : Service() {
         .followRedirects(true)
         .followSslRedirects(true)
         .dns(AdGuardDns)
+        .cookieJar(SessionCookies)
         .addInterceptor { chain ->
             chain.proceed(
                 chain.request().newBuilder()
@@ -273,6 +274,7 @@ internal class DownloadService : Service() {
         .followRedirects(true)
         .followSslRedirects(true)
         .dns(AdGuardDns)
+        .cookieJar(SessionCookies)
         .addInterceptor { chain ->
             chain.proceed(
                 chain.request().newBuilder()

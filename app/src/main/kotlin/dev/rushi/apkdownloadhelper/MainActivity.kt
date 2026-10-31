@@ -291,6 +291,7 @@ class MainActivity : ComponentActivity() {
         .followRedirects(true)
         .followSslRedirects(true)
         .dns(AdGuardDns)
+        .cookieJar(SessionCookies)
         .addInterceptor { chain ->
             chain.proceed(
                 chain.request().newBuilder()
@@ -304,6 +305,7 @@ class MainActivity : ComponentActivity() {
         .followRedirects(true)
         .followSslRedirects(true)
         .dns(AdGuardDns)
+        .cookieJar(SessionCookies)
         .addInterceptor { chain ->
             chain.proceed(
                 chain.request().newBuilder()
