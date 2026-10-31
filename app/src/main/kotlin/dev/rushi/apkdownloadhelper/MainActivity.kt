@@ -340,7 +340,12 @@ class MainActivity : ComponentActivity() {
             apkPureApi = apkPureApi,
             aptoideApi = aptoideApi,
             playHttpClient = playHttpClient,
-            appContext = this
+            appContext = this,
+            // Read through the settings each time, so flipping the switch takes effect on
+            // the next request instead of needing a restart.
+            resolveViaMorphe = { request ->
+                if (helperSettings.useMorpheResolver) MorpheResolver.resolve(request) else null
+            }
         )
         listOf(
             ApkMirrorParser(parserContext),
@@ -3326,6 +3331,18 @@ private fun SystemTabContent(
                     onClick = { fastModePolicyDialog = true }
                 )
             }
+            MorpheDivider()
+            SettingsSwitchItem(
+                icon = Icons.Outlined.Explore,
+                title = "Use Morphe's resolver",
+                subtitle = "Ask Morphe where its own download dialog would go and open that " +
+                    "page directly, instead of searching the site. Faster; turn it off to " +
+                    "always fetch through this app's own source pages.",
+                checked = settings.useMorpheResolver,
+                onToggle = {
+                    onSettingsChange(settings.copy(useMorpheResolver = !settings.useMorpheResolver))
+                }
+            )
         }
     }
 }
@@ -9372,9 +9389,18 @@ private fun validateApkLikeStream(
 
 internal fun Context.readDownloadedApkMetadata(file: File): DownloadedApkMetadata? {
     if (file.extension.equals("apk", ignoreCase = true)) {
-        return readApkMetadata(file)
+        // A container can arrive named .apk (a source served the bundle under an APK
+        // name, or a candidate's kind was a guess), so fall back to reading it as one.
+        return readApkMetadata(file) ?: readContainerMetadata(file)
     }
 
+    // Only the extension says "container" - the bytes decide. A page that serves a
+    // single APK from a bundle-looking page would otherwise fail validation outright.
+    return readContainerMetadata(file) ?: readApkMetadata(file)
+}
+
+/** The base APK's metadata from inside a split container, or null when it is not one. */
+private fun Context.readContainerMetadata(file: File): DownloadedApkMetadata? {
     return runCatching {
         val validationDir = File(cacheDir, "validation").apply { mkdirs() }
         ZipFile(file).use { zip ->

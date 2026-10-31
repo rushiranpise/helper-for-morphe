@@ -65,6 +65,12 @@ internal data class HelperSettings(
     val fastMode: Boolean = true,
     // Which version Fast Mode should auto-fetch when multiple are available.
     val fastModePolicy: FastModePolicy = FastModePolicy.REQUESTED,
+    /**
+     * Ask Morphe's resolver for the page its own dialog would use, instead of walking the
+     * site. On by default because it is a single HEAD chain against a text index rather
+     * than several hundred kilobytes of HTML; off means every source is scraped directly.
+     */
+    val useMorpheResolver: Boolean = true,
     val disabledSources: Set<DownloadSource> = DEFAULT_DISABLED_SOURCES,
     val themeMode: ThemeMode = ThemeMode.DARK,
     /** Where the palette comes from: the app's own, the wallpaper's, or neutral. */
@@ -233,6 +239,7 @@ internal fun Context.loadHelperSettings(): HelperSettings {
         deleteTemporaryAfterHandoff = prefs.getBoolean("delete_temporary_after_handoff", true),
         logcatLogging = prefs.getBoolean("logcat_logging", true),
         fastMode = prefs.getBoolean("fast_mode", true),
+        useMorpheResolver = prefs.getBoolean("use_morphe_resolver", true),
         fastModePolicy = enumValueOrDefault(
             prefs.getString("fast_mode_policy", null),
             FastModePolicy.REQUESTED
@@ -289,6 +296,7 @@ internal fun Context.saveHelperSettings(settings: HelperSettings) {
         .putBoolean("logcat_logging", settings.logcatLogging)
         .putInt(SETTINGS_VERSION_KEY, SETTINGS_VERSION)
         .putBoolean("fast_mode", settings.fastMode)
+        .putBoolean("use_morphe_resolver", settings.useMorpheResolver)
         .putString("fast_mode_policy", settings.fastModePolicy.name)
         .putStringSet("disabled_sources", settings.disabledSources.map { it.name }.toSet())
         .putString("theme_mode", settings.themeMode.name)

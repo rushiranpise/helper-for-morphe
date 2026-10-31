@@ -69,6 +69,11 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
 
 - **Five start enabled**: APKMirror, Uptodown, APKPure, APKCombo and Aurora. Aptoide,
   Evozi, Mi9, APK Downloader and Play are available but off until you turn them on.
+
+- **Morphe's resolver first**: before walking a site, the helper asks Morphe's own resolver
+  (`api.morphe.software`) where its download dialog would go, and opens that page
+  directly - one request instead of a search, app page and uploads walk. On by default;
+  Settings -> System turns it off to always scrape every source itself.
 - A **default source** can be set so the picker opens on your preferred provider instead of the first one.
 - Each source offers up to four flows: **Manual** (open the site), **Recommended** (exact requested version), **Latest** (newest compatible), and **History** (browse every version).
 - The source picker is a compact **dropdown** with a live enabled-source count; selecting a source collapses it so the page stays clean.

@@ -131,6 +131,10 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         }.getOrNull())
 
     private fun findApkMirrorLatest(request: HelperRequest): List<DownloadCandidate> {
+        // The resolver often hands back the exact variant page, which is two fetches
+        // instead of the search -> app -> uploads -> release walk below.
+        apkMirrorFastPath(request, CandidateOption.LATEST)?.let { return it }
+
         val latestInfo = resolveApkMirrorLatestInfo(
             request = request,
             searchUrl = apkMirrorPackageSearchUrl(request.packageName)
@@ -149,6 +153,69 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
 
         return directCandidates.orEmpty()
             .ifEmpty { listOf(apkMirrorLatestWebCandidate(request, latestInfo)) }
+    }
+
+    /**
+     * Morphe's resolver shortcut: the page its own download dialog would open, used directly.
+     *
+     * Returns null whenever the resolver is off, answers with something this helper cannot
+     * continue from (an app page, a Google search, another site), or fails - the caller then
+     * scrapes as it always did, so this is only ever a shortcut and never a dependency.
+     */
+    private fun apkMirrorFastPath(
+        request: HelperRequest,
+        option: CandidateOption
+    ): List<DownloadCandidate>? {
+        val resolved = ctx.resolveViaMorphe?.invoke(request) ?: return null
+        if (resolved.isBlank()) return null
+
+        return when (apkMirrorPageOf(resolved)) {
+            ApkMirrorPage.VARIANT -> {
+                // Already the build the resolver picked for this device's ABI.
+                val releaseUrl = apkMirrorReleaseUrlOfVariantPage(resolved) ?: return null
+                val version = request.requestedVersionNames.firstOrNull()
+                    ?: apkMirrorVersionFromReleaseUrl(
+                        releaseUrl,
+                        appPageUrl = apkMirrorAppPageOfReleaseUrl(releaseUrl)
+                    )
+                listOfNotNull(
+                    runCatching {
+                        apkMirrorDirectCandidateFromReleaseUrl(
+                            request = request,
+                            // A variant page is treated as the page to read: the variant
+                            // page carries its own download button.
+                            releaseUrl = resolved,
+                            versionName = version,
+                            option = option,
+                            variant = null
+                        )
+                    }
+                        .onFailure { Log.w(TAG, "Morphe resolver variant page failed: $resolved", it) }
+                        .getOrNull()
+                ).takeIf { it.isNotEmpty() }
+            }
+
+            ApkMirrorPage.RELEASE -> {
+                val version = request.requestedVersionNames.firstOrNull()
+                    ?: apkMirrorVersionFromReleaseUrl(
+                        resolved,
+                        appPageUrl = apkMirrorAppPageOfReleaseUrl(resolved)
+                    )
+                runCatching {
+                    apkMirrorCandidatesFromReleaseUrl(
+                        request = request,
+                        releaseUrl = resolved,
+                        versionName = version,
+                        option = option
+                    )
+                }
+                    .onFailure { Log.w(TAG, "Morphe resolver release page failed: $resolved", it) }
+                    .getOrNull()
+                    ?.takeIf { it.isNotEmpty() }
+            }
+
+            null -> null
+        }
     }
 
     private fun apkMirrorLatestWebCandidate(
@@ -173,6 +240,8 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
 
     private fun findApkMirrorRequested(request: HelperRequest): List<DownloadCandidate> {
         if (!request.hasKnownVersionRequest) return emptyList()
+
+        apkMirrorFastPath(request, CandidateOption.REQUESTED)?.let { return it }
 
         val searchDoc = fetchDocument(apkMirrorPackageSearchUrl(request.packageName))
         val appPageUrl = resolveApkMirrorAppPage(

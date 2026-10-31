@@ -94,7 +94,13 @@ internal class SourceParserContext(
     val apkPureApi: ApkPureApi,
     val aptoideApi: AptoideApi,
     val playHttpClient: PlayHttpClient? = null,
-    val appContext: Context? = null
+    val appContext: Context? = null,
+    /**
+     * Asks Morphe's resolver for the page its own dialog would use, or returns null to
+     * scrape as usual. Null (the default) keeps every parser on its own scraping path, so
+     * tests and any caller that does not opt in are unaffected.
+     */
+    val resolveViaMorphe: ((HelperRequest) -> String?)? = null
 ) {
     fun document(url: String, referer: String? = null): Document =
         Jsoup.parse(fetcher.fetchText(url, referer), url)
