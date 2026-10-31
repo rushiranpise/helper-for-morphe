@@ -66,6 +66,9 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
 
 - Ten sources: **APKMirror, Uptodown, APKPure, APKCombo, Aptoide, Evozi, Mi9, APK Downloader, Aurora, Play**.
 - Every source can be individually **enabled/disabled** from Settings → Sources; disabled sources disappear from the picker, manual links, Fast Mode, and the default-source dropdown. If you disable *everything*, Play Store remains as the fallback.
+
+- **Five start enabled**: APKMirror, Uptodown, APKPure, APKCombo and Aurora. Aptoide,
+  Evozi, Mi9, APK Downloader and Play are available but off until you turn them on.
 - A **default source** can be set so the picker opens on your preferred provider instead of the first one.
 - Each source offers up to four flows: **Manual** (open the site), **Recommended** (exact requested version), **Latest** (newest compatible), and **History** (browse every version).
 - The source picker is a compact **dropdown** with a live enabled-source count; selecting a source collapses it so the page stays clean.
