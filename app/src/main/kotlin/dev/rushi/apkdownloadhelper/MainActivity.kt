@@ -158,7 +158,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -2830,115 +2829,6 @@ private fun HelperScreen(
 }
 
 @Composable
-private fun SourceHealthCard() {
-    val checks by SourceHealthChecker.checks.collectAsState()
-    val checking by SourceHealthChecker.checking.collectAsState()
-    val webChecks = checks.filter { it.status != SourceHealthChecker.Status.Skipped }
-
-    val goodCount = webChecks.count { it.status == SourceHealthChecker.Status.Good }
-    val blockedCount = webChecks.count { it.status == SourceHealthChecker.Status.CaptchaBlocked }
-    val unreachableCount = webChecks.count { it.status == SourceHealthChecker.Status.Unreachable }
-    val hasProblems = blockedCount > 0 || unreachableCount > 0
-
-    val summaryParts = mutableListOf<String>()
-    if (goodCount > 0) summaryParts.add("$goodCount available")
-    if (blockedCount > 0) summaryParts.add("$blockedCount captcha-blocked")
-    if (unreachableCount > 0) summaryParts.add("$unreachableCount unreachable")
-    val summary = when {
-        checking -> "Checking sources…"
-        // Nothing is checked at launch any more, so say that the button is the way in
-        // rather than leaving it looking like a status that failed to load.
-        webChecks.isEmpty() -> "Not checked yet · tap Re-check"
-        else -> summaryParts.ifEmpty { listOf("No sources available") }.joinToString(" · ")
-    }
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = stringResource(R.string.source_health),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
-            )
-            HelperOutlinedButton(
-                text = if (checking) "Checking…" else "Re-check",
-                onClick = { SourceHealthChecker.refresh() },
-                icon = if (checking) null else Icons.Outlined.Refresh,
-                modifier = Modifier.width(MorpheDefaults.CompactButtonWidth + 28.dp)
-            )
-        }
-        Text(
-            text = summary,
-            color = if (hasProblems) {
-                MaterialTheme.colorScheme.error
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-            style = MaterialTheme.typography.bodySmall
-        )
-
-        if (webChecks.isEmpty()) {
-            InfoCard("No sources checked yet — the check runs automatically when the app opens.")
-        } else {
-            webChecks.forEach { check ->
-                SourceHealthRow(check)
-            }
-        }
-    }
-}
-
-@Composable
-private fun SourceHealthRow(check: SourceHealthChecker.Check) {
-    val (dotColor, statusText) = when (check.status) {
-        SourceHealthChecker.Status.Good -> MaterialTheme.colorScheme.primary to "Available"
-        SourceHealthChecker.Status.Checking -> SemanticTone.Warning.accent to "Checking…"
-        SourceHealthChecker.Status.CaptchaBlocked ->
-            MaterialTheme.colorScheme.error to (check.message ?: "Blocked by a captcha challenge")
-        SourceHealthChecker.Status.Unreachable ->
-            MaterialTheme.colorScheme.error to (check.message ?: "Unreachable")
-        SourceHealthChecker.Status.Skipped -> MaterialTheme.colorScheme.outline to "Not checked"
-    }
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingSmall),
-        verticalAlignment = Alignment.Top
-    ) {
-        Box(
-            modifier = Modifier
-                .padding(top = 5.dp)
-                .size(8.dp)
-                .clip(MorpheDefaults.PillShape)
-                .background(dotColor)
-        )
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(
-                text = check.source.label,
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.bodyMedium
-            )
-            Text(
-                text = statusText,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
 private fun HistoryEntryCard(
     entry: DownloadHistoryEntry,
     usable: Boolean,
@@ -3610,7 +3500,6 @@ private fun AdvancedTabContent(
             }
         }
 
-        SourceHealthCard()
     }
 }
 
