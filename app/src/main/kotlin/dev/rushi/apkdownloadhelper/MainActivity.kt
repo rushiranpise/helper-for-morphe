@@ -427,9 +427,11 @@ class MainActivity : ComponentActivity() {
                 pureBlackTheme = helperSettings.pureBlackTheme,
                 accentColorHex = helperSettings.customAccentColor
             ) {
-                // Ping every web source at launch so the Settings Health tab
-                // reflects current reachability instead of the last resolve.
-                LaunchedEffect(Unit) { SourceHealthChecker.refresh() }
+                // Source reachability is checked on demand from Settings, never at
+                // launch: a ping to every source's home page is another request in
+                // each site's rate-limit pool, spent before the user has asked for
+                // anything, and it competes with the download that prompted the app to
+                // open. The Settings card keeps a Re-check button for when it is wanted.
                 val captcha = captchaBrowser
                 if (captcha != null) {
                     CaptchaBrowserScreen(
@@ -2844,7 +2846,9 @@ private fun SourceHealthCard() {
     if (unreachableCount > 0) summaryParts.add("$unreachableCount unreachable")
     val summary = when {
         checking -> "Checking sources…"
-        webChecks.isEmpty() -> "Sources not checked yet"
+        // Nothing is checked at launch any more, so say that the button is the way in
+        // rather than leaving it looking like a status that failed to load.
+        webChecks.isEmpty() -> "Not checked yet · tap Re-check"
         else -> summaryParts.ifEmpty { listOf("No sources available") }.joinToString(" · ")
     }
 
