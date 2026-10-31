@@ -33,7 +33,10 @@ internal data class HelperSettings(
     val networkPolicy: NetworkPolicy = NetworkPolicy.WIFI_AND_MOBILE,
     val deleteTemporaryAfterHandoff: Boolean = true,
     val logcatLogging: Boolean = true,
-    val fastMode: Boolean = false,
+    // On by default: the helper exists to hand a file back to Morphe, and Fast Mode is
+    // the path that does that in one step. An explicit off is stored and respected, so
+    // this only decides what somebody who never touched the switch gets.
+    val fastMode: Boolean = true,
     // Which version Fast Mode should auto-fetch when multiple are available.
     val fastModePolicy: FastModePolicy = FastModePolicy.REQUESTED,
     val disabledSources: Set<DownloadSource> = emptySet(),
@@ -203,7 +206,7 @@ internal fun Context.loadHelperSettings(): HelperSettings {
         ),
         deleteTemporaryAfterHandoff = prefs.getBoolean("delete_temporary_after_handoff", true),
         logcatLogging = prefs.getBoolean("logcat_logging", true),
-        fastMode = prefs.getBoolean("fast_mode", false),
+        fastMode = prefs.getBoolean("fast_mode", true),
         fastModePolicy = enumValueOrDefault(
             prefs.getString("fast_mode_policy", null),
             FastModePolicy.REQUESTED

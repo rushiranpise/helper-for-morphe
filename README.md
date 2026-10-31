@@ -74,6 +74,9 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
 ### Fast Mode
 
 - One-tap auto-resolve: walks every enabled source in order and returns the file to Morphe without manual taps.
+- **On by default.** The helper exists to hand a file back to Morphe, so Fast Mode
+  starts enabled for anyone who has never touched the switch; turning it off is
+  remembered and upgrades never re-enable it.
 - **Version policy** — requested, latest, or always ask:
   - **Requested version**: finds the exact requested version *and* version code across sources (build mismatches are surfaced for you to accept or skip, never silently downloaded).
   - **Latest version**: fetches the newest version any enabled source offers, and only calls it "latest" when it actually is newer than the requested version.
