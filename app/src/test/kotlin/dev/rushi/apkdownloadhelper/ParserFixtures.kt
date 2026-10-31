@@ -52,11 +52,16 @@ internal fun testParserContext(
     pages: Map<String, String>,
     rateLimitedUrls: Set<String> = emptySet(),
     apkPureApi: ApkPureApi = FakeApkPureApi(),
-    aptoideApi: AptoideApi = FakeAptoideApi()
+    aptoideApi: AptoideApi = FakeAptoideApi(),
+    resolveViaMorphe: ((HelperRequest) -> String?)? = null,
+    /** Answers the direct endpoint's one hop; null means "no shortcut", as in production. */
+    redirects: Map<String, String>? = null
 ): SourceParserContext = SourceParserContext(
     fetcher = FakeSourceTextFetcher(pages, rateLimitedUrls),
     apkPureApi = apkPureApi,
-    aptoideApi = aptoideApi
+    aptoideApi = aptoideApi,
+    resolveViaMorphe = resolveViaMorphe,
+    resolveRedirect = redirects?.let { table -> { url: String -> table[url] } }
 )
 
 internal fun testRequest(

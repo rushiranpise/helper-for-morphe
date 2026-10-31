@@ -15,6 +15,8 @@ internal class UptodownParser(private val ctx: SourceParserContext) : ApkSourceP
         request: HelperRequest,
         option: CandidateOption
     ): List<DownloadCandidate> {
+        uptodownFastPath(request, option)?.let { return it }
+
         return uptodownDetailUrls(request)
             .firstNotNullOfOrNull { detailUrl ->
                 runCatching {
@@ -105,6 +107,102 @@ internal class UptodownParser(private val ctx: SourceParserContext) : ApkSourceP
             )
         )
     }
+
+    /**
+     * Morphe's resolver shortcut: its answer is already one specific build's page, so the
+     * search -> app -> versions -> files walk is skipped entirely.
+     *
+     * Returns null when the resolver is off, answers with another site, the page belongs
+     * to another app, or (for a requested version) the page's version is not the one
+     * asked for - the caller then walks the site as it always did.
+     */
+    private fun uptodownFastPath(
+        request: HelperRequest,
+        option: CandidateOption
+    ): List<DownloadCandidate>? {
+        if (option == CandidateOption.MANUAL) return null
+        val resolved = ctx.resolveViaMorphe?.invoke(request) ?: return null
+        val page = uptodownResolvedPageOf(resolved) ?: return null
+        val doc = runCatching { fetchDocument(page.url) }
+            .onFailure { Log.w(TAG, "Uptodown resolver page failed: $resolved", it) }
+            .getOrNull()
+            ?: return null
+        // The resolver answers by package name but a same-named clone exists for some
+        // apps; the Play id Uptodown prints on the page is the only reliable proof.
+        if (uptodownPackageName(doc) != request.packageName) return null
+
+        val versionName = uptodownVersionFromFilePage(doc)
+            ?: return null
+        if (option == CandidateOption.REQUESTED &&
+            !request.matchesRequestedVersion(versionName, null)
+        ) {
+            return null
+        }
+
+        val fileKind = uptodownFileKindFromFilePage(doc)
+        val directUrl = uptodownDownloadUrlFromPage(doc)
+        return listOf(
+            DownloadCandidate(
+                source = DownloadSource.UPTODOWN,
+                name = request.appName,
+                packageName = request.packageName,
+                versionName = versionName,
+                versionCode = null,
+                url = directUrl ?: page.url,
+                fileKind = fileKind,
+                option = option,
+                directDownload = directUrl != null,
+                versionStatus = request.versionStatus(versionName, null),
+                formatMatches = request.acceptsFormat(fileKind),
+                note = if (directUrl == null && uptodownPageUsesTurnstile(doc)) {
+                    "Uptodown now requires solving a captcha before it reveals the download link. Open the link and download manually."
+                } else {
+                    null
+                },
+                files = directUrl
+                    ?.let {
+                        listOf(
+                            CandidateDownloadFile(
+                                url = it,
+                                fileName = "${request.packageName}-$versionName-uptodown.$fileKind"
+                                    .sanitizeFileName(),
+                                referer = page.url,
+                                expectedSha256 = uptodownSha256FromPage(doc)
+                            )
+                        )
+                    }
+                    .orEmpty()
+            )
+        )
+    }
+
+    /** The version a single-build file page states, from its structured data or title. */
+    private fun uptodownVersionFromFilePage(doc: Document): String? =
+        Regex("""["']softwareVersion["']\s*:\s*["']([^"']+)["']""")
+            .find(doc.html())
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.trim()
+            ?.takeIf(String::isNotBlank)
+            ?: Regex("""Download\s+.+?\s+([\w.\-+ ]+?)\s+for Android""")
+                .find(doc.title())
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.trim()
+                ?.takeIf(String::isNotBlank)
+
+    /**
+     * The kind of file a single-build page offers. Such a page marks an XAPK-only build
+     * with `data-only-xapk`, which is more reliable than the info table it does not carry.
+     */
+    private fun uptodownFileKindFromFilePage(doc: Document): String =
+        when {
+            doc.selectFirst("#detail-download-button[data-only-xapk='1']") != null -> "xapk"
+            parseInfoTableValue(doc, "File type")?.lowercase(Locale.US) != null ->
+                parseInfoTableValue(doc, "File type")!!.lowercase(Locale.US)
+            doc.title().contains("XAPK", ignoreCase = true) -> "xapk"
+            else -> "apk"
+        }
 
     private fun uptodownDetailUrls(request: HelperRequest): List<String> {
         val defaultUrl = "https://${request.appName.slugForUrl()}.en.uptodown.com/android"

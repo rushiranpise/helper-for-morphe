@@ -46,6 +46,30 @@ internal fun apkMirrorPageOf(url: String): ApkMirrorPage? {
     }
 }
 
+/** A Uptodown file page: one build of one app, its file id in the path. */
+internal data class UptodownResolvedPage(val url: String, val fileId: String)
+
+private val UPTODOWN_FILE_PAGE_PATH = Regex("""/android/download/(\d+)(?:-x)?/?$""")
+
+/**
+ * The Uptodown file page the resolver points at, or null for anything else it answers
+ * with (an APKMirror page, the site's generic search, a Google fallback).
+ *
+ * The resolver answers with an app's own subdomain (`instagram.en.uptodown.com`) and a
+ * file id, so the page it names is one specific build - the same shape our variant walk
+ * builds by hand. Requiring the app subdomain keeps a generic `en.uptodown.com` listing
+ * from being mistaken for one.
+ */
+internal fun uptodownResolvedPageOf(url: String): UptodownResolvedPage? {
+    val host = urlHostOf(url) ?: return null
+    if (!host.endsWith(".uptodown.com") || host.startsWith("www.")) return null
+    // <app>.<lang>.uptodown.com: the app slug is what makes the URL specific.
+    if (host.count { it == '.' } < 3) return null
+    val path = runCatching { java.net.URI(url).path.orEmpty() }.getOrNull() ?: return null
+    val match = UPTODOWN_FILE_PAGE_PATH.find(path) ?: return null
+    return UptodownResolvedPage(url, match.groupValues[1])
+}
+
 /**
  * The release page a variant page belongs to, e.g.
  * `.../youtube-21-20-405-release/youtube-21-20-405-4-android-apk-download/` ->

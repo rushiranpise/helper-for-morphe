@@ -323,6 +323,22 @@ class MainActivity : ComponentActivity() {
         .build()
         .create(ApkPureApi::class.java)
 
+    /** One hop only: APKPure's direct endpoint answers with the file URL in its Location. */
+    private val apkPureDirectClient = OkHttpClient.Builder()
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .dns(AdGuardDns)
+        .cookieJar(SessionCookies)
+        .addInterceptor { chain ->
+            chain.proceed(
+                chain.request().newBuilder()
+                    .header("User-Agent", browserUserAgent)
+                    .build()
+            )
+        }
+        .addInterceptor(httpLoggingInterceptor("APKPure"))
+        .build()
+
     private val aptoideApi = Retrofit.Builder()
         .client(client)
         .baseUrl("https://ws75.aptoide.com/api/7/")
@@ -347,6 +363,12 @@ class MainActivity : ComponentActivity() {
             // the next request instead of needing a restart.
             resolveViaMorphe = { request ->
                 if (helperSettings.useMorpheResolver) MorpheResolver.resolve(request) else null
+            },
+            // APKPure's direct endpoint names the file itself in one hop.
+            resolveRedirect = { url ->
+                apkPureDirectClient.newCall(
+                    Request.Builder().url(url).head().build()
+                ).execute().use { response -> response.header("Location") }
             }
         )
         listOf(
@@ -9304,8 +9326,14 @@ internal data class AptoideFile(
     val vername: String = "",
     val vercode: String = "0",
     val path: String = "",
+    /** Aptoide's own malware verdict for this build; not every endpoint reports it. */
+    val malware: AptoideMalware? = null,
     @SerializedName(value = "path_alt", alternate = ["pathAlt"])
     val pathAlt: String = ""
+)
+
+internal data class AptoideMalware(
+    val rank: String = ""
 )
 
 internal data class AptoideUrls(

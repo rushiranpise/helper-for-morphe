@@ -264,11 +264,24 @@ internal class AptoideParser(private val ctx: SourceParserContext) : ApkSourcePa
         }.getOrDefault(emptyList())
     }
 
+    /**
+     * Aptoide's own malware verdict, applied as a hard gate the way their client does:
+     * a build Aptoide marks as anything other than TRUSTED is never offered.
+     *
+     * A missing verdict is not a rejection - some endpoints simply do not report one -
+     * so a build is only dropped when Aptoide actually said something about it.
+     */
+    private fun AptoideFile.isTrustedBuild(): Boolean {
+        val rank = malware?.rank?.trim().orEmpty()
+        return rank.isEmpty() || rank.equals("TRUSTED", ignoreCase = true)
+    }
+
     private fun aptoideCandidateFromApp(
         request: HelperRequest,
         app: AptoideApp,
         option: CandidateOption
     ): DownloadCandidate? {
+        if (!app.file.isTrustedBuild()) return null
         val url = listOf(app.file.path, app.file.pathAlt, app.urls.w, app.urls.m)
             .firstNotNullOfOrNull(String::normalizedHttpUrlOrNull)
             ?: return null

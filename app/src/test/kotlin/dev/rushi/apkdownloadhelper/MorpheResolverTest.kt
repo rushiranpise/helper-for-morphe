@@ -62,4 +62,28 @@ class MorpheResolverTest {
     fun `a lookalike host is not treated as APKMirror`() {
         assertNull(apkMirrorPageOf("https://www.apkmirror.com.evil.example/apk/a/b/1-0-release/"))
     }
+
+    @Test
+    fun `an Uptodown file page is recognised with its file id`() {
+        val page = uptodownResolvedPageOf("https://instagram.en.uptodown.com/android/download/1233072194-x")
+
+        assertEquals("1233072194", page?.fileId)
+        assertEquals("1233072194", uptodownResolvedPageOf("https://instagram.en.uptodown.com/android/download/1233072194")?.fileId)
+        assertEquals("1233072194", uptodownResolvedPageOf("https://instagram.en.uptodown.com/android/download/1233072194-x/")?.fileId)
+    }
+
+    @Test
+    fun `an Uptodown listing is not mistaken for one build`() {
+        // A generic listing has no app subdomain, and a search or versions page names no file.
+        assertNull(uptodownResolvedPageOf("https://en.uptodown.com/android/search?query=instagram"))
+        assertNull(uptodownResolvedPageOf("https://www.uptodown.com/android"))
+        assertNull(uptodownResolvedPageOf("https://instagram.en.uptodown.com/android"))
+        assertNull(uptodownResolvedPageOf("https://instagram.en.uptodown.com/android/versions"))
+    }
+
+    @Test
+    fun `a lookalike Uptodown host is rejected`() {
+        assertNull(uptodownResolvedPageOf("https://evil.example.uptodown.com.evil.example/android/download/1-x"))
+        assertNull(uptodownResolvedPageOf("not a url"))
+    }
 }
