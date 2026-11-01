@@ -129,23 +129,9 @@ jobs:
       - name: Generate release notes
         shell: bash
         run: |
-          tag="${{ steps.release_tag.outputs.tag }}"
-          previous_tag="$(git describe --tags --abbrev=0 "${tag}^" 2>/dev/null || true)"
-
-          {
-            echo "## Release ${tag}"
-            echo
-            if [[ -n "$previous_tag" ]]; then
-              echo "Changes since ${previous_tag}:"
-              echo
-              git log --pretty=format:"- %s (%h)" "${previous_tag}..${tag}"
-            else
-              echo "Changes:"
-              echo
-              git log --pretty=format:"- %s (%h)" "${tag}"
-            fi
-            echo
-          } > release-notes.md
+          chmod +x tools/release-notes.sh
+          tools/release-notes.sh "${{ steps.release_tag.outputs.tag }}" > release-notes.md
+          cat release-notes.md
 
       - name: Create or update GitHub Release
         env:
