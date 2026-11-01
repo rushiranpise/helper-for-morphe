@@ -1113,7 +1113,11 @@ class MainActivity : ComponentActivity() {
     private fun onBrowserDownloadCaptured(capture: BrowserDownloadCapture) {
         val candidate = captchaBrowser ?: return
         captchaBrowser = null
-        val fileKind = fileKindFromUrl(capture.downloadUrl)
+        // A captured link often names no extension (Uptodown's `/dwn/<token>`), so fall
+        // back to what the source said the file is rather than calling every one an APK.
+        val fileKind = fileKindFromUrlOrNull(capture.downloadUrl)
+            ?: candidate.fileKind.lowercase(Locale.US).takeIf { it in DOWNLOAD_FILE_KIND_SET }
+            ?: "apk"
         val referer = capture.refererUrl
             ?.takeIf(String::isNotBlank)
             ?: candidate.captchaUrl
@@ -2321,7 +2325,7 @@ private fun CaptchaBrowserScreen(
                     request: WebResourceRequest?
                 ): Boolean {
                     val url = request?.url?.toString() ?: return false
-                    if (url.looksLikeApkDownload()) {
+                    if (url.isCapturableDownload()) {
                         val referer = view?.url ?: view?.originalUrl ?: candidate.captchaUrl ?: candidate.url
                         onDownloadCaptured(
                             BrowserDownloadCapture(
@@ -2338,6 +2342,7 @@ private fun CaptchaBrowserScreen(
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
                     view?.evaluateJavascript(CAPTCHA_CAPTURE_JS, null)
+                    view?.evaluateJavascript(CAPTCHA_AUTOPRESS_JS, null)
                 }
             }
             setDownloadListener { url, _, _, _, _ ->
@@ -2492,34 +2497,91 @@ private const val CAPTCHA_BRIDGE_NAME = "Android"
  */
 private const val CAPTCHA_CAPTURE_JS = """
 (function () {
+  if (window.__captureInstalled) return;
+  window.__captureInstalled = true;
   var re = /\.(apk|apks|apkm|xapk)(\?|#|$)/i;
+  function isDw(u) {
+    return /^https?:\/\/[^\/]*uptodown\.(com|net)\//i.test(u) && /\/dwn\//i.test(u);
+  }
   function looksLike(u) {
     if (!u) return false;
     try { u = decodeURIComponent(u); } catch (e) {}
-    return re.test(u) || /filename[^.]*\.(apk|apks|apkm|xapk)/i.test(u);
+    return re.test(u) || /filename[^.]*\.(apk|apks|apkm|xapk)/i.test(u) || isDw(u);
   }
-  
+  function capture(u) {
+    window.__captured = true;
+    window.Android && window.Android.capture(u);
+  }
   document.addEventListener('click', function (e) {
     var el = e.target;
     while (el && el !== document && !(el.tagName === 'A' && el.href)) el = el.parentNode;
-    if (el && el.tagName === 'A' && looksLike(el.href)) {
-      window.Android && window.Android.capture(el.href);
-    }
+    if (el && el.tagName === 'A' && el.href && looksLike(el.href)) capture(el.href);
   }, true);
   var origOpen = window.open;
   window.open = function (u) {
-    if (u && looksLike(u)) { window.Android && window.Android.capture(u); return null; }
+    if (u && looksLike(u)) { capture(u); return null; }
     return origOpen ? origOpen.apply(window, arguments) : null;
   };
 })();
 """
 
+/**
+ * Uptodown keeps its file behind a Turnstile widget: the page's own download button only
+ * starts the file once that is solved. This clears the decoys and presses the real button
+ * a few times, so solving the captcha is the only thing left for the user to do.
+ *
+ * Runs on every page load (the flow normally lands on the app page before the file page),
+ * and stops trying once a download has been captured.
+ */
+private const val CAPTCHA_AUTOPRESS_JS = """
+(function () {
+  var decoys = '#detail-download-button-know-native, [data-url*="uptodown-app-store"]';
+  document.querySelectorAll(decoys).forEach(function (el) { el.style.display = 'none'; });
+  var tries = 0;
+  function press() {
+    if (window.__captured || tries >= 4) return;
+    tries++;
+    var b = document.getElementById('detail-download-button');
+    if (!b) return;
+    b.scrollIntoView({ block: 'center' });
+    b.click();
+  }
+  setTimeout(press, 2000);
+  setTimeout(press, 6000);
+  setTimeout(press, 12000);
+})();
+"""
+
+/**
+ * Percent-decodes a URL without touching `+` (which is a literal plus in a path) and
+ * without `Uri.decode`, so these predicates stay usable off-device in unit tests.
+ */
+private fun String.urlDecoded(): String = runCatching {
+    URLDecoder.decode(replace("+", "%2B"), StandardCharsets.UTF_8.name())
+}.getOrDefault(this)
+
 /** True for URLs that point at an APK-family file (extension or filename hint). */
 private fun String.looksLikeApkDownload(): Boolean {
-    val decoded = Uri.decode(this).lowercase(Locale.US)
+    val decoded = urlDecoded().lowercase(Locale.US)
     return Regex("""\.(apk|apks|apkm|xapk)(\?|#|$)""").containsMatchIn(decoded) ||
         Regex("""filename[^.]*\.(apk|apks|apkm|xapk)""").containsMatchIn(decoded)
 }
+
+/**
+ * Uptodown's file links carry no extension at all (`dw.uptodown.com/dwn/<token>`), so the
+ * extension test alone misses them: the in-app browser saw a navigation to a URL it could
+ * not recognise as a file and let the page handle it.
+ */
+internal fun String.isUptodownFileUrl(): Boolean {
+    val uri = runCatching { java.net.URI(urlDecoded()) }.getOrNull() ?: return false
+    val host = uri.host?.lowercase(Locale.US) ?: return false
+    if (!host.endsWith("uptodown.com") && !host.endsWith("uptodown.net")) return false
+    return uri.path.orEmpty().contains("/dwn/", ignoreCase = true)
+}
+
+/** A URL the in-app browser should treat as the file it was opened to capture. */
+internal fun String.isCapturableDownload(): Boolean =
+    looksLikeApkDownload() || isUptodownFileUrl()
 
 @Composable
 private fun HelperScreen(
@@ -9508,7 +9570,16 @@ internal fun parseInfoTableValue(doc: Document, label: String): String? =
         ?.trim()
         ?.takeIf(String::isNotBlank)
 
-internal fun fileKindFromUrl(url: String): String {
+internal fun fileKindFromUrl(url: String): String = fileKindFromUrlOrNull(url) ?: "apk"
+
+/**
+ * The kind a URL names, or null when it names none of them.
+ *
+ * Callers that already know a source's own label (a page stating "XAPK") can keep it
+ * instead of falling back to a plain APK for a link that says nothing, such as
+ * Uptodown's extension-less `dw.uptodown.com/dwn/<token>`.
+ */
+internal fun fileKindFromUrlOrNull(url: String): String? {
     val decoded = URLDecoder.decode(url, StandardCharsets.UTF_8.name()).lowercase(Locale.US)
     // Kind detection must be scoped to the file name (final path segment): CDN
     // hosts and APKMirror's own download.php path embed "apkmirror", so a bare
@@ -9538,7 +9609,7 @@ internal fun fileKindFromUrl(url: String): String {
         "xapk" in fileName -> "xapk"
         "apks" in fileName -> "apks"
         "apkm" in fileName -> "apkm"
-        else -> "apk"
+        else -> null
     }
 }
 

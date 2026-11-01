@@ -8,6 +8,10 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
+/** Shown when Uptodown reveals its file only after a captcha the app can solve for you. */
+private const val UPTODOWN_CAPTCHA_NOTE =
+    "Uptodown needs a captcha solved before it reveals the file. Use Solve captcha to download it in the app."
+
 internal class UptodownParser(private val ctx: SourceParserContext) : ApkSourceParser {
     override val source: DownloadSource = DownloadSource.UPTODOWN
 
@@ -154,11 +158,10 @@ internal class UptodownParser(private val ctx: SourceParserContext) : ApkSourceP
                 directDownload = directUrl != null,
                 versionStatus = request.versionStatus(versionName, null),
                 formatMatches = request.acceptsFormat(fileKind),
-                note = if (directUrl == null && uptodownPageUsesTurnstile(doc)) {
-                    "Uptodown now requires solving a captcha before it reveals the download link. Open the link and download manually."
-                } else {
-                    null
-                },
+                note = if (directUrl == null && uptodownPageUsesTurnstile(doc)) UPTODOWN_CAPTCHA_NOTE else null,
+                // The in-app browser is the only way past Turnstile, so offer it on the
+                // page the resolver named rather than leaving the user to a manual visit.
+                captchaUrl = page.url.takeIf { directUrl == null && uptodownPageUsesTurnstile(doc) },
                 files = directUrl
                     ?.let {
                         listOf(
@@ -192,17 +195,19 @@ internal class UptodownParser(private val ctx: SourceParserContext) : ApkSourceP
                 ?.takeIf(String::isNotBlank)
 
     /**
-     * The kind of file a single-build page offers. Such a page marks an XAPK-only build
-     * with `data-only-xapk`, which is more reliable than the info table it does not carry.
+     * The kind of file a single-build page offers, from its own file-info row.
+     *
+     * Deliberately not taken from the button's `data-only-xapk` flag: measured on Spotify
+     * 9.1.94.1929 that flag was set on a page whose button served a plain
+     * `...-9-1-94-1929.apk`, so trusting it labelled a single APK as a split archive and
+     * reported a format mismatch against the request.
      */
     private fun uptodownFileKindFromFilePage(doc: Document): String =
-        when {
-            doc.selectFirst("#detail-download-button[data-only-xapk='1']") != null -> "xapk"
-            parseInfoTableValue(doc, "File type")?.lowercase(Locale.US) != null ->
-                parseInfoTableValue(doc, "File type")!!.lowercase(Locale.US)
-            doc.title().contains("XAPK", ignoreCase = true) -> "xapk"
-            else -> "apk"
-        }
+        parseInfoTableValue(doc, "File type")
+            ?.lowercase(Locale.US)
+            ?.takeIf { it in DOWNLOAD_FILE_KIND_SET }
+            ?: doc.takeIf { it.title().contains("XAPK", ignoreCase = true) }?.let { "xapk" }
+            ?: "apk"
 
     private fun uptodownDetailUrls(request: HelperRequest): List<String> {
         val defaultUrl = "https://${request.appName.slugForUrl()}.en.uptodown.com/android"
@@ -327,10 +332,9 @@ internal class UptodownParser(private val ctx: SourceParserContext) : ApkSourceP
             directDownload = !externalUrl.isNullOrBlank(),
             versionStatus = request.versionStatus(versionName, null),
             formatMatches = request.acceptsFormat(fileKind),
-            note = if (externalUrl.isNullOrBlank() && uptodownPageUsesTurnstile(doc)) {
-                "Uptodown now requires solving a captcha before it reveals the download link. Open the link and download manually."
-            } else {
-                null
+            note = if (externalUrl.isNullOrBlank() && uptodownPageUsesTurnstile(doc)) UPTODOWN_CAPTCHA_NOTE else null,
+            captchaUrl = downloadPageUrl.takeIf {
+                externalUrl.isNullOrBlank() && uptodownPageUsesTurnstile(doc)
             },
             files = externalUrl
                 ?.takeIf(String::isNotBlank)
@@ -458,10 +462,9 @@ internal class UptodownParser(private val ctx: SourceParserContext) : ApkSourceP
             directDownload = directUrl != null,
             versionStatus = request.versionStatus(versionName, null),
             formatMatches = request.acceptsFormat(fileKind),
-            note = if (directUrl == null && uptodownPageUsesTurnstile(pageDoc)) {
-                "Uptodown now requires solving a captcha before it reveals the download link. Open the link and download manually."
-            } else {
-                null
+            note = if (directUrl == null && uptodownPageUsesTurnstile(pageDoc)) UPTODOWN_CAPTCHA_NOTE else null,
+            captchaUrl = versionPageUrl.takeIf {
+                directUrl == null && uptodownPageUsesTurnstile(pageDoc)
             },
             files = directUrl
                 ?.let {

@@ -22,7 +22,9 @@ class UptodownResolverPathTest {
     private fun filePage(
         version: String = "2.0.0",
         playPackage: String = packageName,
-        xapkOnly: Boolean = false,
+        fileType: String? = null,
+        /** Set on a page that offers an XAPK but serves a plain APK - see data-only-xapk. */
+        xapkFlagOnly: Boolean = false,
         dataUrl: String? = null
     ): String = """
         <html>
@@ -31,12 +33,15 @@ class UptodownResolverPathTest {
             <h1>Example App</h1>
             <div id="gplay-url"
                  data-url="https://play.google.com/store/apps/details?id=$playPackage"></div>
+            <table>
+              ${if (fileType != null) "<tr><th>File type</th><td>$fileType</td></tr>" else ""}
+            </table>
             <script type="application/ld+json">
               {"@type":"SoftwareApplication","softwareVersion":"$version"}
             </script>
             <a id="detail-download-button"
                data-file-id="987"
-               ${if (xapkOnly) "data-only-xapk=\"1\"" else ""}
+               ${if (xapkFlagOnly) "data-only-xapk=\"1\"" else ""}
                ${if (dataUrl != null) "data-url=\"$dataUrl\"" else ""}>Download</a>
             <div id="download-turnstile-widget" data-sitekey="solved-in-browser"></div>
           </body>
@@ -64,6 +69,28 @@ class UptodownResolverPathTest {
         // as the scraped path does.
         assertFalse(candidate.directDownload)
         assertTrue(candidate.note.orEmpty().contains("captcha", ignoreCase = true))
+        // And it points the in-app browser at the page that holds the button, which is
+        // the only way past Turnstile.
+        assertEquals(resolvedUrl, candidate.captchaUrl)
+    }
+
+    @Test
+    fun `a page that reveals its link offers no captcha route`() = runBlocking {
+        val direct = "https://dw.uptodown.com/dwn/abc123"
+        val parser = UptodownParser(
+            testParserContext(
+                pages = mapOf(resolvedUrl to filePage(dataUrl = direct)),
+                resolveViaMorphe = { resolvedUrl }
+            )
+        )
+
+        val candidate = parser.findCandidates(
+            testRequest(packageName = packageName),
+            CandidateOption.LATEST
+        ).single()
+
+        assertEquals(null, candidate.captchaUrl)
+        assertEquals(null, candidate.note)
     }
 
     @Test
@@ -88,10 +115,10 @@ class UptodownResolverPathTest {
     }
 
     @Test
-    fun `an xapk-only page is labelled as a split archive`() = runBlocking {
+    fun `a page that states an xapk is labelled as a split archive`() = runBlocking {
         val parser = UptodownParser(
             testParserContext(
-                pages = mapOf(resolvedUrl to filePage(xapkOnly = true)),
+                pages = mapOf(resolvedUrl to filePage(fileType = "XAPK")),
                 resolveViaMorphe = { resolvedUrl }
             )
         )
@@ -102,6 +129,25 @@ class UptodownResolverPathTest {
         ).single()
 
         assertEquals("xapk", candidate.fileKind)
+        assertTrue(candidate.formatMatches)
+    }
+
+    @Test
+    fun `the xapk-only button flag alone does not relabel a plain apk`() = runBlocking {
+        // Spotify 9.1.94.1929: data-only-xapk was set, and the button served a .apk.
+        val parser = UptodownParser(
+            testParserContext(
+                pages = mapOf(resolvedUrl to filePage(xapkFlagOnly = true)),
+                resolveViaMorphe = { resolvedUrl }
+            )
+        )
+
+        val candidate = parser.findCandidates(
+            testRequest(packageName = packageName, requestedFileType = "APK"),
+            CandidateOption.LATEST
+        ).single()
+
+        assertEquals("apk", candidate.fileKind)
         assertTrue(candidate.formatMatches)
     }
 
