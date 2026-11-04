@@ -1,0 +1,172 @@
+package dev.rushi.apkdownloadhelper
+
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class GitHubParserTest {
+
+    private val api = "https://api.github.com/repos/owner/repo"
+
+    @Test
+    fun `every releases link shape Morphe answers with is read`() {
+        assertEquals(
+            GitHubReleaseLink("owner", "repo", tag = "v1.14.2"),
+            gitHubReleaseLinkOf("https://github.com/owner/repo/releases/tag/v1.14.2")
+        )
+        assertEquals(
+            GitHubReleaseLink("owner", "repo", tag = "v1.14.2"),
+            gitHubReleaseLinkOf("https://github.com/owner/repo/releases/tag/v1.14.2/")
+        )
+        assertEquals(
+            GitHubReleaseLink("owner", "repo", tag = "v1.14.2"),
+            gitHubReleaseLinkOf("https://github.com/owner/repo/releases#release-v1.14.2")
+        )
+        assertEquals(
+            GitHubReleaseLink("owner", "repo", tag = null),
+            gitHubReleaseLinkOf("https://github.com/owner/repo/releases")
+        )
+        assertEquals(
+            GitHubReleaseLink("owner", "repo", tag = null),
+            gitHubReleaseLinkOf("https://www.github.com/owner/repo/releases/latest")
+        )
+        assertEquals(
+            GitHubReleaseLink("owner", "repo", tag = "v1.0", assetName = "app release.apk"),
+            gitHubReleaseLinkOf("https://github.com/owner/repo/releases/download/v1.0/app%20release.apk")
+        )
+    }
+
+    @Test
+    fun `other GitHub pages and other hosts are not release links`() {
+        assertNull(gitHubReleaseLinkOf("https://github.com/owner/repo"))
+        assertNull(gitHubReleaseLinkOf("https://github.com/owner/repo/issues/1"))
+        assertNull(gitHubReleaseLinkOf("https://gitlab.com/owner/repo/releases"))
+        assertNull(gitHubReleaseLinkOf("https://www.apkmirror.com/apk/owner/repo/releases"))
+        assertNull(gitHubReleaseLinkOf("not a url"))
+    }
+
+    @Test
+    fun `a leading v before the number is not part of the version`() {
+        assertEquals("1.14.2", gitHubVersionOfTag("v1.14.2"))
+        assertEquals("1.14.2", gitHubVersionOfTag("1.14.2"))
+        assertEquals("vanilla-2.0", gitHubVersionOfTag("vanilla-2.0"))
+    }
+
+    @Test
+    fun `the device ABI wins, then universal, and other ABIs are dropped`() {
+        val assets = listOf(
+            asset("app-x86_64-release.apk"),
+            asset("app-universal-release.apk"),
+            asset("app-armeabi-v7a-release.apk"),
+            asset("app-arm64-v8a-release.apk"),
+            asset("checksums.txt")
+        )
+
+        val picked = gitHubInstallableAssets(assets, listOf("arm64-v8a", "armeabi-v7a"))
+
+        assertEquals(
+            listOf("app-arm64-v8a-release.apk", "app-armeabi-v7a-release.apk", "app-universal-release.apk"),
+            picked.map { it.name }
+        )
+    }
+
+    @Test
+    fun `a name without an ABI is universal and a debug build comes last`() {
+        val picked = gitHubInstallableAssets(
+            listOf(asset("app-debug.apk"), asset("app-release.apk")),
+            listOf("arm64-v8a")
+        )
+
+        assertEquals(listOf("app-release.apk", "app-debug.apk"), picked.map { it.name })
+    }
+
+    @Test
+    fun `only a sha256 digest is used`() {
+        val hex = "a".repeat(64)
+        assertEquals(hex, gitHubSha256Of("sha256:${hex.uppercase()}"))
+        assertNull(gitHubSha256Of("sha512:$hex"))
+        assertNull(gitHubSha256Of(null))
+    }
+
+    @Test
+    fun `the requested version comes from the release the resolver names`() = runBlocking {
+        val parser = parser(
+            resolved = "https://github.com/owner/repo/releases/tag/v1.2.0",
+            pages = mapOf("$api/releases/tags/v1.2.0" to release("v1.2.0"))
+        )
+
+        val candidates = parser.findCandidates(testRequest(versionName = "1.2.0"), CandidateOption.REQUESTED)
+
+        assertEquals(1, candidates.size)
+        val candidate = candidates.single()
+        assertEquals("1.2.0", candidate.versionName)
+        assertTrue(candidate.directDownload)
+        assertEquals(
+            "https://github.com/owner/repo/releases/download/v1.2.0/app-arm64-v8a.apk",
+            candidate.files.single().url
+        )
+    }
+
+    @Test
+    fun `a link to the list of releases is searched for the requested tag`() = runBlocking {
+        val parser = parser(
+            resolved = "https://github.com/owner/repo/releases",
+            pages = mapOf("$api/releases?per_page=50" to "[${release("v1.3.0")},${release("v1.2.0")}]")
+        )
+
+        val candidates = parser.findCandidates(testRequest(versionName = "1.2.0"), CandidateOption.REQUESTED)
+
+        assertEquals(listOf("1.2.0"), candidates.map { it.versionName })
+    }
+
+    @Test
+    fun `latest falls back to the newest listed release when only pre-releases exist`() = runBlocking {
+        val parser = parser(
+            resolved = "https://github.com/owner/repo/releases",
+            pages = mapOf("$api/releases?per_page=50" to "[${release("v2.0.0-beta", prerelease = true)}]")
+        )
+
+        val candidates = parser.findCandidates(testRequest(versionName = "1.2.0"), CandidateOption.LATEST)
+
+        assertEquals(listOf("2.0.0-beta"), candidates.map { it.versionName })
+    }
+
+    @Test
+    fun `nothing is looked up when the resolver does not answer with GitHub`() = runBlocking {
+        val parser = parser(
+            resolved = "https://www.apkmirror.com/apk/google-inc/youtube/",
+            pages = emptyMap()
+        )
+
+        assertTrue(parser.findCandidates(testRequest(versionName = "1.2.0"), CandidateOption.REQUESTED).isEmpty())
+        assertTrue(parser.resolveHistory(testRequest(versionName = "1.2.0")).isEmpty())
+    }
+
+    private fun parser(resolved: String, pages: Map<String, String>) =
+        GitHubParser(testParserContext(pages = pages, resolveViaMorphe = { resolved }))
+
+    private fun asset(name: String) = GitHubAsset(name = name, downloadUrl = "https://example.invalid/$name")
+
+    private fun release(tag: String, prerelease: Boolean = false): String = """
+        {
+          "tag_name": "$tag",
+          "html_url": "https://github.com/owner/repo/releases/tag/$tag",
+          "draft": false,
+          "prerelease": $prerelease,
+          "assets": [
+            {
+              "name": "app-arm64-v8a.apk",
+              "browser_download_url": "https://github.com/owner/repo/releases/download/$tag/app-arm64-v8a.apk",
+              "size": 1024
+            },
+            {
+              "name": "app-x86.apk",
+              "browser_download_url": "https://github.com/owner/repo/releases/download/$tag/app-x86.apk",
+              "size": 1024
+            }
+          ]
+        }
+    """.trimIndent()
+}

@@ -32,7 +32,8 @@ internal var adGuardDnsEnabled = false
  * Sources that start switched off.
  *
  * The five the helper is built around (APKMirror, Uptodown, APKPure, APKCombo, Aurora)
- * are enabled; the rest are theirs to discover in Settings. Like the Fast Mode default,
+ * are enabled, and so is GitHub, which only acts when Morphe's resolver itself points at a
+ * release; the rest are theirs to discover in Settings. Like the Fast Mode default,
  * this only decides what somebody who never touched the source toggles gets - a stored
  * set is used as it is.
  */

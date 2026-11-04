@@ -8,7 +8,7 @@ import org.junit.Test
 class DefaultDisabledSourcesTest {
 
     @Test
-    fun `the five built-around sources start enabled`() {
+    fun `the built-around sources and GitHub start enabled`() {
         val enabled = DownloadSource.entries.filterNot { it in DEFAULT_DISABLED_SOURCES }
 
         assertEquals(
@@ -17,7 +17,8 @@ class DefaultDisabledSourcesTest {
                 DownloadSource.UPTODOWN,
                 DownloadSource.APK_PURE,
                 DownloadSource.APK_COMBO,
-                DownloadSource.AURORA
+                DownloadSource.AURORA,
+                DownloadSource.GITHUB
             ),
             enabled.sortedBy { it.sortIndex }
         )

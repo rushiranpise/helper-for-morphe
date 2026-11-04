@@ -380,7 +380,8 @@ class MainActivity : ComponentActivity() {
             EvoziParser(parserContext),
             Mi9Parser(),
             ApkDownloaderPagesParser(),
-            AuroraParser(parserContext)
+            AuroraParser(parserContext),
+            GitHubParser(parserContext)
         ).associateBy { it.source }
     }
 
@@ -6582,7 +6583,8 @@ private val sourceCategories: List<Pair<String, List<DownloadSource>>> = listOf(
         DownloadSource.APTOIDE,
         DownloadSource.EVOZI,
         DownloadSource.MI9,
-        DownloadSource.APK_DOWNLOADER
+        DownloadSource.APK_DOWNLOADER,
+        DownloadSource.GITHUB
     )
 )
 
@@ -6742,6 +6744,7 @@ private fun DownloadSource.brand(): SourceBrand = when (this) {
     DownloadSource.EVOZI -> SourceBrand(resId = R.drawable.ic_src_evozi)
     DownloadSource.MI9 -> SourceBrand(resId = R.drawable.ic_src_mi9)
     DownloadSource.APK_DOWNLOADER -> SourceBrand(resId = R.drawable.ic_src_apkdownloader)
+    DownloadSource.GITHUB -> SourceBrand(resId = R.drawable.ic_src_github)
 }
 
 @Composable
@@ -8752,6 +8755,7 @@ internal data class HelperRequest(
             DownloadSource.EVOZI -> listOf("apkcube.com", "evozi.com")
             DownloadSource.MI9 -> listOf("mi9.com")
             DownloadSource.APK_DOWNLOADER -> listOf("apkdownloader.pages.dev")
+            DownloadSource.GITHUB -> listOf("github.com/")
         }
 
         return (sourceHintUrls + fallbackWebUrl).distinct().filter { url ->
@@ -9110,7 +9114,9 @@ internal enum class DownloadSource(
     MI9("Mi9", 6),
     APK_DOWNLOADER("APK Downloader", 7),
     AURORA("Aurora", 8, supportsManualArtifactPicker = false),
-    PLAY("Play", 9, supportsManualArtifactPicker = false)
+    PLAY("Play", 9, supportsManualArtifactPicker = false),
+    // Only reachable through a link Morphe's resolver answers with.
+    GITHUB("GitHub", 10)
 }
 
 internal fun DownloadSource.searchDomain(): String? = when (this) {
@@ -9122,6 +9128,7 @@ internal fun DownloadSource.searchDomain(): String? = when (this) {
     DownloadSource.EVOZI -> "apkcube.com"
     DownloadSource.MI9 -> "mi9.com"
     DownloadSource.APK_DOWNLOADER -> "apkdownloader.pages.dev"
+    DownloadSource.GITHUB -> "github.com"
     DownloadSource.PLAY -> "play.google.com"
     DownloadSource.AURORA -> null
 }
