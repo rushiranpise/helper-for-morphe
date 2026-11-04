@@ -38,6 +38,22 @@ class DefaultDisabledSourcesTest {
     }
 
     @Test
+    fun `Play comes back when only GitHub is left`() {
+        // Saved before GitHub existed: every source then known is disabled.
+        val disabled = DownloadSource.entries.toSet() - DownloadSource.GITHUB
+
+        assertFalse(DownloadSource.PLAY in effectiveDisabledSources(disabled))
+        assertFalse(DownloadSource.PLAY in effectiveDisabledSources(DownloadSource.entries.toSet()))
+    }
+
+    @Test
+    fun `a chosen set with something besides GitHub is kept as it is`() {
+        val disabled = DownloadSource.entries.toSet() - DownloadSource.GITHUB - DownloadSource.APK_MIRROR
+
+        assertEquals(disabled, effectiveDisabledSources(disabled))
+    }
+
+    @Test
     fun `a fresh install still has sources to try`() {
         // A default set that disabled everything would leave the resolver with nothing,
         // which is the one thing these defaults must never do.

@@ -118,6 +118,63 @@ class GitHubParserTest {
     }
 
     @Test
+    fun `armv8, arm32 and armhf name their ABI`() {
+        val abis = listOf("arm64-v8a")
+
+        assertEquals(0, gitHubAssetArchRank("app-armv8.apk", abis))
+        assertEquals(ARCH_RANK_MISMATCH, gitHubAssetArchRank("app-arm32.apk", abis))
+        assertEquals(ARCH_RANK_MISMATCH, gitHubAssetArchRank("app-armhf.apk", abis))
+        // A bare "arm" also ends ordinary words, so it does not name an ABI.
+        assertEquals(ARCH_RANK_UNIVERSAL, gitHubAssetArchRank("Alarm.apk", abis))
+    }
+
+    @Test
+    fun `a file Morphe links directly is the only one offered`() = runBlocking {
+        val parser = parser(
+            resolved = "https://github.com/owner/repo/releases/download/v1.2.0/app-arm64-v8a.apk",
+            pages = mapOf("$api/releases/tags/v1.2.0" to release("v1.2.0", "app-arm64-v8a.apk", "app-universal.apk"))
+        )
+
+        val candidates = parser.findCandidates(testRequest(versionName = "1.2.0"), CandidateOption.REQUESTED)
+
+        assertEquals(listOf("app-arm64-v8a.apk"), candidates.map { it.variantLabel })
+    }
+
+    @Test
+    fun `latest skips a release that has no APK`() = runBlocking {
+        val parser = parser(
+            resolved = "https://github.com/owner/repo/releases",
+            pages = mapOf(
+                "$api/releases/latest" to release("v2.0.0", "app-desktop.zip"),
+                "$api/releases?per_page=50" to "[${release("v2.0.0", "app-desktop.zip")},${release("v1.9.0")}]"
+            )
+        )
+
+        val candidates = parser.findCandidates(testRequest(versionName = "1.2.0"), CandidateOption.LATEST)
+
+        assertEquals(listOf("1.9.0"), candidates.map { it.versionName })
+    }
+
+    @Test
+    fun `the latest fallback opens the latest release, not the requested tag`() = runBlocking {
+        val parser = parser(
+            resolved = "https://github.com/owner/repo/releases/tag/v1.2.0",
+            pages = mapOf("$api/releases/tags/v1.2.0" to release("v1.2.0"))
+        )
+        val request = testRequest(versionName = "1.2.0")
+        parser.findCandidates(request, CandidateOption.REQUESTED)
+
+        assertEquals(
+            "https://github.com/owner/repo/releases/latest",
+            parser.latestFallbackCandidate(request)?.url
+        )
+        assertEquals(
+            "https://github.com/owner/repo/releases/tag/v1.2.0",
+            parser.requestedFallbackCandidate(request)?.url
+        )
+    }
+
+    @Test
     fun `one clear best file is not asked about`() {
         val candidates = choiceCandidates(
             "Bravearm64Universal.apk",
@@ -250,24 +307,22 @@ class GitHubParserTest {
 
     private fun asset(name: String) = GitHubAsset(name = name, downloadUrl = "https://example.invalid/$name")
 
-    private fun release(tag: String, prerelease: Boolean = false): String = """
-        {
-          "tag_name": "$tag",
-          "html_url": "https://github.com/owner/repo/releases/tag/$tag",
-          "draft": false,
-          "prerelease": $prerelease,
-          "assets": [
-            {
-              "name": "app-arm64-v8a.apk",
-              "browser_download_url": "https://github.com/owner/repo/releases/download/$tag/app-arm64-v8a.apk",
-              "size": 1024
-            },
-            {
-              "name": "app-x86.apk",
-              "browser_download_url": "https://github.com/owner/repo/releases/download/$tag/app-x86.apk",
-              "size": 1024
-            }
-          ]
+    private fun release(
+        tag: String,
+        vararg assetNames: String = arrayOf("app-arm64-v8a.apk", "app-x86.apk"),
+        prerelease: Boolean = false
+    ): String {
+        val assets = assetNames.joinToString(",") { name ->
+            """{"name": "$name", "browser_download_url": "https://github.com/owner/repo/releases/download/$tag/$name", "size": 1024}"""
         }
-    """.trimIndent()
+        return """
+            {
+              "tag_name": "$tag",
+              "html_url": "https://github.com/owner/repo/releases/tag/$tag",
+              "draft": false,
+              "prerelease": $prerelease,
+              "assets": [$assets]
+            }
+        """.trimIndent()
+    }
 }

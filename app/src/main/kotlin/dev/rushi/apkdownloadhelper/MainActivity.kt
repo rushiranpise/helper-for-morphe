@@ -414,15 +414,7 @@ class MainActivity : ComponentActivity() {
      * one fallback source available.
      */
     private val effectiveDisabledSources: Set<DownloadSource>
-        get() {
-            val disabled = helperSettings.disabledSources
-            return if (disabled.size >= DownloadSource.entries.size) {
-                // All sources disabled – keep Play Store as the sole fallback.
-                disabled - DownloadSource.PLAY
-            } else {
-                disabled
-            }
-        }
+        get() = effectiveDisabledSources(helperSettings.disabledSources)
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { _ -> startPendingDownload() }
@@ -1455,7 +1447,10 @@ class MainActivity : ComponentActivity() {
             var best = fastModeLatestCandidate(request, candidates)
             if (best != null) {
                 val choices = gitHubTiedChoices(
-                    candidates.filter { it.versionName == best?.versionName },
+                    candidates.filter { candidate ->
+                        candidate.versionName == best?.versionName &&
+                            (request.requestsVariantBuild || !candidate.hasVariantBuildMarker)
+                    },
                     request.availableAbis
                 )
                 if (choices.isNotEmpty()) {

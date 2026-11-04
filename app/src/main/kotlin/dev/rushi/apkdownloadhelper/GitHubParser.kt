@@ -112,9 +112,10 @@ private val ABI_MENTION = Regex("""arm64|aarch64|v8a|armeabi|v7a|armv7|x86""", R
 /**
  * The architecture rank of an asset by its file name.
  *
- * Release assets name their ABI loosely (`app-arm64-v8a-release.apk`, Brave's
- * `BraveMonox64.apk`) or not at all (`app-release.apk`), and a name that mentions none is a
- * universal build rather than a mismatch.
+ * Release assets name their ABI loosely (`app-arm64-v8a-release.apk`, `app-armv8.apk`,
+ * `app-armhf.apk`, Brave's `BraveMonox64.apk`) or not at all (`app-release.apk`), and a name
+ * that mentions none is a universal build rather than a mismatch. A bare `arm` is not read as
+ * an ABI: it ends ordinary words too (`Alarm.apk`).
  *
  * A name that says `universal` next to an ABI (`Bravearm64Universal.apk`) is still built for
  * that ABI only: it is dropped on other devices, and ranks as universal on a matching one so
@@ -123,6 +124,9 @@ private val ABI_MENTION = Regex("""arm64|aarch64|v8a|armeabi|v7a|armv7|x86""", R
 internal fun gitHubAssetArchRank(fileName: String, availableAbis: List<String>): Int {
     val normalized = fileName.lowercase(Locale.US)
         .replace("aarch64", "arm64")
+        .replace("armv8", "arm64")
+        .replace("arm32", "armeabi-v7a")
+        .replace("armhf", "armeabi-v7a")
         .replace("x64", "x86_64")
     if (!ABI_MENTION.containsMatchIn(normalized)) return ARCH_RANK_UNIVERSAL
     val rank = archMatchRank(normalized.replace("universal", ""), availableAbis)
@@ -168,16 +172,19 @@ internal fun gitHubTiedChoices(
     candidates: List<DownloadCandidate>,
     availableAbis: List<String>
 ): List<DownloadCandidate> {
-    val files = candidates.filter { it.source == DownloadSource.GITHUB && it.directDownload }
-    val placeOf = { candidate: DownloadCandidate ->
-        val name = candidate.variantLabel.orEmpty()
-        name.contains("debug", ignoreCase = true) to gitHubAssetArchRank(name, availableAbis)
-    }
-    val best = files.minWithOrNull(
-        compareBy<DownloadCandidate> { placeOf(it).first }.thenBy { placeOf(it).second }
+    // Each file's place: debug builds after release builds, then the ABI rank.
+    val placed = candidates
+        .filter { it.source == DownloadSource.GITHUB && it.directDownload }
+        .map { candidate ->
+            val name = candidate.variantLabel.orEmpty()
+            candidate to (name.contains("debug", ignoreCase = true) to gitHubAssetArchRank(name, availableAbis))
+        }
+    val (best, bestPlace) = placed.minWithOrNull(
+        compareBy<Pair<DownloadCandidate, Pair<Boolean, Int>>> { it.second.first }.thenBy { it.second.second }
     ) ?: return emptyList()
-    return files
-        .filter { it.versionName == best.versionName && placeOf(it) == placeOf(best) }
+    return placed
+        .filter { (candidate, place) -> candidate.versionName == best.versionName && place == bestPlace }
+        .map { (candidate, _) -> candidate }
         .takeIf { it.size > 1 }
         .orEmpty()
 }
@@ -251,12 +258,18 @@ internal class GitHubParser(private val ctx: SourceParserContext) : ApkSourcePar
     }
 
     private fun latestCandidates(request: HelperRequest, link: GitHubReleaseLink): List<DownloadCandidate> {
-        // `/releases/latest` skips pre-releases and answers 404 when a repository only has
-        // those, so the newest published release in the list stands in for it.
         val latest = runCatching { fetch<GitHubRelease>("${repoApi(link)}/releases/latest") }.getOrNull()
-            ?: releases(link).firstOrNull()
-            ?: return emptyList()
-        return candidatesOf(request, link, latest, CandidateOption.LATEST)
+        latest?.let { candidatesOf(request, link, it, CandidateOption.LATEST) }
+            ?.takeIf(List<DownloadCandidate>::isNotEmpty)
+            ?.let { return it }
+        // `/releases/latest` skips pre-releases and answers 404 when a repository only has
+        // those, and a repository that also ships desktop builds can have a latest release
+        // with no APK at all, so the newest listed release that carries one stands in for it.
+        return releases(link)
+            .asSequence()
+            .map { candidatesOf(request, link, it, CandidateOption.LATEST) }
+            .firstOrNull(List<DownloadCandidate>::isNotEmpty)
+            .orEmpty()
     }
 
     private fun candidatesOf(
@@ -266,9 +279,12 @@ internal class GitHubParser(private val ctx: SourceParserContext) : ApkSourcePar
         option: CandidateOption
     ): List<DownloadCandidate> {
         val versionName = versionOf(release) ?: return emptyList()
-        // A link straight to one file means Morphe picked it: offer that one first.
-        val assets = gitHubInstallableAssets(release.assets, request.availableAbis)
-            .sortedBy { asset -> if (link.assetName != null && asset.name == link.assetName) 0 else 1 }
+        // A link straight to one file means Morphe picked it, so it is the only one offered
+        // and Fast Mode has nothing to ask about.
+        val installable = gitHubInstallableAssets(release.assets, request.availableAbis)
+        val assets = installable
+            .filter { asset -> link.assetName != null && asset.name == link.assetName }
+            .ifEmpty { installable }
         if (assets.isEmpty()) {
             Log.w(TAG, "GitHub release ${release.tagName} of ${link.owner}/${link.repo} has no installable APK")
         }
@@ -311,7 +327,13 @@ internal class GitHubParser(private val ctx: SourceParserContext) : ApkSourcePar
             packageName = request.packageName,
             versionName = request.requestedVersionNames.firstOrNull().takeIf { option == CandidateOption.REQUESTED },
             versionCode = null,
-            url = link.tag?.let { "${link.releasesPageUrl}/tag/$it" } ?: link.releasesPageUrl,
+            // The resolver's tag is the requested version's, so Latest opens GitHub's own
+            // latest release instead.
+            url = when {
+                option == CandidateOption.LATEST -> "${link.releasesPageUrl}/latest"
+                link.tag != null -> "${link.releasesPageUrl}/tag/${link.tag.encodedPathSegment()}"
+                else -> link.releasesPageUrl
+            },
             fileKind = "web",
             option = option,
             directDownload = false,

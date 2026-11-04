@@ -55,6 +55,20 @@ internal val DEFAULT_DISABLED_SOURCES: Set<DownloadSource> = setOf(
     DownloadSource.PLAY
 )
 
+/**
+ * [disabled] with Play Store switched back on when nothing else could find a file.
+ *
+ * GitHub does not count: it only acts on a link Morphe's resolver answers with, so on its own
+ * it leaves the picker, Fast Mode and the manual links empty.
+ */
+internal fun effectiveDisabledSources(disabled: Set<DownloadSource>): Set<DownloadSource> =
+    if (DownloadSource.entries.all { it in disabled || it == DownloadSource.GITHUB }) {
+        // All sources disabled – keep Play Store as the sole fallback.
+        disabled - DownloadSource.PLAY
+    } else {
+        disabled
+    }
+
 internal data class HelperSettings(
     val downloadLocation: DownloadLocation = DownloadLocation.TEMPORARY,
     val networkPolicy: NetworkPolicy = NetworkPolicy.WIFI_AND_MOBILE,
