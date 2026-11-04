@@ -1182,6 +1182,12 @@ class MainActivity : ComponentActivity() {
     private fun startFastModeIfEnabled(request: HelperRequest) {
         if (!helperSettings.fastMode) return
         if (fastModeActive) return
+        // Fast Mode looks sources up (and asks Morphe's resolver) before it downloads, so it
+        // honours the network setting up front, as the manual lookups do.
+        helperSettings.networkPolicy.blockReason(this)?.let { message ->
+            appendLog(message, LogLevel.Warning)
+            return
+        }
         // REQUESTED mode needs a concrete version to match against; LATEST and
         // ALWAYS_ASK can resolve the newest version even with no request fields.
         val policy = helperSettings.fastModePolicy
