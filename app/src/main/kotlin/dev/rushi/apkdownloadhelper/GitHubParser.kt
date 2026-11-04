@@ -112,14 +112,21 @@ private val ABI_MENTION = Regex("""arm64|aarch64|v8a|armeabi|v7a|armv7|x86""", R
 /**
  * The architecture rank of an asset by its file name.
  *
- * Release assets name their ABI loosely (`app-arm64-v8a-release.apk`) or not at all
- * (`app-release.apk`), and a name that mentions none is a universal build rather than a
- * mismatch.
+ * Release assets name their ABI loosely (`app-arm64-v8a-release.apk`, Brave's
+ * `BraveMonox64.apk`) or not at all (`app-release.apk`), and a name that mentions none is a
+ * universal build rather than a mismatch.
+ *
+ * A name that says `universal` next to an ABI (`Bravearm64Universal.apk`) is still built for
+ * that ABI only: it is dropped on other devices, and ranks as universal on a matching one so
+ * the plain ABI build stays ahead of it.
  */
 internal fun gitHubAssetArchRank(fileName: String, availableAbis: List<String>): Int {
-    val normalized = fileName.lowercase(Locale.US).replace("aarch64", "arm64")
+    val normalized = fileName.lowercase(Locale.US)
+        .replace("aarch64", "arm64")
+        .replace("x64", "x86_64")
     if (!ABI_MENTION.containsMatchIn(normalized)) return ARCH_RANK_UNIVERSAL
-    return archMatchRank(normalized, availableAbis)
+    val rank = archMatchRank(normalized.replace("universal", ""), availableAbis)
+    return if (rank != ARCH_RANK_MISMATCH && "universal" in normalized) ARCH_RANK_UNIVERSAL else rank
 }
 
 /**

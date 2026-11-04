@@ -93,6 +93,31 @@ class GitHubParserTest {
     }
 
     @Test
+    fun `Brave's Mono build is picked for each device ABI`() {
+        // brave/brave-browser's release assets, in the order GitHub lists them.
+        val assets = listOf(
+            asset("Bravearm64Universal.apk"),
+            asset("BraveMonoarm.apk"),
+            asset("BraveMonoarm64.apk"),
+            asset("BraveMonox64.apk"),
+            asset("BraveMonox86.apk")
+        )
+
+        assertEquals(
+            listOf("BraveMonoarm64.apk", "Bravearm64Universal.apk", "BraveMonoarm.apk"),
+            gitHubInstallableAssets(assets, listOf("arm64-v8a", "armeabi-v7a", "armeabi")).map { it.name }
+        )
+        assertEquals(
+            listOf("BraveMonoarm.apk"),
+            gitHubInstallableAssets(assets, listOf("armeabi-v7a", "armeabi")).map { it.name }
+        )
+        assertEquals(
+            listOf("BraveMonox64.apk", "BraveMonox86.apk", "BraveMonoarm.apk"),
+            gitHubInstallableAssets(assets, listOf("x86_64", "x86")).map { it.name }
+        )
+    }
+
+    @Test
     fun `only a sha256 digest is used`() {
         val hex = "a".repeat(64)
         assertEquals(hex, gitHubSha256Of("sha256:${hex.uppercase()}"))
