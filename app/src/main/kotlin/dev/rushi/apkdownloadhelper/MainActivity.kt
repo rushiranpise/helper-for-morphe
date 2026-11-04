@@ -1241,7 +1241,7 @@ class MainActivity : ComponentActivity() {
         } else {
             // The resolver answers for the requested version, so it only says where to
             // look first when that is the version being fetched.
-            checkResolvedSourceFirst(request)
+            if (!checkResolvedSourceFirst(request)) return
             fastModeNext(request)
         }
     }
@@ -1260,15 +1260,20 @@ class MainActivity : ComponentActivity() {
      * source first instead of taking whichever enabled source comes first in its fixed order.
      * A disabled source stays disabled, and an answer no source can continue from (a Google
      * search) leaves the order as it is.
+     *
+     * Returns false when Fast Mode was cancelled or started over while the resolver answered,
+     * so this run stops instead of walking the queue of the run that replaced it.
      */
-    private suspend fun checkResolvedSourceFirst(request: HelperRequest) {
-        val queue = fastModeQueue ?: return
-        val resolved = withContext(Dispatchers.IO) { resolveViaMorphe(request) } ?: return
-        val source = morpheResolvedSource(resolved)?.takeIf { it in queue } ?: return
-        if (queue.first() == source) return
+    private suspend fun checkResolvedSourceFirst(request: HelperRequest): Boolean {
+        val queue = fastModeQueue ?: return false
+        val resolved = withContext(Dispatchers.IO) { resolveViaMorphe(request) }
+        if (!fastModeActive || fastModeQueue !== queue) return false
+        val source = resolved?.let(::morpheResolvedSource)?.takeIf { it in queue } ?: return true
+        if (queue.first() == source) return true
         queue.remove(source)
         queue.add(0, source)
         appendLog("Fast Mode: Morphe's resolver points at ${source.label}, checking it first.", LogLevel.Info)
+        return true
     }
 
     private fun cancelFastMode() {
