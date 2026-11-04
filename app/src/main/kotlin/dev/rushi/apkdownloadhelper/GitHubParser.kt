@@ -141,8 +141,10 @@ internal fun gitHubInstallableAssets(
         .map { asset -> asset to gitHubAssetArchRank(asset.name.orEmpty(), availableAbis) }
         .filter { (_, rank) -> rank < ARCH_RANK_MISMATCH }
         .sortedWith(
-            compareBy<Pair<GitHubAsset, Int>> { (_, rank) -> rank }
-                .thenBy { (asset, _) -> asset.name.orEmpty().contains("debug", ignoreCase = true) }
+            compareBy<Pair<GitHubAsset, Int>> { (asset, _) ->
+                asset.name.orEmpty().contains("debug", ignoreCase = true)
+            }
+                .thenBy { (_, rank) -> rank }
         )
         .map { (asset, _) -> asset }
 
@@ -190,7 +192,8 @@ internal class GitHubParser(private val ctx: SourceParserContext) : ApkSourcePar
     ): DownloadCandidate? = candidate.takeIf { it.directDownload }
 
     // The resolver is the only way to learn the repository, and its answer for a request
-    // does not change, so it is asked once per request rather than per tab.
+    // does not change, so it is asked once per request rather than per tab. A null is not
+    // kept: the resolver also answers null when it could not be reached.
     @Volatile
     private var cachedLink: Pair<HelperRequest, GitHubReleaseLink?>? = null
 
@@ -198,7 +201,7 @@ internal class GitHubParser(private val ctx: SourceParserContext) : ApkSourcePar
         cachedLink?.takeIf { it.first == request }?.let { return it.second }
         val link = request.sourceHintUrlsFor(DownloadSource.GITHUB).firstNotNullOfOrNull(::gitHubReleaseLinkOf)
             ?: ctx.resolveViaMorphe?.invoke(request)?.let(::gitHubReleaseLinkOf)
-        cachedLink = request to link
+        if (link != null) cachedLink = request to link
         return link
     }
 

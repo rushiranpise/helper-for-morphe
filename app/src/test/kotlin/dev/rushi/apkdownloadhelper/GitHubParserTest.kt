@@ -83,6 +83,16 @@ class GitHubParserTest {
     }
 
     @Test
+    fun `a debug build comes after every other build, even one for this ABI`() {
+        val picked = gitHubInstallableAssets(
+            listOf(asset("app-arm64-v8a-debug.apk"), asset("app-universal-release.apk")),
+            listOf("arm64-v8a")
+        )
+
+        assertEquals(listOf("app-universal-release.apk", "app-arm64-v8a-debug.apk"), picked.map { it.name })
+    }
+
+    @Test
     fun `only a sha256 digest is used`() {
         val hex = "a".repeat(64)
         assertEquals(hex, gitHubSha256Of("sha256:${hex.uppercase()}"))
@@ -142,6 +152,21 @@ class GitHubParserTest {
 
         assertTrue(parser.findCandidates(testRequest(versionName = "1.2.0"), CandidateOption.REQUESTED).isEmpty())
         assertTrue(parser.resolveHistory(testRequest(versionName = "1.2.0")).isEmpty())
+    }
+
+    @Test
+    fun `a resolver that could not be reached is asked again`() = runBlocking {
+        val answers = ArrayDeque(listOf(null, "https://github.com/owner/repo/releases/tag/v1.2.0"))
+        val parser = GitHubParser(
+            testParserContext(
+                pages = mapOf("$api/releases/tags/v1.2.0" to release("v1.2.0")),
+                resolveViaMorphe = { answers.removeFirst() }
+            )
+        )
+        val request = testRequest(versionName = "1.2.0")
+
+        assertTrue(parser.findCandidates(request, CandidateOption.REQUESTED).isEmpty())
+        assertEquals(listOf("1.2.0"), parser.findCandidates(request, CandidateOption.REQUESTED).map { it.versionName })
     }
 
     private fun parser(resolved: String, pages: Map<String, String>) =
