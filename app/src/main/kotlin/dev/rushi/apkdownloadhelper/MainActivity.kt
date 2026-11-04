@@ -229,6 +229,7 @@ import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
@@ -361,9 +362,7 @@ class MainActivity : ComponentActivity() {
             appContext = this,
             // Read through the settings each time, so flipping the switch takes effect on
             // the next request instead of needing a restart.
-            resolveViaMorphe = { request ->
-                if (helperSettings.useMorpheResolver) MorpheResolver.resolve(request) else null
-            },
+            resolveViaMorphe = ::resolveViaMorphe,
             // APKPure's direct endpoint names the file itself in one hop.
             resolveRedirect = { url ->
                 apkPureDirectClient.newCall(
@@ -383,6 +382,11 @@ class MainActivity : ComponentActivity() {
             AuroraParser(parserContext)
         ).associateBy { it.source }
     }
+
+    // Morphe's resolver answers by package, version and ABI, and that answer does not change
+    // while the app is open, so Fast Mode and every source share one lookup. A null is not
+    // kept: the resolver also answers null when it could not be reached.
+    private val morpheResolverAnswers = ConcurrentHashMap<String, String>()
 
     private var request by mutableStateOf<HelperRequest?>(null)
     private var uiState by mutableStateOf<UiState>(UiState.Idle)
@@ -1235,8 +1239,36 @@ class MainActivity : ComponentActivity() {
         if (policy == FastModePolicy.LATEST) {
             fastModeNextLatest(request)
         } else {
+            // The resolver answers for the requested version, so it only says where to
+            // look first when that is the version being fetched.
+            checkResolvedSourceFirst(request)
             fastModeNext(request)
         }
+    }
+
+    private fun resolveViaMorphe(request: HelperRequest): String? {
+        if (!helperSettings.useMorpheResolver) return null
+        val query = morpheResolveQuery(request)
+        morpheResolverAnswers[query]?.let { return it }
+        return MorpheResolver.resolve(request)?.also { morpheResolverAnswers[query] = it }
+    }
+
+    /**
+     * Moves the source Morphe's resolver names to the front of the Fast Mode walk.
+     *
+     * Morphe's own download dialog goes where the resolver points, so the helper checks that
+     * source first instead of taking whichever enabled source comes first in its fixed order.
+     * A disabled source stays disabled, and an answer no source can continue from (a Google
+     * search) leaves the order as it is.
+     */
+    private suspend fun checkResolvedSourceFirst(request: HelperRequest) {
+        val queue = fastModeQueue ?: return
+        val resolved = withContext(Dispatchers.IO) { resolveViaMorphe(request) } ?: return
+        val source = morpheResolvedSource(resolved)?.takeIf { it in queue } ?: return
+        if (queue.first() == source) return
+        queue.remove(source)
+        queue.add(0, source)
+        appendLog("Fast Mode: Morphe's resolver points at ${source.label}, checking it first.", LogLevel.Info)
     }
 
     private fun cancelFastMode() {

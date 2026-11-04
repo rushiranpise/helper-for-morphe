@@ -74,6 +74,8 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
   (`api.morphe.software`) where its download dialog would go, and opens that page
   directly - one request instead of a search, app page and uploads walk. On by default;
   Settings -> System turns it off to always scrape every source itself.
+  Fast Mode also checks the source the resolver names first, so it fetches the same build
+  Morphe's own dialog would, instead of whichever enabled source comes first.
 - A **default source** can be set so the picker opens on your preferred provider instead of the first one.
 - Each source offers up to four flows: **Manual** (open the site), **Recommended** (exact requested version), **Latest** (newest compatible), and **History** (browse every version).
 - The source picker is a compact **dropdown** with a live enabled-source count; selecting a source collapses it so the page stays clean.
