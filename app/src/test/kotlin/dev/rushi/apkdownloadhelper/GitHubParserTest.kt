@@ -118,6 +118,39 @@ class GitHubParserTest {
     }
 
     @Test
+    fun `one clear best file is not asked about`() {
+        val candidates = choiceCandidates(
+            "Bravearm64Universal.apk",
+            "BraveMonoarm.apk",
+            "BraveMonoarm64.apk"
+        )
+
+        assertTrue(gitHubTiedChoices(candidates, listOf("arm64-v8a", "armeabi-v7a")).isEmpty())
+    }
+
+    @Test
+    fun `files tied for the best fit are offered to the user`() {
+        val candidates = choiceCandidates(
+            "app-foss-arm64-v8a.apk",
+            "app-play-arm64-v8a.apk",
+            "app-universal.apk",
+            "app-foss-arm64-v8a-debug.apk"
+        )
+
+        assertEquals(
+            listOf("app-foss-arm64-v8a.apk", "app-play-arm64-v8a.apk"),
+            gitHubTiedChoices(candidates, listOf("arm64-v8a")).map { it.variantLabel }
+        )
+    }
+
+    @Test
+    fun `several unlabelled builds are a question too`() {
+        val candidates = choiceCandidates("app-foss.apk", "app-play.apk")
+
+        assertEquals(2, gitHubTiedChoices(candidates, listOf("arm64-v8a")).size)
+    }
+
+    @Test
     fun `only a sha256 digest is used`() {
         val hex = "a".repeat(64)
         assertEquals(hex, gitHubSha256Of("sha256:${hex.uppercase()}"))
@@ -196,6 +229,24 @@ class GitHubParserTest {
 
     private fun parser(resolved: String, pages: Map<String, String>) =
         GitHubParser(testParserContext(pages = pages, resolveViaMorphe = { resolved }))
+
+    private fun choiceCandidates(vararg fileNames: String): List<DownloadCandidate> =
+        fileNames.map { name ->
+            DownloadCandidate(
+                source = DownloadSource.GITHUB,
+                name = "Example App",
+                packageName = "com.example.app",
+                versionName = "1.0.0",
+                versionCode = null,
+                url = "https://github.com/owner/repo/releases/tag/v1.0.0",
+                fileKind = "apk",
+                option = CandidateOption.REQUESTED,
+                directDownload = true,
+                versionStatus = VersionStatus.REQUESTED,
+                formatMatches = true,
+                variantLabel = name
+            )
+        }
 
     private fun asset(name: String) = GitHubAsset(name = name, downloadUrl = "https://example.invalid/$name")
 

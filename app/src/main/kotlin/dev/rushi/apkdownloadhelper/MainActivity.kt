@@ -403,6 +403,8 @@ class MainActivity : ComponentActivity() {
     private var fastModeDecision: CompletableDeferred<FastModeChoice?>? = null
     // ALWAYS_ASK: which version the user picked for the current request.
     private var fastModeVersionDecision: CompletableDeferred<FastModePolicy?>? = null
+    // Which of several equally good files the user picked (GitHub releases).
+    private var fastModeFileDecision: CompletableDeferred<DownloadCandidate?>? = null
     // Effective policy for the current run (chosen interactively for ALWAYS_ASK).
     private var fastModeRunPolicy = FastModePolicy.REQUESTED
 
@@ -507,6 +509,7 @@ class MainActivity : ComponentActivity() {
                         onUseFastModeMismatch = { fastModeChoose(FastModeChoice.USE) },
                         onSkipFastModeMismatch = { fastModeChoose(FastModeChoice.NEXT) },
                         onChooseVersion = ::fastModeChooseVersion,
+                        onChooseFile = ::fastModeChooseFile,
                         onOpenMorphe = ::openMorpheManager,
                         onSolveCaptcha = ::openCaptchaBrowser,
                         onRequestFileTypeChange = ::changeRequestedFileType,
@@ -1232,6 +1235,40 @@ class MainActivity : ComponentActivity() {
         fastModeVersionDecision?.complete(policy)
     }
 
+    private fun fastModeChooseFile(candidate: DownloadCandidate) {
+        fastModeFileDecision?.complete(candidate)
+    }
+
+    /**
+     * Asks which of [choices] to download, or returns null when Fast Mode was cancelled.
+     *
+     * Only reached for files that tie for the best fit, so there is no right answer to pick
+     * on the user's behalf: repositories name their builds their own way.
+     */
+    private suspend fun fastModeAskFile(
+        source: DownloadSource,
+        choices: List<DownloadCandidate>
+    ): DownloadCandidate? {
+        appendLog(
+            "Fast Mode: ${source.label} has ${choices.size} files for " +
+                "${choices.first().versionDisplay}. Asking the user.",
+            LogLevel.Info
+        )
+        val gate = CompletableDeferred<DownloadCandidate?>()
+        fastModeFileDecision = gate
+        uiState = UiState.FastMode(
+            FastModeProgress(
+                sourceLabel = source.label,
+                detail = "Several files fit this device",
+                fileChoices = choices
+            )
+        )
+        val choice = gate.await()
+        fastModeFileDecision = null
+        if (!fastModeActive) return null
+        return choice
+    }
+
     private suspend fun fastModeRun(request: HelperRequest, policy: FastModePolicy) {
         if (policy == FastModePolicy.LATEST) {
             fastModeNextLatest(request)
@@ -1247,6 +1284,8 @@ class MainActivity : ComponentActivity() {
         // Unblock a pending "use this version?" question so the loop exits.
         fastModeDecision?.complete(null)
         fastModeDecision = null
+        fastModeFileDecision?.complete(null)
+        fastModeFileDecision = null
         // If a fast-mode download is in flight, stop it too; its Cancelled
         // event also restores the source list.
         if (DownloadJobManager.activeJob != null) {
@@ -1307,6 +1346,23 @@ class MainActivity : ComponentActivity() {
                     appendLog(
                         "Fast Mode: found ${candidate.versionDisplay} on ${source.label} " +
                             "(${candidate.fileKind.uppercase(Locale.US)})  downloading.",
+                        LogLevel.Info
+                    )
+                    uiState = UiState.FastMode(
+                        FastModeProgress(
+                            sourceLabel = source.label,
+                            detail = "Found ${candidate.versionDisplay}  downloading…",
+                            percent = 0
+                        )
+                    )
+                    downloadAndReturn(candidate)
+                    return
+                }
+                is FastModeFindResult.Choice -> {
+                    val candidate = fastModeAskFile(source, result.candidates) ?: return
+                    appendLog(
+                        "Fast Mode: using ${candidate.variantLabel ?: candidate.versionDisplay} " +
+                            "from ${source.label}  downloading.",
                         LogLevel.Info
                     )
                     uiState = UiState.FastMode(
@@ -1396,8 +1452,15 @@ class MainActivity : ComponentActivity() {
                 }.getOrDefault(emptyList())
             }
             if (!fastModeActive) return
-            val best = fastModeLatestCandidate(request, candidates)
+            var best = fastModeLatestCandidate(request, candidates)
             if (best != null) {
+                val choices = gitHubTiedChoices(
+                    candidates.filter { it.versionName == best?.versionName },
+                    request.availableAbis
+                )
+                if (choices.isNotEmpty()) {
+                    best = fastModeAskFile(source, choices) ?: return
+                }
                 appendLog(
                     "Fast Mode: latest ${best.versionDisplay} on ${source.label} " +
                         "(${best.fileKind.uppercase(Locale.US)})  downloading.",
@@ -1467,7 +1530,7 @@ class MainActivity : ComponentActivity() {
         source: DownloadSource
     ): FastModeFindResult {
         val outcome = resolveSourceSection(request, source, CandidateOption.REQUESTED)
-        val exact = outcome.candidates.firstOrNull { candidate ->
+        val exactMatches = outcome.candidates.filter { candidate ->
             // Format differences are fine, but the exact version name AND
             // version code are both required. A candidate that reports a code
             // outside the request is surfaced as a mismatch the user can
@@ -1475,6 +1538,9 @@ class MainActivity : ComponentActivity() {
             candidate.directDownload &&
                 request.matchesRequestedVersionStrict(candidate)
         }
+        val choices = gitHubTiedChoices(exactMatches, request.availableAbis)
+        if (choices.isNotEmpty()) return FastModeFindResult.Choice(choices)
+        val exact = exactMatches.firstOrNull()
         if (exact != null) return FastModeFindResult.Exact(exact)
 
         // The version name exists on this source but with a different build 
@@ -2616,6 +2682,7 @@ private fun HelperScreen(
     onUseFastModeMismatch: () -> Unit,
     onSkipFastModeMismatch: () -> Unit,
     onChooseVersion: (FastModePolicy) -> Unit,
+    onChooseFile: (DownloadCandidate) -> Unit,
     onOpenMorphe: () -> Unit,
     onSolveCaptcha: (DownloadCandidate) -> Unit,
     onRequestFileTypeChange: (String) -> Unit,
@@ -2845,7 +2912,8 @@ private fun HelperScreen(
                             onUseMismatch = onUseFastModeMismatch,
                             onSkipMismatch = onSkipFastModeMismatch,
                             onSkipScan = onSkipScan,
-                            onChooseVersion = onChooseVersion
+                            onChooseVersion = onChooseVersion,
+                            onChooseFile = onChooseFile
                         )
                     }
                     if (isScanStatus(state.progress.detail)) {
@@ -7712,7 +7780,8 @@ private fun FastModeCard(
     onUseMismatch: () -> Unit,
     onSkipMismatch: () -> Unit,
     onSkipScan: () -> Unit,
-    onChooseVersion: (FastModePolicy) -> Unit
+    onChooseVersion: (FastModePolicy) -> Unit,
+    onChooseFile: (DownloadCandidate) -> Unit
 ) {
     SurfaceCard(cornerRadius = MorpheDefaults.SectionCornerRadius) {
         Column(
@@ -7739,7 +7808,9 @@ private fun FastModeCard(
                         )
                     }
                 }
-                if (!progress.done && progress.percent == null && !progress.awaitingDecision) {
+                if (!progress.done && progress.percent == null && !progress.awaitingDecision &&
+                    progress.fileChoices.isEmpty()
+                ) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(22.dp),
                         strokeWidth = 2.5.dp
@@ -7824,6 +7895,38 @@ private fun FastModeCard(
                         text = "Latest version",
                         onClick = { onChooseVersion(FastModePolicy.LATEST) },
                         modifier = Modifier.weight(1f)
+                    )
+                }
+                HelperOutlinedButton(
+                    text = "Cancel",
+                    onClick = onCancel,
+                    icon = Icons.Outlined.Close,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else if (progress.fileChoices.isNotEmpty()) {
+                Surface(
+                    color = SemanticTone.Primary.container,
+                    contentColor = SemanticTone.Primary.content,
+                    shape = RoundedCornerShape(MorpheDefaults.CompactCornerRadius)
+                ) {
+                    IconTextRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(MorpheDefaults.ContentPadding),
+                        leadingContent = {
+                            ThemedIcon(icon = Icons.Outlined.Tune, size = 20.dp)
+                        },
+                        title = "Which file should Fast Mode download?",
+                        titleStyle = MaterialTheme.typography.bodyMedium,
+                        titleWeight = FontWeight.Normal,
+                        titleColor = SemanticTone.Primary.content
+                    )
+                }
+                progress.fileChoices.forEach { candidate ->
+                    HelperOutlinedButton(
+                        text = candidate.variantLabel ?: candidate.versionDisplay,
+                        onClick = { onChooseFile(candidate) },
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
                 HelperOutlinedButton(
@@ -9188,6 +9291,8 @@ private enum class FastModeChoice { USE, NEXT }
 
 private sealed interface FastModeFindResult {
     data class Exact(val candidate: DownloadCandidate) : FastModeFindResult
+    /** Several files fit equally well; the user picks one. */
+    data class Choice(val candidates: List<DownloadCandidate>) : FastModeFindResult
     data class VersionMismatch(val candidate: DownloadCandidate) : FastModeFindResult
     object None : FastModeFindResult
 }
@@ -9211,6 +9316,8 @@ private data class FastModeProgress(
     // The requested version shown on the ALWAYS_ASK prompt, so the user can
     // compare it against the newest version each source offers.
     val versionChoiceRequested: String? = null,
+    // Set while Fast Mode asks which of several equally good files to download.
+    val fileChoices: List<DownloadCandidate> = emptyList(),
     // True once the downloaded file's bytes matched the source-published SHA-256;
     // shown persistently on the card (not just the transient post-download status).
     val shaVerified: Boolean = false

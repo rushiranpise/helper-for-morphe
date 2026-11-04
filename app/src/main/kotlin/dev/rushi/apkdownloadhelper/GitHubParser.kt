@@ -155,6 +155,33 @@ internal fun gitHubInstallableAssets(
         )
         .map { (asset, _) -> asset }
 
+/**
+ * The files Fast Mode should let the user choose between, or an empty list when one is
+ * clearly the best fit.
+ *
+ * Repositories name their builds their own way, so several files are only a question when
+ * they tie for first place: two builds for this device's ABI (`app-foss-arm64.apk`,
+ * `app-play-arm64.apk`), or several that name no ABI at all. A debug build never ties with a
+ * release build.
+ */
+internal fun gitHubTiedChoices(
+    candidates: List<DownloadCandidate>,
+    availableAbis: List<String>
+): List<DownloadCandidate> {
+    val files = candidates.filter { it.source == DownloadSource.GITHUB && it.directDownload }
+    val placeOf = { candidate: DownloadCandidate ->
+        val name = candidate.variantLabel.orEmpty()
+        name.contains("debug", ignoreCase = true) to gitHubAssetArchRank(name, availableAbis)
+    }
+    val best = files.minWithOrNull(
+        compareBy<DownloadCandidate> { placeOf(it).first }.thenBy { placeOf(it).second }
+    ) ?: return emptyList()
+    return files
+        .filter { it.versionName == best.versionName && placeOf(it) == placeOf(best) }
+        .takeIf { it.size > 1 }
+        .orEmpty()
+}
+
 /** The hex digest of a `sha256:<hex>` asset digest, or null for any other algorithm. */
 internal fun gitHubSha256Of(digest: String?): String? =
     digest?.trim()

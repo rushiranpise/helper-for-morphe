@@ -77,6 +77,8 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
   the asset built for this device's ABI (falling back to a universal build), checking
   GitHub's published SHA-256 when there is one. Recommended, Latest and History all work;
   GitHub has no search by package name, so nothing is looked up without that link.
+  Repositories name their builds their own way, so when several files fit equally well
+  (two builds for this ABI, or several that name none), Fast Mode asks which one to download.
 
 - **Morphe's resolver first**: before walking a site, the helper asks Morphe's own resolver
   (`api.morphe.software`) where its download dialog would go, and opens that page
