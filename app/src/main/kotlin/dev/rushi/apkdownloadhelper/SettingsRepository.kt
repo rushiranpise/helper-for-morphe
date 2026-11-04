@@ -32,7 +32,8 @@ internal var adGuardDnsEnabled = false
  * Sources that start switched off.
  *
  * The five the helper is built around (APKMirror, Uptodown, APKPure, APKCombo, Aurora)
- * are enabled; the rest are theirs to discover in Settings. Like the Fast Mode default,
+ * are enabled, and so is GitHub, which only acts when Morphe's resolver itself points at a
+ * release; the rest are theirs to discover in Settings. Like the Fast Mode default,
  * this only decides what somebody who never touched the source toggles gets - a stored
  * set is used as it is.
  */
@@ -53,6 +54,20 @@ internal val DEFAULT_DISABLED_SOURCES: Set<DownloadSource> = setOf(
     DownloadSource.APK_DOWNLOADER,
     DownloadSource.PLAY
 )
+
+/**
+ * [disabled] with Play Store switched back on when nothing else could find a file.
+ *
+ * GitHub does not count: it only acts on a link Morphe's resolver answers with, so on its own
+ * it leaves the picker, Fast Mode and the manual links empty.
+ */
+internal fun effectiveDisabledSources(disabled: Set<DownloadSource>): Set<DownloadSource> =
+    if (DownloadSource.entries.all { it in disabled || it == DownloadSource.GITHUB }) {
+        // All sources disabled – keep Play Store as the sole fallback.
+        disabled - DownloadSource.PLAY
+    } else {
+        disabled
+    }
 
 internal data class HelperSettings(
     val downloadLocation: DownloadLocation = DownloadLocation.TEMPORARY,

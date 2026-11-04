@@ -8,7 +8,7 @@ import org.junit.Test
 class DefaultDisabledSourcesTest {
 
     @Test
-    fun `the five built-around sources start enabled`() {
+    fun `the built-around sources and GitHub start enabled`() {
         val enabled = DownloadSource.entries.filterNot { it in DEFAULT_DISABLED_SOURCES }
 
         assertEquals(
@@ -17,7 +17,8 @@ class DefaultDisabledSourcesTest {
                 DownloadSource.UPTODOWN,
                 DownloadSource.APK_PURE,
                 DownloadSource.APK_COMBO,
-                DownloadSource.AURORA
+                DownloadSource.AURORA,
+                DownloadSource.GITHUB
             ),
             enabled.sortedBy { it.sortIndex }
         )
@@ -34,6 +35,22 @@ class DefaultDisabledSourcesTest {
         ).forEach { source ->
             assertTrue("$source should start disabled", source in DEFAULT_DISABLED_SOURCES)
         }
+    }
+
+    @Test
+    fun `Play comes back when only GitHub is left`() {
+        // Saved before GitHub existed: every source then known is disabled.
+        val disabled = DownloadSource.entries.toSet() - DownloadSource.GITHUB
+
+        assertFalse(DownloadSource.PLAY in effectiveDisabledSources(disabled))
+        assertFalse(DownloadSource.PLAY in effectiveDisabledSources(DownloadSource.entries.toSet()))
+    }
+
+    @Test
+    fun `a chosen set with something besides GitHub is kept as it is`() {
+        val disabled = DownloadSource.entries.toSet() - DownloadSource.GITHUB - DownloadSource.APK_MIRROR
+
+        assertEquals(disabled, effectiveDisabledSources(disabled))
     }
 
     @Test

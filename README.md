@@ -64,11 +64,21 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
 
 ### Sources
 
-- Ten sources: **APKMirror, Uptodown, APKPure, APKCombo, Aptoide, Evozi, Mi9, APK Downloader, Aurora, Play**.
+- Eleven sources: **APKMirror, Uptodown, APKPure, APKCombo, Aptoide, Evozi, Mi9, APK Downloader, Aurora, Play, GitHub**.
 - Every source can be individually **enabled/disabled** from Settings → Sources; disabled sources disappear from the picker, manual links, Fast Mode, and the default-source dropdown. If you disable *everything*, Play Store remains as the fallback.
 
 - **Five start enabled**: APKMirror, Uptodown, APKPure, APKCombo and Aurora. Aptoide,
   Evozi, Mi9, APK Downloader and Play are available but off until you turn them on.
+  GitHub starts enabled too, but only acts when Morphe's resolver points at a release.
+
+- **GitHub releases**: for apps whose original APK is published as a GitHub release asset,
+  Morphe's resolver answers with the release page (or the file itself) instead of a mirror.
+  The helper follows that link, reads the release through the GitHub API, and downloads
+  the asset built for this device's ABI (falling back to a universal build), checking
+  GitHub's published SHA-256 when there is one. Recommended, Latest and History all work;
+  GitHub has no search by package name, so nothing is looked up without that link.
+  Repositories name their builds their own way, so when several files fit equally well
+  (two builds for this ABI, or several that name none), Fast Mode asks which one to download.
 
 - **Morphe's resolver first**: before walking a site, the helper asks Morphe's own resolver
   (`api.morphe.software`) where its download dialog would go, and opens that page
