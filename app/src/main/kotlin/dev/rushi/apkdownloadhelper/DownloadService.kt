@@ -14,7 +14,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.SystemClock
 import android.provider.MediaStore
 import android.util.Log
@@ -97,15 +99,16 @@ internal object DownloadJobManager {
             val etaMs: Long? = null
         ) : Event
         data class Completed(val result: PendingDownloadResult, val epoch: Long = 0) : Event
-        data class Failed(val candidate: DownloadCandidate, val message: String) : Event
-        data class Cancelled(val candidate: DownloadCandidate) : Event
+        data class Failed(val candidate: DownloadCandidate, val message: String, val epoch: Long = 0) : Event
+        data class Cancelled(val candidate: DownloadCandidate, val epoch: Long = 0) : Event
         // The downloaded file is valid except for its version code (which the
         // parser could not know up front). The file is kept so the UI can ask
         // whether to use it anyway.
         data class ValidationMismatch(
             val candidate: DownloadCandidate,
             val file: File,
-            val foundVersionCode: Long?
+            val foundVersionCode: Long?,
+            val epoch: Long = 0
         ) : Event
         /** Short-lived status shown after download hits 100 % but before completion. */
         data class PostDownloadStatus(
@@ -168,9 +171,41 @@ internal object DownloadJobManager {
     var currentEpoch: Long = 0
         private set
 
+    /**
+     * Every epoch up to this one belongs to a run that was cancelled or replaced. Its download
+     * can still finish or report after that, and must then be neither handed off nor allowed
+     * to touch the screen of the request that replaced it.
+     */
+    @Volatile
+    var retiredThrough: Long = -1
+        private set
+
+    /** Marks the current download as no longer wanted; the next [start] is live again. */
+    @Synchronized
+    fun retireCurrent() {
+        retiredThrough = currentEpoch
+    }
+
+    /** Whether [epoch] is the newest download and still wanted. */
+    @Synchronized
+    fun isLive(epoch: Long): Boolean = epoch == currentEpoch && epoch > retiredThrough
+
+    /**
+     * Runs [publish] only if [epoch] is live, and returns whether it ran. Holding the same lock
+     * as [retireCurrent] and [start] means a run cannot be retired half-way through publishing
+     * its download's result or prompt.
+     */
+    @Synchronized
+    fun ifLive(epoch: Long, publish: () -> Unit): Boolean {
+        if (!isLive(epoch)) return false
+        publish()
+        return true
+    }
+
     private val _events = MutableStateFlow<Event?>(null)
     val events: StateFlow<Event?> = _events.asStateFlow()
 
+    @Synchronized
     fun start(job: DownloadJob) {
         currentEpoch++
         activeJob = job.copy(epoch = currentEpoch)
@@ -181,9 +216,14 @@ internal object DownloadJobManager {
         _events.value = null
     }
 
+    @Synchronized
     fun emit(event: Event) {
         _events.value = event
-        if (event is Event.Completed || event is Event.Cancelled) {
+        // A job replaced by a new request can finish or report its cancellation after the new
+        // job has started, so either only clears the job it belongs to.
+        if ((event is Event.Completed && event.epoch == activeJob?.epoch) ||
+            (event is Event.Cancelled && event.epoch == activeJob?.epoch)
+        ) {
             activeJob = null
         }
     }
@@ -223,6 +263,7 @@ internal object DownloadJobManager {
 internal class DownloadService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var downloadJob: Job? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
     // Verdict of the last scan, carried from scanAndHandoff into handleSuccess
     // so the hand-off gets recorded with its VirusTotal outcome.
     private var lastScanVerdict: ScanVerdict? = null
@@ -328,9 +369,8 @@ internal class DownloadService : Service() {
                             is DownloadJobManager.PendingScan.Ask -> handleSuccess(job, pending.file)
                             // User chose not to hand off after seeing the result.
                             is DownloadJobManager.PendingScan.Decided -> {
-                                DownloadJobManager.emit(DownloadJobManager.Event.Cancelled(job.candidate))
-                                stopForeground(STOP_FOREGROUND_REMOVE)
-                                stopSelf()
+                                DownloadJobManager.emit(DownloadJobManager.Event.Cancelled(job.candidate, job.epoch))
+                                stopForJob(job)
                             }
                         }
                     }
@@ -446,10 +486,16 @@ internal class DownloadService : Service() {
                         }
                         VirusTotalScanMode.ASK -> {
                             // Emit event, store file, wait for user decision.
-                            DownloadJobManager.setPendingScan(DownloadJobManager.PendingScan.Ask(file))
-                            DownloadJobManager.emit(
-                                DownloadJobManager.Event.ScanAsk(job.candidate)
-                            )
+                            val asked = DownloadJobManager.ifLive(job.epoch) {
+                                DownloadJobManager.setPendingScan(DownloadJobManager.PendingScan.Ask(file))
+                                DownloadJobManager.emit(
+                                    DownloadJobManager.Event.ScanAsk(job.candidate)
+                                )
+                            }
+                            if (!asked) {
+                                handleCancelled(job)
+                                return@launch
+                            }
                             notifySafe(
                                 NOTIFICATION_ID_PROGRESS,
                                 buildProgressNotification(
@@ -490,11 +536,11 @@ internal class DownloadService : Service() {
                         DownloadJobManager.Event.ValidationMismatch(
                             candidate = job.candidate,
                             file = error.file,
-                            foundVersionCode = error.foundVersionCode
+                            foundVersionCode = error.foundVersionCode,
+                            epoch = job.epoch
                         )
                     )
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
+                    stopForJob(job)
                 } else {
                     handleFailure(job, error)
                 }
@@ -535,6 +581,11 @@ internal class DownloadService : Service() {
     }
 
     private fun handleSuccess(job: DownloadJobManager.DownloadJob, file: File) {
+        // Cancelled or replaced while it finished: the file belongs to no request any more.
+        if (!DownloadJobManager.isLive(job.epoch)) {
+            handleCancelled(job)
+            return
+        }
         val request = job.request
         val candidate = job.candidate
         val settings = job.settings
@@ -556,21 +607,32 @@ internal class DownloadService : Service() {
             requestPackage = request.packageName,
             callerPackage = request.callerPackage
         )
-        DownloadJobManager.persistPendingResult(result, applicationContext)
-        recordHandOff(request, candidate, file, uri, lastScanVerdict)
-        lastScanVerdict = null
+        // Checked again: the run can be retired while the file is being copied.
+        val published = DownloadJobManager.ifLive(job.epoch) {
+            DownloadJobManager.persistPendingResult(result, applicationContext)
+            recordHandOff(request, candidate, file, uri, lastScanVerdict)
+            lastScanVerdict = null
 
-        if (
-            settings.downloadLocation == DownloadLocation.DOWNLOADS ||
-            settings.deleteTemporaryAfterHandoff
-        ) {
-            scheduleTemporaryDelete(file)
+            if (
+                settings.downloadLocation == DownloadLocation.DOWNLOADS ||
+                settings.deleteTemporaryAfterHandoff
+            ) {
+                scheduleTemporaryDelete(file)
+            }
+
+            DownloadJobManager.emit(DownloadJobManager.Event.Completed(result, job.epoch))
         }
-
-        DownloadJobManager.emit(DownloadJobManager.Event.Completed(result, job.epoch))
+        if (!published) {
+            revokeUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            // The visible copy in Downloads was made for a request that no longer wants it.
+            if (settings.downloadLocation == DownloadLocation.DOWNLOADS) {
+                runCatching { contentResolver.delete(uri, null, null) }
+            }
+            handleCancelled(job)
+            return
+        }
         notifyCompletion(job, result)
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        stopForJob(job)
     }
 
     private suspend fun scanAndHandoff(job: DownloadJobManager.DownloadJob, file: File) {
@@ -673,15 +735,11 @@ internal class DownloadService : Service() {
             return
         }
 
-        DownloadJobManager.emit(
-            DownloadJobManager.Event.ScanComplete(candidate, scanResult, shaVerified = lastShaVerified)
-        )
-
         // Always pause for the user: show the result and let them proceed or
         // cancel. "Always scan" means the scan runs without asking, not that
         // the result is skipped — the user must see it before the file leaves
         // the app.
-        lastScanVerdict = when (scanResult) {
+        val verdict = when (scanResult) {
             is VirusTotalScanner.ScanResult.Clean -> ScanVerdict(
                 label = if (scanResult.scannedFiles != null) {
                     "Clean · 0/${scanResult.totalEngines} engines · ${scanResult.scannedFiles} APKs"
@@ -711,7 +769,20 @@ internal class DownloadService : Service() {
                 result = scanResult
             )
         }
-        DownloadJobManager.setPendingScan(DownloadJobManager.PendingScan.Decided(file))
+        // An ASK-mode scan runs outside downloadJob and can finish after its run was replaced;
+        // its result, and its verdict (which the next hand-off records), must not land on the
+        // download that replaced it.
+        val decided = DownloadJobManager.ifLive(job.epoch) {
+            DownloadJobManager.emit(
+                DownloadJobManager.Event.ScanComplete(candidate, scanResult, shaVerified = lastShaVerified)
+            )
+            lastScanVerdict = verdict
+            DownloadJobManager.setPendingScan(DownloadJobManager.PendingScan.Decided(file))
+        }
+        if (!decided) {
+            handleCancelled(job)
+            return
+        }
         notifySafe(
             NOTIFICATION_ID_PROGRESS,
             buildProgressNotification(candidate, 100, "Scan complete — open the app to continue")
@@ -721,16 +792,29 @@ internal class DownloadService : Service() {
     private fun handleFailure(job: DownloadJobManager.DownloadJob, error: Throwable) {
         val message = downloadFailureMessage(job.candidate, error)
         Log.w(TAG, "Download failed for ${job.candidate.packageName}", error)
-        DownloadJobManager.emit(DownloadJobManager.Event.Failed(job.candidate, message))
-        notifyFailure(job, message)
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        DownloadJobManager.emit(DownloadJobManager.Event.Failed(job.candidate, message, job.epoch))
+        if (DownloadJobManager.isLive(job.epoch)) notifyFailure(job, message)
+        stopForJob(job)
     }
 
     private fun handleCancelled(job: DownloadJobManager.DownloadJob) {
-        DownloadJobManager.emit(DownloadJobManager.Event.Cancelled(job.candidate))
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        DownloadJobManager.emit(DownloadJobManager.Event.Cancelled(job.candidate, job.epoch))
+        stopForJob(job)
+    }
+
+    /**
+     * Ends the service once [job] is over, unless a newer download has started since: a job
+     * replaced by a new request can finish after it, and stopping the service then would
+     * take the new download down with it.
+     */
+    private fun stopForJob(job: DownloadJobManager.DownloadJob) {
+        // Checked on the main thread, where new downloads are started, so one cannot start
+        // between the check and the stop.
+        mainHandler.post {
+            if (job.epoch != DownloadJobManager.currentEpoch) return@post
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
     }
 
     /** A history verdict for a scan the user chose to skip (handed off unverified). */
@@ -748,6 +832,14 @@ internal class DownloadService : Service() {
     private fun cancelDownload() {
         downloader.cancelCurrent()
         downloadJob?.cancel()
+        // A download paused at a scan prompt has no running coroutine to cancel, and its
+        // file would otherwise be handed off by the next Skip, even for another request.
+        val job = DownloadJobManager.activeJob
+        if (DownloadJobManager.pendingScan != null && job != null) {
+            DownloadJobManager.setPendingScan(null)
+            DownloadJobManager.emit(DownloadJobManager.Event.Cancelled(job.candidate, job.epoch))
+            stopForJob(job)
+        }
         // Flag any in-flight scan (ALWAYS or ASK mode) so its next
         // checkCancelled() poll aborts it even though the scan may be running
         // in a different coroutine than downloadJob.
