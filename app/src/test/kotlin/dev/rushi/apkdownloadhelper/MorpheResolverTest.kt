@@ -29,6 +29,24 @@ class MorpheResolverTest {
     }
 
     @Test
+    fun `the resolved page names the source Fast Mode checks first`() {
+        assertEquals(DownloadSource.APK_MIRROR, morpheResolvedSource(variant))
+        assertEquals(DownloadSource.APK_MIRROR, morpheResolvedSource(release))
+        assertEquals(
+            DownloadSource.UPTODOWN,
+            morpheResolvedSource("https://instagram.en.uptodown.com/android/download/1234-x")
+        )
+    }
+
+    @Test
+    fun `an answer no source can continue from keeps the usual order`() {
+        assertNull(morpheResolvedSource("https://google.com/search?q=com.example.app"))
+        assertNull(morpheResolvedSource("https://www.apkmirror.com/apk/google-inc/youtube/"))
+        assertNull(morpheResolvedSource("https://en.uptodown.com/android/search"))
+        assertNull(morpheResolvedSource("https://github.com/owner/repo/releases/tag/v1.0"))
+    }
+
+    @Test
     fun `a variant page is recognised and mapped to its release page`() {
         assertEquals(ApkMirrorPage.VARIANT, apkMirrorPageOf(variant))
         assertEquals(release, apkMirrorReleaseUrlOfVariantPage(variant))

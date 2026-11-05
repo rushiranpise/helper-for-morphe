@@ -71,6 +71,19 @@ internal fun uptodownResolvedPageOf(url: String): UptodownResolvedPage? {
 }
 
 /**
+ * The source a resolved URL belongs to, or null when no source can continue from it.
+ *
+ * This is Morphe's own choice of where a version comes from, so Fast Mode checks that source
+ * before the others: a site walked first can carry another build of the same version (a
+ * Play bundle where the patches want the developer's own APK).
+ */
+internal fun morpheResolvedSource(url: String): DownloadSource? = when {
+    apkMirrorPageOf(url) != null -> DownloadSource.APK_MIRROR
+    uptodownResolvedPageOf(url) != null -> DownloadSource.UPTODOWN
+    else -> null
+}
+
+/**
  * The release page a variant page belongs to, e.g.
  * `.../youtube-21-20-405-release/youtube-21-20-405-4-android-apk-download/` ->
  * `.../youtube-21-20-405-release/`.

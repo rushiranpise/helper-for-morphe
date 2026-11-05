@@ -229,6 +229,7 @@ import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
@@ -361,9 +362,7 @@ class MainActivity : ComponentActivity() {
             appContext = this,
             // Read through the settings each time, so flipping the switch takes effect on
             // the next request instead of needing a restart.
-            resolveViaMorphe = { request ->
-                if (helperSettings.useMorpheResolver) MorpheResolver.resolve(request) else null
-            },
+            resolveViaMorphe = ::resolveViaMorphe,
             // APKPure's direct endpoint names the file itself in one hop.
             resolveRedirect = { url ->
                 apkPureDirectClient.newCall(
@@ -384,6 +383,11 @@ class MainActivity : ComponentActivity() {
         ).associateBy { it.source }
     }
 
+    // Morphe's resolver answers by package, version and ABI, and that answer does not change
+    // while the app is open, so Fast Mode and every source share one lookup. A null is not
+    // kept: the resolver also answers null when it could not be reached.
+    private val morpheResolverAnswers = ConcurrentHashMap<String, String>()
+
     private var request by mutableStateOf<HelperRequest?>(null)
     private var uiState by mutableStateOf<UiState>(UiState.Idle)
     private var helperSettings by mutableStateOf(HelperSettings())
@@ -398,6 +402,9 @@ class MainActivity : ComponentActivity() {
     private var reuseOffer by mutableStateOf<List<ReuseOption>?>(null)
     private var selectedPagerPage by mutableIntStateOf(0)
     private var fastModeActive = false
+    // Which Fast Mode run is current. A run checks it after every pause, so one replaced by a
+    // new request (or cancelled and started again) stops instead of walking alongside it.
+    private var fastModeRunId = 0
     private var fastModeQueue: MutableList<DownloadSource>? = null
     private var fastModeDecision: CompletableDeferred<FastModeChoice?>? = null
     // ALWAYS_ASK: which version the user picked for the current request.
@@ -554,8 +561,13 @@ class MainActivity : ComponentActivity() {
             installedPackageRefreshToken++
             return
         }
+        val replacedFastMode = fastModeActive
+        if (replacedFastMode) endFastModeRun()
         request = HelperRequest.from(intent)
         startRequestLog(request)
+        if (replacedFastMode) {
+            appendLog("Fast Mode: stopped the previous request's run for this new one.", LogLevel.Warning)
+        }
         val activeRequest = request
         if (activeRequest != null) {
             if (!deliverPendingResultIfPresent(activeRequest)) {
@@ -1178,11 +1190,18 @@ class MainActivity : ComponentActivity() {
     private fun startFastModeIfEnabled(request: HelperRequest) {
         if (!helperSettings.fastMode) return
         if (fastModeActive) return
+        // Fast Mode looks sources up (and asks Morphe's resolver) before it downloads, so it
+        // honours the network setting up front, as the manual lookups do.
+        helperSettings.networkPolicy.blockReason(this)?.let { message ->
+            appendLog(message, LogLevel.Warning)
+            return
+        }
         // REQUESTED mode needs a concrete version to match against; LATEST and
         // ALWAYS_ASK can resolve the newest version even with no request fields.
         val policy = helperSettings.fastModePolicy
         if (policy == FastModePolicy.REQUESTED && !request.hasRequestedVersionRequest) return
         fastModeActive = true
+        val runId = ++fastModeRunId
         fastModeRunPolicy = if (policy == FastModePolicy.ALWAYS_ASK) FastModePolicy.REQUESTED else policy
         // Walk whatever the user has enabled globally; sources that cannot
         // deliver a direct APK (Play/Aurora links, captcha-gated services)
@@ -1209,11 +1228,11 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch {
                 val chosen = gate.await()
                 fastModeVersionDecision = null
-                if (!fastModeActive || chosen == null) return@launch
+                if (!isFastModeRun(runId) || chosen == null) return@launch
                 fastModeRunPolicy = chosen
                 appendLog("Fast Mode: resolving ${chosen.name.lowercase(Locale.US)} version.", LogLevel.Info)
                 uiState = UiState.FastMode(FastModeProgress(detail = "Auto-searching sources…"))
-                fastModeRun(request, chosen)
+                fastModeRun(request, chosen, runId)
             }
         } else {
             appendLog(
@@ -1222,7 +1241,7 @@ class MainActivity : ComponentActivity() {
             )
             uiState = UiState.FastMode(FastModeProgress(detail = "Auto-searching sources…"))
             lifecycleScope.launch {
-                fastModeRun(request, policy)
+                fastModeRun(request, policy, runId)
             }
         }
     }
@@ -1231,31 +1250,78 @@ class MainActivity : ComponentActivity() {
         fastModeVersionDecision?.complete(policy)
     }
 
-    private suspend fun fastModeRun(request: HelperRequest, policy: FastModePolicy) {
+    private suspend fun fastModeRun(request: HelperRequest, policy: FastModePolicy, runId: Int) {
         if (policy == FastModePolicy.LATEST) {
-            fastModeNextLatest(request)
+            fastModeNextLatest(request, runId)
         } else {
-            fastModeNext(request)
+            // The resolver answers for the requested version, so it only says where to
+            // look first when that is the version being fetched.
+            if (!checkResolvedSourceFirst(request, runId)) return
+            fastModeNext(request, runId)
         }
+    }
+
+    /** Whether [runId] is still the Fast Mode run in progress. */
+    private fun isFastModeRun(runId: Int): Boolean = fastModeActive && runId == fastModeRunId
+
+    private fun resolveViaMorphe(request: HelperRequest): String? {
+        if (!helperSettings.useMorpheResolver) return null
+        val query = morpheResolveQuery(request)
+        morpheResolverAnswers[query]?.let { return it }
+        return MorpheResolver.resolve(request)?.also { morpheResolverAnswers[query] = it }
+    }
+
+    /**
+     * Moves the source Morphe's resolver names to the front of the Fast Mode walk.
+     *
+     * Morphe's own download dialog goes where the resolver points, so the helper checks that
+     * source first instead of taking whichever enabled source comes first in its fixed order.
+     * A disabled source stays disabled, and an answer no source can continue from (a Google
+     * search) leaves the order as it is.
+     *
+     * Returns false when Fast Mode was cancelled or started over while the resolver answered,
+     * so this run stops instead of walking the queue of the run that replaced it.
+     */
+    private suspend fun checkResolvedSourceFirst(request: HelperRequest, runId: Int): Boolean {
+        val queue = fastModeQueue ?: return false
+        val resolved = withContext(Dispatchers.IO) { resolveViaMorphe(request) }
+        if (!isFastModeRun(runId)) return false
+        val source = resolved?.let(::morpheResolvedSource)?.takeIf { it in queue } ?: return true
+        if (queue.first() == source) return true
+        queue.remove(source)
+        queue.add(0, source)
+        appendLog("Fast Mode: Morphe's resolver points at ${source.label}, checking it first.", LogLevel.Info)
+        return true
     }
 
     private fun cancelFastMode() {
         appendLog("Fast Mode cancelled  taking over manually.", LogLevel.Warning)
-        fastModeActive = false
-        fastModeQueue = null
-        // Unblock a pending "use this version?" question so the loop exits.
-        fastModeDecision?.complete(null)
-        fastModeDecision = null
-        // If a fast-mode download is in flight, stop it too; its Cancelled
-        // event also restores the source list.
-        if (DownloadJobManager.activeJob != null) {
-            cancelDownload()
-        }
+        endFastModeRun()
         val activeRequest = request
         uiState = if (activeRequest != null) {
             UiState.Ready(initialCandidateResult(activeRequest))
         } else {
             UiState.Idle
+        }
+    }
+
+    /** Stops the Fast Mode run in progress, its pending questions and its download. */
+    private fun endFastModeRun() {
+        fastModeActive = false
+        fastModeQueue = null
+        // A download still waiting on the notification permission prompt belongs to this run.
+        pendingDownload = null
+        // Unblock a pending "use this version?" question so the loop exits.
+        fastModeDecision?.complete(null)
+        fastModeDecision = null
+        fastModeVersionDecision?.complete(null)
+        fastModeVersionDecision = null
+        // The run's download is no longer wanted: whatever it reports from now on is ignored,
+        // and it is never handed off. The caller restores the screen.
+        DownloadJobManager.retireCurrent()
+        // If a fast-mode download is in flight, stop it too.
+        if (DownloadJobManager.activeJob != null) {
+            cancelDownload()
         }
     }
 
@@ -1285,11 +1351,11 @@ class MainActivity : ComponentActivity() {
         uiState = UiState.Loading
     }
 
-    private suspend fun fastModeNext(request: HelperRequest) {
+    private suspend fun fastModeNext(request: HelperRequest, runId: Int) {
         val queue = fastModeQueue ?: return
         while (queue.isNotEmpty()) {
             // The user may have cancelled while a source was resolving.
-            if (!fastModeActive) return
+            if (!isFastModeRun(runId)) return
             val source = queue.removeAt(0)
             appendLog("Fast Mode: checking ${source.label} for ${request.requestedVersionLabel}...")
             uiState = UiState.FastMode(
@@ -1299,7 +1365,7 @@ class MainActivity : ComponentActivity() {
                 runCatching { fastModeFindCandidate(request, source) }
                     .getOrDefault(FastModeFindResult.None)
             }
-            if (!fastModeActive) return
+            if (!isFastModeRun(runId)) return
             when (result) {
                 is FastModeFindResult.Exact -> {
                     val candidate = result.candidate
@@ -1337,7 +1403,7 @@ class MainActivity : ComponentActivity() {
                         )
                     )
                     val decision = decisionGate.await()
-                    if (!fastModeActive || decision == null) return
+                    if (!isFastModeRun(runId) || decision == null) return
                     if (decision == FastModeChoice.USE) {
                         appendLog(
                             "Fast Mode: using ${candidate.versionDisplay} from ${source.label} " +
@@ -1380,10 +1446,10 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private suspend fun fastModeNextLatest(request: HelperRequest) {
+    private suspend fun fastModeNextLatest(request: HelperRequest, runId: Int) {
         val queue = fastModeQueue ?: return
         while (queue.isNotEmpty()) {
-            if (!fastModeActive) return
+            if (!isFastModeRun(runId)) return
             val source = queue.removeAt(0)
             appendLog("Fast Mode: fetching latest from ${source.label}...", LogLevel.Info)
             uiState = UiState.FastMode(
@@ -1394,7 +1460,7 @@ class MainActivity : ComponentActivity() {
                     resolveSourceSection(request, source, CandidateOption.LATEST).candidates
                 }.getOrDefault(emptyList())
             }
-            if (!fastModeActive) return
+            if (!isFastModeRun(runId)) return
             val best = fastModeLatestCandidate(request, candidates)
             if (best != null) {
                 appendLog(
@@ -1496,7 +1562,26 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Status events (progress, scan state) carry no epoch, so they count only while their
+     * download is the live one: a cancelled or replaced download can report once more before
+     * it notices, and must not paint over the screen of the request that replaced it.
+     */
+    private fun isFromLiveDownload(candidate: DownloadCandidate): Boolean {
+        val live = DownloadJobManager.activeJob ?: return false
+        return DownloadJobManager.isLive(live.epoch) && live.candidate == candidate
+    }
+
     private fun handleDownloadEvent(event: DownloadJobManager.Event?) {
+        val statusCandidate = when (event) {
+            is DownloadJobManager.Event.Progress -> event.candidate
+            is DownloadJobManager.Event.PostDownloadStatus -> event.candidate
+            is DownloadJobManager.Event.Scanning -> event.candidate
+            is DownloadJobManager.Event.ScanAsk -> event.candidate
+            is DownloadJobManager.Event.ScanComplete -> event.candidate
+            else -> null
+        }
+        if (statusCandidate != null && !isFromLiveDownload(statusCandidate)) return
         when (event) {
             null -> Unit
             is DownloadJobManager.Event.Progress -> {
@@ -1637,9 +1722,10 @@ class MainActivity : ComponentActivity() {
                     // activity recreation cannot replay it into a new request
                     // session.
                     DownloadJobManager.clearEvent()
-                } else if (event.epoch != DownloadJobManager.currentEpoch) {
-                    // A stale epoch belongs to an earlier session that no live
-                    // activity owns any more. Safe to drop entirely.
+                } else if (!DownloadJobManager.isLive(event.epoch)) {
+                    // A stale epoch belongs to an earlier session (or a run that was
+                    // cancelled or replaced) that no live activity owns any more.
+                    // Safe to drop entirely.
                     appendLog(
                         "Ignoring download completion for a stale request session " +
                             "(epoch ${event.epoch}, current ${DownloadJobManager.currentEpoch}).",
@@ -1686,6 +1772,8 @@ class MainActivity : ComponentActivity() {
                 // the owner processes the event swallows it).
                 val failedRequest = request
                 if (failedRequest == null || event.candidate.packageName != failedRequest.packageName) return
+                // A replaced download for the same app can fail after the new one has started.
+                if (!DownloadJobManager.isLive(event.epoch)) return
                 appendLog(event.message, LogLevel.Error)
                 if (fastModeActive) {
                     val activeRequest = request
@@ -1694,7 +1782,7 @@ class MainActivity : ComponentActivity() {
                             "Fast Mode: ${event.candidate.source.label} did not work  trying the next source.",
                             LogLevel.Warning
                         )
-                        lifecycleScope.launch { fastModeNext(activeRequest) }
+                        lifecycleScope.launch { fastModeNext(activeRequest, fastModeRunId) }
                     } else {
                         fastModeActive = false
                         fastModeQueue = null
@@ -1728,6 +1816,11 @@ class MainActivity : ComponentActivity() {
                 // collector would never see it (StateFlow conflates: a clear
                 // before the owner processes the event swallows it).
                 if (activeRequest == null || event.candidate.packageName != activeRequest.packageName) return
+                // A replaced download for the same app must not offer its file to the new one.
+                if (!DownloadJobManager.isLive(event.epoch)) {
+                    event.file.delete()
+                    return
+                }
                 if (fastModeActive) {
                     appendLog(
                         "Fast Mode: ${event.candidate.source.label} downloaded " +
@@ -1777,7 +1870,7 @@ class MainActivity : ComponentActivity() {
                                     "trying the next source.",
                                 LogLevel.Info
                             )
-                            fastModeNext(activeRequest)
+                            fastModeNext(activeRequest, fastModeRunId)
                         }
                     }
                 } else {
@@ -1790,6 +1883,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
             is DownloadJobManager.Event.Cancelled -> {
+                // A cancelled or replaced run's download, matched by epoch: a new job for the
+                // same app can download the same file.
+                if (!DownloadJobManager.isLive(event.epoch)) {
+                    appendLog("Download cancelled.", LogLevel.Warning)
+                    return
+                }
                 // Only the owning activity may act on a cancellation. A stale
                 // instance (no request, or a different package) must ignore
                 // it  and must NOT clear it first, or the owner's collector
@@ -9722,7 +9821,7 @@ internal fun PendingDownloadResult.belongsToCurrentSession(
 ): Boolean =
     request != null &&
         requestPackage == request.packageName &&
-        epoch == DownloadJobManager.currentEpoch
+        DownloadJobManager.isLive(epoch)
 
 internal fun String.withoutTrailingVersionCode(): String =
     replace(Regex("""\s*\(\s*\d+\s*\)\s*$"""), "")
