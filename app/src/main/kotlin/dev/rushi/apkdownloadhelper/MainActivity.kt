@@ -433,6 +433,11 @@ class MainActivity : ComponentActivity() {
     private var failedAttempts by mutableStateOf<Set<FailedAttempt>>(emptySet())
     private var lastFailureMessage by mutableStateOf<String?>(null)
     private var lastFailureOption by mutableStateOf<CandidateOption?>(null)
+    // Set while Retry all / Retry failed sources is walking sources and
+    // downloading. Fast Mode failures keep using fastModeActive instead.
+    private var autoRetryActive = false
+    private var autoRetryQueue: MutableList<FailedAttempt>? = null
+    private var autoRetryTarget: DownloadCandidate? = null
     private var fastModeActive = false
     private var fastModeQueue: MutableList<DownloadSource>? = null
     private var fastModeDecision: CompletableDeferred<FastModeChoice?>? = null
@@ -773,6 +778,9 @@ class MainActivity : ComponentActivity() {
         source: DownloadSource? = null,
         option: CandidateOption? = null
     ) {
+        autoRetryActive = false
+        autoRetryQueue = null
+        autoRetryTarget = null
         lastFailureMessage = message
         if (source != null) {
             recordFailedAttempt(source, option ?: defaultRetryOption())
@@ -788,7 +796,11 @@ class MainActivity : ComponentActivity() {
         }
 
     private fun retryAllSources() {
-        val option = lastFailureOption ?: defaultRetryOption()
+        val option = sequenceOf(
+            activeDownloadCandidate?.option,
+            lastFailureOption,
+            defaultRetryOption()
+        ).filterNotNull().first { it != CandidateOption.MANUAL }
         val attempts = helperSettings.orderedSources
             .filter { it !in effectiveDisabledSources }
             .map { source -> FailedAttempt(source, option) }
@@ -811,17 +823,167 @@ class MainActivity : ComponentActivity() {
             .distinct()
         if (unique.isEmpty()) return
 
+        if (uiState is UiState.FastMode) {
+            retryInFastMode(unique, label, activeRequest)
+            return
+        }
+        retryNormally(unique, label, activeRequest)
+    }
+
+    private fun retryInFastMode(
+        attempts: List<FailedAttempt>,
+        label: String,
+        activeRequest: HelperRequest
+    ) {
+        val sources = attempts.map { it.source }.distinct()
+        if (sources.isEmpty()) return
+        autoRetryActive = false
+        autoRetryQueue = null
+        autoRetryTarget = null
+        fastModeActive = true
+        fastModeQueue = sources.toMutableList()
+        failedAttempts = emptySet()
+        lastFailureMessage = null
+        lastFailureOption = null
+        DownloadJobManager.clearEvent()
+        val policy = if (fastModeRunPolicy == FastModePolicy.LATEST) {
+            FastModePolicy.LATEST
+        } else {
+            FastModePolicy.REQUESTED
+        }
+        fastModeRunPolicy = policy
+        appendLog(
+            "Fast Mode retry for $label: " + sources.joinToString { it.label } + "."
+        )
+        uiState = UiState.FastMode(FastModeProgress(detail = "Retrying $label…"))
+        lifecycleScope.launch {
+            fastModeRun(activeRequest, policy)
+        }
+    }
+
+    private fun retryNormally(
+        attempts: List<FailedAttempt>,
+        label: String,
+        activeRequest: HelperRequest
+    ) {
+        autoRetryActive = true
+        autoRetryQueue = attempts.toMutableList()
+        autoRetryTarget = activeDownloadCandidate
         fastModeActive = false
         fastModeQueue = null
+        failedAttempts = emptySet()
         lastFailureMessage = null
+        lastFailureOption = null
         DownloadJobManager.clearEvent()
-        uiState = UiState.Ready(initialCandidateResult(activeRequest))
         appendLog(
             "Retrying $label: " +
-                unique.joinToString { "${it.source.label} ${it.option.labelForLogs}" } + "."
+                attempts.joinToString { "${it.source.label} ${it.option.labelForLogs}" } + "."
         )
-        unique.forEach { attempt ->
-            resolveCandidates(attempt.source, attempt.option)
+        uiState = UiState.FastMode(
+            FastModeProgress(title = "Retrying", detail = "Retrying $label…")
+        )
+        lifecycleScope.launch {
+            retryNextNormally(activeRequest)
+        }
+    }
+
+    private suspend fun retryNextNormally(activeRequest: HelperRequest) {
+        val queue = autoRetryQueue ?: return
+        while (autoRetryActive && queue.isNotEmpty()) {
+            val attempt = queue.removeAt(0)
+            if (attempt.source in effectiveDisabledSources) continue
+            val option = when (attempt.option) {
+                CandidateOption.LATEST,
+                CandidateOption.REQUESTED -> attempt.option
+                CandidateOption.MANUAL -> defaultRetryOption()
+            }
+            appendLog("Retrying ${attempt.source.label} for ${option.labelForLogs}…")
+            uiState = UiState.FastMode(
+                FastModeProgress(
+                    title = "Retrying",
+                    sourceLabel = attempt.source.label,
+                    detail = "Checking ${attempt.source.label}…"
+                )
+            )
+            val outcome = withContext(Dispatchers.IO) {
+                resolveSourceSection(activeRequest, attempt.source, option)
+            }
+            if (!autoRetryActive) return
+            logResolveOutcome(attempt.source, option, outcome)
+
+            val targetMatches = autoRetryTarget
+                ?.let { target ->
+                    matchingSourceSwitchCandidates(outcome.candidates, target, activeRequest)
+                }
+                .orEmpty()
+            val candidate = targetMatches.singleOrNull()
+                ?: retryCandidateForSource(outcome.candidates, activeRequest, option)
+            if (candidate == null) {
+                recordFailedAttempt(attempt.source, option)
+                appendLog(
+                    "Retry: ${attempt.source.label} did not offer a direct file.",
+                    LogLevel.Warning
+                )
+                continue
+            }
+            appendLog(
+                "Retry: downloading ${candidate.versionDisplay} from " +
+                    "${attempt.source.label} (${candidate.fileKind.uppercase(Locale.US)})."
+            )
+            downloadAndReturn(candidate)
+            return
+        }
+
+        if (!autoRetryActive) return
+        autoRetryActive = false
+        autoRetryQueue = null
+        autoRetryTarget = null
+        val message = "No source could download ${activeRequest.appName} after retrying."
+        appendLog("Retry failed: $message", LogLevel.Error)
+        showFailure(message)
+    }
+
+    /**
+     * Best direct file to start when a retry source has no exact match for the
+     * failed target. Requested retries stay on the exact version and build;
+     * latest retries prefer the newest candidate the source returned.
+     */
+    private fun retryCandidateForSource(
+        candidates: List<DownloadCandidate>,
+        request: HelperRequest,
+        option: CandidateOption
+    ): DownloadCandidate? {
+        val direct = candidates.filter {
+            it.directDownload && request.acceptsFormat(it.fileKind)
+        }
+        val usable = direct.filter {
+            archMatchRank(it.variantLabel ?: it.variantTag, request.availableAbis) !=
+                ARCH_RANK_MISMATCH
+        }
+        if (usable.isEmpty()) return null
+        fun archRank(candidate: DownloadCandidate): Int =
+            archMatchRank(candidate.variantLabel ?: candidate.variantTag, request.availableAbis)
+
+        return when (option) {
+            CandidateOption.REQUESTED -> usable
+                .filter { candidate -> request.matchesRequestedVersionStrict(candidate) }
+                .minWithOrNull(compareBy({ archRank(it) }, { it.sortIndex }))
+
+            CandidateOption.LATEST -> usable
+                .filter { candidate ->
+                    candidate.versionName != null &&
+                        (request.requestsVariantBuild || !candidate.hasVariantBuildMarker)
+                }
+                .maxWithOrNull(
+                    Comparator { a, b ->
+                        val byVersion = compareVersionNames(b.versionName, a.versionName)
+                        if (byVersion != 0) byVersion else a.sortIndex.compareTo(b.sortIndex)
+                    }
+                )
+                ?: usable.minWithOrNull(compareBy({ archRank(it) }, { it.sortIndex }))
+
+            CandidateOption.MANUAL -> usable
+                .minWithOrNull(compareBy({ archRank(it) }, { it.sortIndex }))
         }
     }
 
@@ -947,6 +1109,9 @@ class MainActivity : ComponentActivity() {
         pendingSwitchOption = null
         activeDownloadCandidate = null
         switchCandidatePrompt = null
+        autoRetryActive = false
+        autoRetryQueue = null
+        autoRetryTarget = null
         AppLog.clear()
         if (request == null) {
             AppLog.setRequestSummary(null)
@@ -1650,7 +1815,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun cancelFastMode() {
-        appendLog("Fast Mode cancelled  taking over manually.", LogLevel.Warning)
+        if (autoRetryActive) {
+            appendLog("Retry cancelled  taking over manually.", LogLevel.Warning)
+            autoRetryActive = false
+            autoRetryQueue = null
+            autoRetryTarget = null
+        } else {
+            appendLog("Fast Mode cancelled  taking over manually.", LogLevel.Warning)
+        }
         fastModeActive = false
         fastModeQueue = null
         // Unblock a pending "use this version?" question so the loop exits.
@@ -2037,6 +2209,9 @@ class MainActivity : ComponentActivity() {
                 // must still be returned instead of leaving the UI stuck at
                 // 100%.
                 if (event.result.belongsToCurrentSession(request, event.epoch)) {
+                    autoRetryActive = false
+                    autoRetryQueue = null
+                    autoRetryTarget = null
                     appendLog("Download validated: ${event.result.fileName}.")
                     if (!deliverResult(event.result)) {
                         appendLog(
@@ -2126,6 +2301,29 @@ class MainActivity : ComponentActivity() {
                 val failedRequest = request
                 if (failedRequest == null || event.candidate.packageName != failedRequest.packageName) return
                 appendLog(event.message, LogLevel.Error)
+                if (autoRetryActive) {
+                    recordFailedAttempt(event.candidate.source, event.candidate.option)
+                    if (autoRetryQueue.isNullOrEmpty()) {
+                        autoRetryActive = false
+                        autoRetryQueue = null
+                        autoRetryTarget = null
+                        showFailure(
+                            event.message,
+                            event.candidate.source,
+                            event.candidate.option
+                        )
+                    } else {
+                        appendLog(
+                            "Retry: ${event.candidate.source.label} did not work  trying the next source.",
+                            LogLevel.Warning
+                        )
+                        DownloadJobManager.clearEvent()
+                        lifecycleScope.launch {
+                            retryNextNormally(failedRequest)
+                        }
+                    }
+                    return
+                }
                 if (fastModeActive) {
                     recordFailedAttempt(event.candidate.source, event.candidate.option)
                     val activeRequest = request
@@ -2264,6 +2462,9 @@ class MainActivity : ComponentActivity() {
                 val cancelledRequest = request
                 if (cancelledRequest == null || event.candidate.packageName != cancelledRequest.packageName) return
                 appendLog("Download cancelled.", LogLevel.Warning)
+                autoRetryActive = false
+                autoRetryQueue = null
+                autoRetryTarget = null
                 fastModeActive = false
                 fastModeQueue = null
                 val activeRequest = request
@@ -9025,7 +9226,10 @@ private fun FastModeCard(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    Text(stringResource(R.string.fast_mode), fontWeight = FontWeight.Bold)
+                    Text(
+                        progress.title ?: stringResource(R.string.fast_mode),
+                        fontWeight = FontWeight.Bold
+                    )
                     progress.sourceLabel?.let { source ->
                         Text(
                             text = source,
@@ -10727,7 +10931,9 @@ private data class FastModeProgress(
     val versionChoiceRequested: String? = null,
     // True once the downloaded file's bytes matched the source-published SHA-256;
     // shown persistently on the card (not just the transient post-download status).
-    val shaVerified: Boolean = false
+    val shaVerified: Boolean = false,
+    // Reused by the automatic retry flow so the card does not claim Fast Mode.
+    val title: String? = null
 )
 
 internal object DownloadHelperContract {
