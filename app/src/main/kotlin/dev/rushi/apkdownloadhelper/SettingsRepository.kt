@@ -223,8 +223,8 @@ internal enum class DownloadLocation(
     val description: String
 ) {
     TEMPORARY(
-        title = "Internal app cache",
-        description = "Keep the hand-off file in Helper's internal cache."
+        title = "Internal app storage",
+        description = "Keep the hand-off file in Helper's private storage."
     ),
     EXTERNAL(
         title = "App external storage",
@@ -537,7 +537,10 @@ internal fun Context.restoreAndPersistRateLimiter() {
     }
 }
 
-internal fun Context.temporaryDownloadsDir(): File = File(cacheDir, "downloads")
+// Private files rather than cacheDir: Android may clear the cache while Morphe
+// is still reading the returned URI, which made the hand-off fail.
+internal fun Context.temporaryDownloadsDir(): File =
+    File(filesDir, "downloads").apply { mkdirs() }
 
 internal fun Context.temporaryDownloadsSize(): Long =
     temporaryDownloadsDir()

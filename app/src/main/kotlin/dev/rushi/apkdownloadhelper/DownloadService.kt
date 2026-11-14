@@ -1054,8 +1054,6 @@ internal class DownloadService : Service() {
         }
     }
 
-    private fun temporaryDownloadsDir(): File = File(cacheDir, "downloads")
-
     private fun createNotificationChannels() {
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
