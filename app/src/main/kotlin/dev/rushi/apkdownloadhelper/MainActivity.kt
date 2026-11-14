@@ -4609,6 +4609,15 @@ private fun HelperSettingsScreen(
     val context = LocalContext.current
     val swipeThresholdPx = with(LocalDensity.current) { 72.dp.toPx() }
     var tab by rememberSaveable { mutableStateOf(SettingsTab.SYSTEM) }
+    var showSources by rememberSaveable { mutableStateOf(false) }
+    if (showSources) {
+        SourcesSettingsScreen(
+            settings = settings,
+            onSettingsChange = onSettingsChange,
+            onBack = { showSources = false }
+        )
+        return
+    }
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -4679,7 +4688,8 @@ private fun HelperSettingsScreen(
                 SystemTabContent(
                     settings = settings,
                     onSettingsChange = onSettingsChange,
-                    onOpenUpdates = onOpenUpdates
+                    onOpenUpdates = onOpenUpdates,
+                    onOpenSources = { showSources = true }
                 )
             }
 
@@ -4710,7 +4720,8 @@ private fun HelperSettingsScreen(
 private fun SystemTabContent(
     settings: HelperSettings,
     onSettingsChange: (HelperSettings) -> Unit,
-    onOpenUpdates: () -> Unit
+    onOpenUpdates: () -> Unit,
+    onOpenSources: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -4723,7 +4734,6 @@ private fun SystemTabContent(
     var policyDialog by remember { mutableStateOf(false) }
     var connectionCountDialog by remember { mutableStateOf(false) }
     var fastModePolicyDialog by remember { mutableStateOf(false) }
-    var sourceDialog by remember { mutableStateOf(false) }
     var pendingLocation by remember { mutableStateOf<DownloadLocation?>(null) }
     val latestSettings by rememberUpdatedState(settings)
 
@@ -4815,16 +4825,6 @@ private fun SystemTabContent(
         }
     }
 
-    fun moveSourceOrder(source: DownloadSource, delta: Int) {
-        val order = latestSettings.orderedSources.toMutableList()
-        val index = order.indexOf(source)
-        val target = index + delta
-        if (index < 0 || target !in order.indices) return
-        order.removeAt(index)
-        order.add(target, source)
-        onSettingsChange(latestSettings.copy(sourceOrder = order))
-    }
-
     if (locationDialog) {
         SettingsChoiceDialog(
             title = stringResource(R.string.save_downloads),
@@ -4906,38 +4906,6 @@ private fun SystemTabContent(
         )
     }
 
-    if (sourceDialog) {
-        val orderedSources = settings.orderedSources
-        val choices = buildList {
-            add(SettingsChoice(Icons.Outlined.AutoAwesome, "Automatic", "Use the first enabled source in the custom order"))
-            addAll(orderedSources.map {
-                SettingsChoice(
-                    icon = null,
-                    title = it.label,
-                    description = "Prefer this source when it has the file",
-                    source = it
-                )
-            })
-        }
-        SettingsChoiceDialog(
-            title = stringResource(R.string.default_source),
-            choices = choices,
-            selectedIndex = settings.preferredSource
-                ?.let { source -> orderedSources.indexOf(source) + 1 }
-                ?.takeIf { it > 0 }
-                ?: 0,
-            onSelect = { index ->
-                onSettingsChange(
-                    settings.copy(
-                        preferredSource = if (index == 0) null else orderedSources[index - 1]
-                    )
-                )
-                sourceDialog = false
-            },
-            onDismiss = { sourceDialog = false }
-        )
-    }
-
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingMedium)
@@ -4984,85 +4952,14 @@ private fun SystemTabContent(
         }
 
         SettingsGroup(title = stringResource(R.string.sources), icon = Icons.Outlined.Dns) {
+            val enabledCount = settings.orderedSources.count { it !in settings.disabledSources }
             SettingsRow(
-                icon = Icons.Outlined.Star,
-                title = stringResource(R.string.default_source),
-                subtitle = "Used first when a request is resolved",
-                value = settings.preferredSource?.label ?: "Automatic",
-                onClick = { sourceDialog = true }
-            )
-            settings.orderedSources.forEach { source ->
-                MorpheDivider()
-                SettingsSwitchItem(
-                    // Each source's own brand logo, the same artwork the picker uses.
-                    leading = { SourceAvatar(source = source, size = MorpheDefaults.IconSize) },
-                    title = source.label,
-                    checked = source !in settings.disabledSources,
-                    onToggle = {
-                        val enabled = source !in settings.disabledSources
-                        onSettingsChange(
-                            settings.copy(
-                                disabledSources = if (enabled) {
-                                    settings.disabledSources + source
-                                } else {
-                                    settings.disabledSources - source
-                                }
-                            )
-                        )
-                    }
-                )
-            }
-        }
-
-        SettingsGroup(title = "Source order", icon = Icons.Outlined.SortByAlpha) {
-            settings.orderedSources.forEachIndexed { index, source ->
-                if (index > 0) MorpheDivider()
-                SettingsRow(
-                    leading = { SourceAvatar(source = source, size = MorpheDefaults.IconSize) },
-                    title = source.label,
-                    subtitle = when {
-                        source in settings.disabledSources -> "Disabled"
-                        index == 0 -> "Tried first"
-                        else -> null
-                    },
-                    trailing = {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (index > 0) {
-                                HelperIconButton(
-                                    icon = Icons.Outlined.ExpandLess,
-                                    contentDescription = "Move ${source.label} up",
-                                    onClick = { moveSourceOrder(source, -1) }
-                                )
-                            } else {
-                                Spacer(Modifier.size(MorpheDefaults.GlassButtonHeight))
-                            }
-                            if (index < settings.orderedSources.lastIndex) {
-                                HelperIconButton(
-                                    icon = Icons.Outlined.ExpandMore,
-                                    contentDescription = "Move ${source.label} down",
-                                    onClick = { moveSourceOrder(source, 1) }
-                                )
-                            } else {
-                                Spacer(Modifier.size(MorpheDefaults.GlassButtonHeight))
-                            }
-                        }
-                    }
-                )
-            }
-            MorpheDivider()
-            SettingsRow(
-                icon = Icons.Outlined.Refresh,
-                title = "Reset source order",
-                subtitle = "Restore the default priority.",
-                value = "Reset",
-                onClick = {
-                    onSettingsChange(
-                        latestSettings.copy(sourceOrder = DEFAULT_SOURCE_ORDER)
-                    )
-                }
+                icon = Icons.Outlined.Dns,
+                title = "Manage sources",
+                subtitle = "$enabledCount of ${settings.orderedSources.size} enabled, default " +
+                    (settings.preferredSource?.label ?: "Automatic"),
+                value = "Manage",
+                onClick = onOpenSources
             )
         }
 
@@ -5138,6 +5035,207 @@ private fun SystemTabContent(
                 value = "v${BuildConfig.VERSION_NAME}",
                 onClick = onOpenUpdates
             )
+        }
+    }
+}
+
+/**
+ * Dedicated source management screen. The Settings tab keeps one summary row instead
+ * of repeating every provider twice (once to enable it, once to reorder it).
+ */
+@Composable
+private fun SourcesSettingsScreen(
+    settings: HelperSettings,
+    onSettingsChange: (HelperSettings) -> Unit,
+    onBack: () -> Unit
+) {
+    BackHandler(onBack = onBack)
+    var sourceDialog by remember { mutableStateOf(false) }
+    val latestSettings by rememberUpdatedState(settings)
+    val orderedSources = settings.orderedSources
+
+    fun moveSourceOrder(source: DownloadSource, delta: Int) {
+        val order = latestSettings.orderedSources.toMutableList()
+        val index = order.indexOf(source)
+        val target = index + delta
+        if (index < 0 || target !in order.indices) return
+        order.removeAt(index)
+        order.add(target, source)
+        onSettingsChange(latestSettings.copy(sourceOrder = order))
+    }
+
+    if (sourceDialog) {
+        val choices = buildList {
+            add(
+                SettingsChoice(
+                    Icons.Outlined.AutoAwesome,
+                    "Automatic",
+                    "Use the first enabled source in the custom order"
+                )
+            )
+            addAll(orderedSources.map {
+                SettingsChoice(
+                    icon = null,
+                    title = it.label,
+                    description = "Prefer this source when it has the file",
+                    source = it
+                )
+            })
+        }
+        SettingsChoiceDialog(
+            title = stringResource(R.string.default_source),
+            choices = choices,
+            selectedIndex = settings.preferredSource
+                ?.let { source -> orderedSources.indexOf(source) + 1 }
+                ?.takeIf { it > 0 }
+                ?: 0,
+            onSelect = { index ->
+                onSettingsChange(
+                    settings.copy(
+                        preferredSource = if (index == 0) null else orderedSources[index - 1]
+                    )
+                )
+                sourceDialog = false
+            },
+            onDismiss = { sourceDialog = false }
+        )
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(
+                horizontal = MorpheDefaults.ContentPadding,
+                vertical = MorpheDefaults.ContentPadding
+            ),
+        verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
+    ) {
+        item {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.sources),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        text = "Enable providers and set their priority",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                HelperHeaderIconButton(
+                    icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                    contentDescription = stringResource(R.string.back),
+                    onClick = onBack,
+                    modifier = Modifier.align(Alignment.CenterStart)
+                )
+            }
+        }
+
+        item {
+            SettingsGroup(
+                title = stringResource(R.string.default_source),
+                icon = Icons.Outlined.Star
+            ) {
+                SettingsRow(
+                    icon = Icons.Outlined.Star,
+                    title = stringResource(R.string.default_source),
+                    subtitle = "Used first when a request is resolved",
+                    value = settings.preferredSource?.label ?: "Automatic",
+                    onClick = { sourceDialog = true }
+                )
+            }
+        }
+
+        item {
+            SettingsGroup(title = "Providers", icon = Icons.Outlined.Dns) {
+                orderedSources.forEachIndexed { index, source ->
+                    if (index > 0) MorpheDivider()
+                    SettingsSwitchItem(
+                        leading = {
+                            SourceAvatar(source = source, size = MorpheDefaults.IconSize)
+                        },
+                        title = source.label,
+                        checked = source !in settings.disabledSources,
+                        onToggle = {
+                            val enabled = source !in settings.disabledSources
+                            onSettingsChange(
+                                settings.copy(
+                                    disabledSources = if (enabled) {
+                                        settings.disabledSources + source
+                                    } else {
+                                        settings.disabledSources - source
+                                    }
+                                )
+                            )
+                        }
+                    )
+                }
+            }
+        }
+
+        item {
+            SettingsGroup(title = "Priority", icon = Icons.Outlined.SortByAlpha) {
+                orderedSources.forEachIndexed { index, source ->
+                    if (index > 0) MorpheDivider()
+                    SettingsRow(
+                        leading = {
+                            SourceAvatar(source = source, size = MorpheDefaults.IconSize)
+                        },
+                        title = source.label,
+                        subtitle = when {
+                            source in settings.disabledSources -> "Disabled"
+                            index == 0 -> "Tried first"
+                            else -> null
+                        },
+                        trailing = {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (index > 0) {
+                                    HelperIconButton(
+                                        icon = Icons.Outlined.ExpandLess,
+                                        contentDescription = "Move ${source.label} up",
+                                        onClick = { moveSourceOrder(source, -1) }
+                                    )
+                                } else {
+                                    Spacer(Modifier.size(MorpheDefaults.GlassButtonHeight))
+                                }
+                                if (index < orderedSources.lastIndex) {
+                                    HelperIconButton(
+                                        icon = Icons.Outlined.ExpandMore,
+                                        contentDescription = "Move ${source.label} down",
+                                        onClick = { moveSourceOrder(source, 1) }
+                                    )
+                                } else {
+                                    Spacer(Modifier.size(MorpheDefaults.GlassButtonHeight))
+                                }
+                            }
+                        }
+                    )
+                }
+                MorpheDivider()
+                SettingsRow(
+                    icon = Icons.Outlined.Refresh,
+                    title = "Reset source order",
+                    subtitle = "Restore the default priority.",
+                    value = "Reset",
+                    onClick = {
+                        onSettingsChange(
+                            latestSettings.copy(sourceOrder = DEFAULT_SOURCE_ORDER)
+                        )
+                    }
+                )
+            }
         }
     }
 }
