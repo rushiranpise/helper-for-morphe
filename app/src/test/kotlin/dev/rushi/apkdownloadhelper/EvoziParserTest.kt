@@ -123,6 +123,36 @@ class EvoziParserTest {
     }
 
     @Test
+    fun requestedFallbackTargetsTheBuildAndAbi() {
+        val request = testRequest(
+            packageName = packageName,
+            appName = "Battery Guru",
+            versionName = "2.5.0.6",
+            versionCode = 2506L
+        )
+
+        val candidate = parser(emptyMap()).requestedFallbackCandidate(request)
+
+        assertEquals(
+            "$downloaderUrl&target=version&vc=2506&arch=arm64-v8a&langs=standard&dpi=all",
+            candidate?.url
+        )
+        assertEquals(candidate?.url, candidate?.captchaUrl)
+        assertEquals(CandidateOption.REQUESTED, candidate?.option)
+    }
+
+    @Test
+    fun latestFallbackKeepsTheAbiAndLanguageParameters() {
+        val candidate = parser(emptyMap()).latestFallbackCandidate(latestRequest())
+
+        assertEquals(
+            "$downloaderUrl&arch=arm64-v8a&langs=standard&dpi=all",
+            candidate?.url
+        )
+        assertEquals(CandidateOption.LATEST, candidate?.option)
+    }
+
+    @Test
     fun requested_matchesListedVersion() {
         val result = runBlocking {
             parser(

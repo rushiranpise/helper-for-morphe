@@ -1374,6 +1374,14 @@ class MainActivity : ComponentActivity() {
             DownloadSource.APK_PURE -> request.sourceHintUrlsFor(source)
                 .firstOrNull { it.contains("apkpure.com", ignoreCase = true) }
                 ?: parsers[source]?.searchUrl(request.packageName)
+            DownloadSource.APK_CUBE, DownloadSource.EVOZI -> {
+                val parser = parsers[source]
+                if (option == CandidateOption.REQUESTED) {
+                    parser?.requestedFallbackCandidate(request)?.url
+                } else {
+                    parser?.latestFallbackCandidate(request)?.url
+                }
+            }
             else -> null
         }
         val url = browserUrl ?: when (option) {
@@ -3927,10 +3935,23 @@ internal fun String.isApkCubeAllowedNavigation(): Boolean {
     if (isApkCubeHostedUrl() || looksLikeApkDownload()) return true
     val uri = runCatching { java.net.URI(urlDecoded()) }.getOrNull() ?: return false
     val host = uri.host?.lowercase(Locale.US) ?: return false
-    return host == "cloudflarestorage.com" ||
+    if (
+        host == "cloudflarestorage.com" ||
         host.endsWith(".cloudflarestorage.com") ||
         host == "r2.dev" ||
         host.endsWith(".r2.dev")
+    ) {
+        return true
+    }
+    // APKCube's file endpoint is not always on a CDN host and can carry no
+    // extension. Only a real file endpoint is allowed here; generic `/download`
+    // paths on unknown hosts are prelander pages.
+    val path = uri.path.orEmpty().lowercase(Locale.US)
+    return path.endsWith(".apk") ||
+        path.endsWith(".apks") ||
+        path.endsWith(".apkm") ||
+        path.endsWith(".xapk") ||
+        path.contains("download.php")
 }
 
 @Composable

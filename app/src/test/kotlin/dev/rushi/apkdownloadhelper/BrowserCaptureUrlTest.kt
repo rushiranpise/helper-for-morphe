@@ -106,8 +106,11 @@ class BrowserCaptureUrlTest {
         )
         assertTrue("https://pub-123.r2.dev/files/build".isApkCubeAllowedNavigation())
         assertTrue("https://cdn.example.com/app-1.0.xapk".isApkCubeAllowedNavigation())
+        assertTrue("https://files.example.com/download.php?id=1".isApkCubeAllowedNavigation())
 
+        assertFalse("https://cdn.example.com/download/token".isApkCubeAllowedNavigation())
         assertFalse("https://s.shopee.com.my/8pnI7nf4Kp".isApkCubeAllowedNavigation())
+        assertFalse("https://prelander.example/go".isApkCubeAllowedNavigation())
         assertFalse("https://cloudflarestorage.com.evil.example/download".isApkCubeAllowedNavigation())
         assertFalse("https://r2.dev.evil.example/download".isApkCubeAllowedNavigation())
     }

@@ -34,6 +34,45 @@ internal abstract class ApkCubeSourceParser(
 
     override fun searchUrl(packageName: String): String? = apkCubeSearchUrl(packageName)
 
+    override fun requestedFallbackCandidate(request: HelperRequest): DownloadCandidate? =
+        apkCubeFallbackCandidate(request, CandidateOption.REQUESTED)
+
+    override fun latestFallbackCandidate(request: HelperRequest): DownloadCandidate? =
+        apkCubeFallbackCandidate(request, CandidateOption.LATEST)
+
+    private fun apkCubeFallbackCandidate(
+        request: HelperRequest,
+        option: CandidateOption
+    ): DownloadCandidate {
+        val versionCode = request.versionCode ?: request.versionCodes.firstOrNull()
+        val versionName = request.requestedVersionName
+            ?.takeIf { option == CandidateOption.REQUESTED }
+        val url = apkCubeTargetedDownloadUrl(
+            baseUrl = apkCubeSearchUrl(request.packageName),
+            versionCode = versionCode,
+            arch = apkCubeArch(request)
+        )
+        return DownloadCandidate(
+            source = source,
+            name = request.appName,
+            packageName = request.packageName,
+            versionName = versionName,
+            versionCode = versionCode,
+            url = url,
+            fileKind = "web",
+            option = option,
+            directDownload = false,
+            versionStatus = if (option == CandidateOption.REQUESTED) {
+                request.versionStatus(versionName, versionCode)
+            } else {
+                VersionStatus.LATEST
+            },
+            formatMatches = true,
+            note = captchaNote,
+            captchaUrl = url
+        )
+    }
+
     override suspend fun findCandidates(
         request: HelperRequest,
         option: CandidateOption
