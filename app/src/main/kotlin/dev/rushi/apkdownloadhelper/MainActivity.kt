@@ -757,7 +757,7 @@ class MainActivity : ComponentActivity() {
 
     private fun retryAllSources() {
         val option = lastFailureOption ?: defaultRetryOption()
-        val attempts = DownloadSource.entries
+        val attempts = helperSettings.orderedSources
             .filter { it !in effectiveDisabledSources }
             .map { source -> FailedAttempt(source, option) }
         retrySources(attempts, "all sources")
@@ -997,7 +997,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun updateHelperSettings(settings: HelperSettings) {
-        val sourcesChanged = helperSettings.disabledSources != settings.disabledSources
+        val sourcesChanged = helperSettings.disabledSources != settings.disabledSources ||
+            helperSettings.sourceOrder != settings.sourceOrder ||
+            helperSettings.preferredSource != settings.preferredSource
         val launcherChanged = helperSettings.showLauncherIcon != settings.showLauncherIcon
         helperSettings = settings
         saveHelperSettings(settings)
@@ -1012,11 +1014,11 @@ class MainActivity : ComponentActivity() {
 
     private fun initialCandidateResult(request: HelperRequest): CandidateResult {
         val manual = manualCandidates(request)
-        val enabled = DownloadSource.entries
+        val enabled = helperSettings.orderedSources
             .filter { it !in effectiveDisabledSources }
         // Put the user's preferred source first so the picker's pager opens on
-        // it (page 0) instead of always the first enabled source. Falls back to
-        // the default order when no preference is set or it's disabled.
+        // it (page 0) instead of the first source in the custom order. Falls
+        // back to that order when no preference is set or it's disabled.
         val ordered = helperSettings.preferredSource
             ?.takeIf { it in enabled }
             ?.let { preferred -> listOf(preferred) + enabled.filterNot { it == preferred } }
@@ -1487,7 +1489,7 @@ class MainActivity : ComponentActivity() {
         // Walk whatever the user has enabled globally; sources that cannot
         // deliver a direct APK (Play/Aurora links, captcha-gated services)
         // simply resolve to nothing and the walk moves on.
-        fastModeQueue = DownloadSource.entries
+        fastModeQueue = helperSettings.orderedSources
             .filter { it !in effectiveDisabledSources }
             .toMutableList()
         if (policy == FastModePolicy.ALWAYS_ASK) {
@@ -3466,7 +3468,7 @@ private fun HelperScreen(
 ) {
     var showSettings by remember { mutableStateOf(false) }
     var showAppBrowser by remember { mutableStateOf(false) }
-    val availableSources = DownloadSource.entries.filter { it !in settings.disabledSources }
+    val availableSources = settings.orderedSources.filter { it !in settings.disabledSources }
     var pendingFilePick by remember { mutableStateOf<DownloadCandidate?>(null) }
     var primaryAction by remember { mutableStateOf<PrimaryAction?>(null) }
     val context = LocalContext.current
@@ -4181,6 +4183,16 @@ private fun SystemTabContent(
         }
     }
 
+    fun moveSourceOrder(source: DownloadSource, delta: Int) {
+        val order = latestSettings.orderedSources.toMutableList()
+        val index = order.indexOf(source)
+        val target = index + delta
+        if (index < 0 || target !in order.indices) return
+        order.removeAt(index)
+        order.add(target, source)
+        onSettingsChange(latestSettings.copy(sourceOrder = order))
+    }
+
     if (locationDialog) {
         SettingsChoiceDialog(
             title = stringResource(R.string.save_downloads),
@@ -4244,30 +4256,29 @@ private fun SystemTabContent(
     }
 
     if (sourceDialog) {
+        val orderedSources = settings.orderedSources
         val choices = buildList {
-            add(SettingsChoice(Icons.Outlined.AutoAwesome, "Automatic", "Use the first enabled source"))
-            addAll(sourceCategories.flatMap { (_, sources) -> sources }
-                .map {
-                    SettingsChoice(
-                        icon = null,
-                        title = it.label,
-                        description = "Prefer this source when it has the file",
-                        source = it
-                    )
-                })
+            add(SettingsChoice(Icons.Outlined.AutoAwesome, "Automatic", "Use the first enabled source in the custom order"))
+            addAll(orderedSources.map {
+                SettingsChoice(
+                    icon = null,
+                    title = it.label,
+                    description = "Prefer this source when it has the file",
+                    source = it
+                )
+            })
         }
         SettingsChoiceDialog(
             title = stringResource(R.string.default_source),
             choices = choices,
-            selectedIndex = settings.preferredSource?.let { source -> choices.indexOfFirst { it.title == source.label } } ?: 0,
+            selectedIndex = settings.preferredSource
+                ?.let { source -> orderedSources.indexOf(source) + 1 }
+                ?.takeIf { it > 0 }
+                ?: 0,
             onSelect = { index ->
                 onSettingsChange(
                     settings.copy(
-                        preferredSource = if (index == 0) {
-                            null
-                        } else {
-                            sourceCategories.flatMap { (_, sources) -> sources }[index - 1]
-                        }
+                        preferredSource = if (index == 0) null else orderedSources[index - 1]
                     )
                 )
                 sourceDialog = false
@@ -4329,7 +4340,7 @@ private fun SystemTabContent(
                 value = settings.preferredSource?.label ?: "Automatic",
                 onClick = { sourceDialog = true }
             )
-            DownloadSource.entries.forEach { source ->
+            settings.orderedSources.forEach { source ->
                 MorpheDivider()
                 SettingsSwitchItem(
                     // Each source's own brand logo, the same artwork the picker uses.
@@ -4350,6 +4361,58 @@ private fun SystemTabContent(
                     }
                 )
             }
+        }
+
+        SettingsGroup(title = "Source order", icon = Icons.Outlined.SortByAlpha) {
+            settings.orderedSources.forEachIndexed { index, source ->
+                if (index > 0) MorpheDivider()
+                SettingsRow(
+                    leading = { SourceAvatar(source = source, size = MorpheDefaults.IconSize) },
+                    title = source.label,
+                    subtitle = when {
+                        source in settings.disabledSources -> "Disabled"
+                        index == 0 -> "Tried first"
+                        else -> null
+                    },
+                    trailing = {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (index > 0) {
+                                HelperIconButton(
+                                    icon = Icons.Outlined.ExpandLess,
+                                    contentDescription = "Move ${source.label} up",
+                                    onClick = { moveSourceOrder(source, -1) }
+                                )
+                            } else {
+                                Spacer(Modifier.size(MorpheDefaults.GlassButtonHeight))
+                            }
+                            if (index < settings.orderedSources.lastIndex) {
+                                HelperIconButton(
+                                    icon = Icons.Outlined.ExpandMore,
+                                    contentDescription = "Move ${source.label} down",
+                                    onClick = { moveSourceOrder(source, 1) }
+                                )
+                            } else {
+                                Spacer(Modifier.size(MorpheDefaults.GlassButtonHeight))
+                            }
+                        }
+                    }
+                )
+            }
+            MorpheDivider()
+            SettingsRow(
+                icon = Icons.Outlined.Refresh,
+                title = "Reset source order",
+                subtitle = "Restore the default priority.",
+                value = "Reset",
+                onClick = {
+                    onSettingsChange(
+                        latestSettings.copy(sourceOrder = DownloadSource.entries.toList())
+                    )
+                }
+            )
         }
 
         SettingsGroup(title = stringResource(R.string.connection), icon = Icons.Outlined.NetworkCheck) {
@@ -7477,26 +7540,15 @@ private fun SourcePickerFlow(
                     onDismissRequest = { sourcesExpanded = false },
                     modifier = Modifier.fillMaxWidth(0.85f)
                 ) {
-                    sourceCategories.forEach { (title, catSources) ->
-                        val visibleSources = catSources.filter { src ->
-                            groups.any { it.source == src }
-                        }
-                        if (visibleSources.isNotEmpty()) {
-                            SourceMenuHeader(title)
-                            visibleSources.forEach { src ->
-                                val index = groups.indexOfFirst { it.source == src }
-                                if (index >= 0) {
-                                    SourceMenuItem(
-                                        source = src,
-                                        selected = index == currentPage,
-                                        onClick = {
-                                            currentPage = index
-                                            sourcesExpanded = false
-                                        }
-                                    )
-                                }
+                    groups.forEachIndexed { index, group ->
+                        SourceMenuItem(
+                            source = group.source,
+                            selected = index == currentPage,
+                            onClick = {
+                                currentPage = index
+                                sourcesExpanded = false
                             }
-                        }
+                        )
                     }
                 }
             }
@@ -7613,58 +7665,29 @@ private fun buildPrimaryAction(
     }
 }
 
-private val sourceCategories: List<Pair<String, List<DownloadSource>>> = listOf(
-    "Official" to listOf(
-        DownloadSource.PLAY,
-        DownloadSource.AURORA
-    ),
-    "Trusted mirrors" to listOf(
-        DownloadSource.APK_MIRROR,
-        DownloadSource.UPTODOWN,
-        DownloadSource.APK_PURE,
-        DownloadSource.APK_COMBO
-    ),
-    "Other sources" to listOf(
-        DownloadSource.APTOIDE,
-        DownloadSource.EVOZI,
-        DownloadSource.MI9,
-        DownloadSource.APK_DOWNLOADER
-    )
-)
-
 @Composable
 private fun SourceGrid(
     groups: List<SourceCandidateGroup>,
     selectedIndex: Int,
     onSelect: (Int) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        sourceCategories.forEach { (title, sources) ->
-            val catGroups = sources.mapNotNull { source ->
-                groups.firstOrNull { it.source == source }
-            }
-            if (catGroups.isEmpty()) return@forEach
-
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                MorpheSectionTitle(text = title)
-                catGroups.chunked(2).forEach { rowGroups ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        rowGroups.forEach { group ->
-                            val index = groups.indexOfFirst { it.source == group.source }
-                            SourceCard(
-                                group = group,
-                                selected = index == selectedIndex,
-                                onClick = { onSelect(index) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        if (rowGroups.size == 1) {
-                            Spacer(Modifier.weight(1f))
-                        }
-                    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        groups.chunked(2).forEach { rowGroups ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                rowGroups.forEach { group ->
+                    val index = groups.indexOfFirst { it.source == group.source }
+                    SourceCard(
+                        group = group,
+                        selected = index == selectedIndex,
+                        onClick = { onSelect(index) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                if (rowGroups.size == 1) {
+                    Spacer(Modifier.weight(1f))
                 }
             }
         }
@@ -7691,19 +7714,6 @@ private fun SourceMenuItem(
             }
         },
         onClick = onClick
-    )
-}
-
-/** Section header inside a dropdown menu (Official / Trusted mirrors / Other). */
-@Composable
-private fun SourceMenuHeader(title: String) {
-    Text(
-        text = title,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
     )
 }
 

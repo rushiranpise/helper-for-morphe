@@ -76,6 +76,8 @@ internal data class HelperSettings(
      */
     val useMorpheResolver: Boolean = true,
     val disabledSources: Set<DownloadSource> = DEFAULT_DISABLED_SOURCES,
+    /** Source priority, first tried first. Missing sources are appended in enum order. */
+    val sourceOrder: List<DownloadSource> = DownloadSource.entries,
     val themeMode: ThemeMode = ThemeMode.DARK,
     /** Where the palette comes from: the app's own, the wallpaper's, or neutral. */
     val themeStyle: ThemeStyle = ThemeStyle.MORPHE,
@@ -329,6 +331,12 @@ internal fun Context.loadHelperSettings(): HelperSettings {
             .orEmpty()
             .mapNotNull { name -> DownloadSource.entries.firstOrNull { it.name == name } }
             .toSet(),
+        sourceOrder = prefs.getString("source_order", null)
+            ?.split(',')
+            ?.mapNotNull { name -> DownloadSource.entries.firstOrNull { it.name == name } }
+            ?.distinct()
+            ?.takeIf { it.isNotEmpty() }
+            ?: DownloadSource.entries.toList(),
         themeMode = enumValueOrDefault(
             prefs.getString("theme_mode", null),
             ThemeMode.DARK
@@ -398,6 +406,7 @@ internal fun Context.saveHelperSettings(settings: HelperSettings) {
         .putBoolean("use_morphe_resolver", settings.useMorpheResolver)
         .putString("fast_mode_policy", settings.fastModePolicy.name)
         .putStringSet("disabled_sources", settings.disabledSources.map { it.name }.toSet())
+        .putString("source_order", settings.orderedSources.joinToString(",") { it.name })
         .putString("theme_mode", settings.themeMode.name)
         .putString("theme_style", settings.themeStyle.name)
         .putBoolean("pure_black_theme", settings.pureBlackTheme)
@@ -418,6 +427,13 @@ internal fun Context.saveHelperSettings(settings: HelperSettings) {
 
 private inline fun <reified T : Enum<T>> enumValueOrDefault(name: String?, fallback: T): T =
     name?.let { runCatching { enumValueOf<T>(it) }.getOrNull() } ?: fallback
+
+/** Saved priority order with any newly added sources appended. */
+internal val HelperSettings.orderedSources: List<DownloadSource>
+    get() {
+        val saved = sourceOrder.filter { it in DownloadSource.entries }.distinct()
+        return saved + DownloadSource.entries.filterNot { it in saved }
+    }
 
 /** Re-applies the saved launcher icon choice without requiring a settings reload. */
 internal fun Context.ensureLauncherIconState() {
