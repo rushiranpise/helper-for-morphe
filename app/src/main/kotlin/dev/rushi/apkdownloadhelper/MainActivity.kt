@@ -3,6 +3,7 @@ package dev.rushi.apkdownloadhelper
 import android.Manifest
 import android.app.Activity
 import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.ContentValues
 import android.content.Context
 import android.widget.Toast
@@ -421,6 +422,9 @@ class MainActivity : ComponentActivity() {
     // the user picks one to reuse or chooses to download a fresh copy.
     private var reuseOffer by mutableStateOf<List<ReuseOption>?>(null)
     private var selectedPagerPage by mutableIntStateOf(0)
+    private var failedAttempts by mutableStateOf<Set<FailedAttempt>>(emptySet())
+    private var lastFailureMessage by mutableStateOf<String?>(null)
+    private var lastFailureOption by mutableStateOf<CandidateOption?>(null)
     private var fastModeActive = false
     private var fastModeQueue: MutableList<DownloadSource>? = null
     private var fastModeDecision: CompletableDeferred<FastModeChoice?>? = null
@@ -531,6 +535,10 @@ class MainActivity : ComponentActivity() {
                         onSettingsChange = ::updateHelperSettings,
                         onOpenUpdates = { showUpdates = true },
                         onRefresh = ::loadCandidates,
+                        canRetryFailedSources = failedAttempts.isNotEmpty(),
+                        onRetryAll = ::retryAllSources,
+                        onRetryFailedSources = ::retryFailedSources,
+                        onCopyFailureDetails = ::copyFailureDetails,
                         onResolve = ::resolveCandidates,
                         onDownload = ::downloadAndReturn,
                         onPickDownloadedFile = ::returnPickedFile,
@@ -662,7 +670,9 @@ class MainActivity : ComponentActivity() {
         val activeRequest = request ?: return
         helperSettings.networkPolicy.blockReason(this)?.let { message ->
             appendLog(message, LogLevel.Warning)
-            updateResolveState(source, option, ResolveState.Error(message))
+            val state = ResolveState.Error(message)
+            recordResolveState(source, option, state)
+            updateResolveState(source, option, state)
             return
         }
         appendLog("Checking ${option.labelForLogs} from ${source.label}.")
@@ -673,23 +683,45 @@ class MainActivity : ComponentActivity() {
             }
             logResolveOutcome(source, option, resolved)
 
-            updateResolveState(
-                source = source,
-                option = option,
-                state = resolved.notFoundMessage
+            val state = resolved.notFoundMessage
+                ?.takeIf { resolved.candidates.isEmpty() }
+                ?.let { ResolveState.Done(emptyList()) }
+                ?: resolved.errorMessage
                     ?.takeIf { resolved.candidates.isEmpty() }
-                    ?.let { ResolveState.Done(emptyList()) }
-                    ?: resolved.errorMessage
-                        ?.takeIf { resolved.candidates.isEmpty() }
-                        ?.let { message ->
-                            ResolveState.Error(
-                                message = message,
-                                fallbackCandidate = resolved.fallbackCandidate
-                            )
-                        }
-                        ?: ResolveState.Done(resolved.candidates)
-            )
+                    ?.let { message ->
+                        ResolveState.Error(
+                            message = message,
+                            fallbackCandidate = resolved.fallbackCandidate
+                        )
+                    }
+                    ?: ResolveState.Done(resolved.candidates)
+            recordResolveState(source, option, state)
+            updateResolveState(source, option, state)
         }
+    }
+
+    private fun recordResolveState(
+        source: DownloadSource,
+        option: CandidateOption,
+        state: ResolveState
+    ) {
+        val attempt = FailedAttempt(source, option)
+        when (state) {
+            is ResolveState.Error -> recordFailedAttempt(source, option)
+            is ResolveState.Done -> failedAttempts = failedAttempts - attempt
+            ResolveState.Idle,
+            ResolveState.Loading -> Unit
+        }
+    }
+
+    private fun recordFailedAttempt(source: DownloadSource, option: CandidateOption) {
+        val retryOption = if (option == CandidateOption.MANUAL) {
+            defaultRetryOption()
+        } else {
+            option
+        }
+        failedAttempts = failedAttempts + FailedAttempt(source, retryOption)
+        lastFailureOption = retryOption
     }
 
     private fun updateResolveState(
@@ -700,6 +732,91 @@ class MainActivity : ComponentActivity() {
         val activeRequest = request ?: return
         val current = (uiState as? UiState.Ready)?.result ?: initialCandidateResult(activeRequest)
         uiState = UiState.Ready(current.withResolveState(source, option, state))
+    }
+
+    private fun showFailure(
+        message: String,
+        source: DownloadSource? = null,
+        option: CandidateOption? = null
+    ) {
+        lastFailureMessage = message
+        if (source != null) {
+            recordFailedAttempt(source, option ?: defaultRetryOption())
+        }
+        uiState = UiState.Error(message)
+    }
+
+    private fun defaultRetryOption(): CandidateOption =
+        if (request?.hasRequestedVersionRequest == true) {
+            CandidateOption.REQUESTED
+        } else {
+            CandidateOption.LATEST
+        }
+
+    private fun retryAllSources() {
+        val option = lastFailureOption ?: defaultRetryOption()
+        val attempts = DownloadSource.entries
+            .filter { it !in effectiveDisabledSources }
+            .map { source -> FailedAttempt(source, option) }
+        retrySources(attempts, "all sources")
+    }
+
+    private fun retryFailedSources() {
+        val attempts = failedAttempts.toList()
+        if (attempts.isEmpty()) {
+            Toast.makeText(this, "No failed sources to retry.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        retrySources(attempts, "failed sources")
+    }
+
+    private fun retrySources(attempts: List<FailedAttempt>, label: String) {
+        val activeRequest = request ?: return
+        val unique = attempts
+            .filter { it.source !in effectiveDisabledSources }
+            .distinct()
+        if (unique.isEmpty()) return
+
+        fastModeActive = false
+        fastModeQueue = null
+        lastFailureMessage = null
+        DownloadJobManager.clearEvent()
+        uiState = UiState.Ready(initialCandidateResult(activeRequest))
+        appendLog(
+            "Retrying $label: " +
+                unique.joinToString { "${it.source.label} ${it.option.labelForLogs}" } + "."
+        )
+        unique.forEach { attempt ->
+            resolveCandidates(attempt.source, attempt.option)
+        }
+    }
+
+    private fun copyFailureDetails() {
+        val clipboard = getSystemService(ClipboardManager::class.java)
+        if (clipboard == null) {
+            Toast.makeText(this, "Clipboard is unavailable.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val details = buildString {
+            lastFailureMessage?.let { message ->
+                append("Failure: ").append(message).append("\n\n")
+            }
+            if (failedAttempts.isNotEmpty()) {
+                append("Failed sources:\n")
+                failedAttempts
+                    .sortedBy { it.source.ordinal }
+                    .forEach { attempt ->
+                        append("- ").append(attempt.source.label)
+                            .append(" (").append(attempt.option.labelForLogs).append(")\n")
+                    }
+                append("\n")
+            }
+            append(AppLog.exportText())
+        }
+        clipboard.setPrimaryClip(
+            ClipData.newPlainText("Morphe Helper failure details", details)
+        )
+        Toast.makeText(this, "Failure details copied.", Toast.LENGTH_SHORT).show()
     }
 
     private fun loadVersionHistory(source: DownloadSource) {
@@ -770,7 +887,7 @@ class MainActivity : ComponentActivity() {
                 .onFailure { error ->
                     val message = downloadFailureMessage(candidate, error)
                     appendLog(message, LogLevel.Error)
-                    uiState = UiState.Error(message)
+                    showFailure(message, candidate.source, candidate.option)
                 }
         }
     }
@@ -788,6 +905,9 @@ class MainActivity : ComponentActivity() {
         parsers[candidate.source]?.resolveHistoryCandidate(request, candidate)
 
     private fun startRequestLog(request: HelperRequest?) {
+        failedAttempts = emptySet()
+        lastFailureMessage = null
+        lastFailureOption = null
         AppLog.clear()
         if (request == null) {
             AppLog.setRequestSummary(null)
@@ -1114,7 +1234,7 @@ class MainActivity : ComponentActivity() {
         val settings = helperSettings
         settings.networkPolicy.blockReason(this)?.let { message ->
             appendLog(message, LogLevel.Warning)
-            uiState = UiState.Error(message)
+            showFailure(message)
             return
         }
         appendLog(
@@ -1239,7 +1359,7 @@ class MainActivity : ComponentActivity() {
                     ?: outcome.errorMessage
                     ?: "No downloadable file from ${source.label}."
                 appendLog(message, LogLevel.Error)
-                uiState = UiState.Error(message)
+                showFailure(message, source, option)
             } else if (!candidate.directDownload) {
                 appendLog(
                     "${source.label} needs a browser check; choose the file manually.",
@@ -1340,6 +1460,9 @@ class MainActivity : ComponentActivity() {
         // ALWAYS_ASK can resolve the newest version even with no request fields.
         val policy = helperSettings.fastModePolicy
         if (policy == FastModePolicy.REQUESTED && !request.hasRequestedVersionRequest) return
+        failedAttempts = emptySet()
+        lastFailureMessage = null
+        lastFailureOption = null
         fastModeActive = true
         fastModeRunPolicy = if (policy == FastModePolicy.ALWAYS_ASK) FastModePolicy.REQUESTED else policy
         // Walk whatever the user has enabled globally; sources that cannot
@@ -1513,21 +1636,25 @@ class MainActivity : ComponentActivity() {
                         return
                     }
                     appendLog("Fast Mode: user skipped ${source.label}  trying the next source.", LogLevel.Info)
+                    recordFailedAttempt(source, CandidateOption.REQUESTED)
                     continue
                 }
                 FastModeFindResult.None -> {
+                    recordFailedAttempt(source, CandidateOption.REQUESTED)
                     appendLog("Fast Mode: no exact match on ${source.label}.", LogLevel.Info)
                 }
             }
         }
         fastModeActive = false
         fastModeQueue = null
+        val message = "No source had the exact version ${request.requestedVersionLabel}."
+        lastFailureMessage = message
         appendLog("Fast Mode: no source had the exact version. Use the sources below.", LogLevel.Warning)
         val activeRequest = request
         uiState = if (activeRequest != null) {
             UiState.FastMode(
                 FastModeProgress(
-                    detail = "No source had the exact version ${request.requestedVersionLabel}.",
+                    detail = message,
                     done = true,
                     succeeded = false,
                     result = initialCandidateResult(activeRequest)
@@ -1570,16 +1697,19 @@ class MainActivity : ComponentActivity() {
                 downloadAndReturn(best)
                 return
             }
+            recordFailedAttempt(source, CandidateOption.LATEST)
             appendLog("Fast Mode: no newer latest on ${source.label}.", LogLevel.Info)
         }
         fastModeActive = false
         fastModeQueue = null
+        val message = "No source offered a newer version than ${request.requestedVersionLabel}."
+        lastFailureMessage = message
         appendLog("Fast Mode: no source offered a newer version than requested. Use the sources below.", LogLevel.Warning)
         val activeRequest = request
         uiState = if (activeRequest != null) {
             UiState.FastMode(
                 FastModeProgress(
-                    detail = "No source offered a newer version than ${request.requestedVersionLabel}.",
+                    detail = message,
                     done = true,
                     succeeded = false,
                     result = initialCandidateResult(activeRequest)
@@ -1868,6 +1998,7 @@ class MainActivity : ComponentActivity() {
                 if (failedRequest == null || event.candidate.packageName != failedRequest.packageName) return
                 appendLog(event.message, LogLevel.Error)
                 if (fastModeActive) {
+                    recordFailedAttempt(event.candidate.source, event.candidate.option)
                     val activeRequest = request
                     if (activeRequest != null && !fastModeQueue.isNullOrEmpty()) {
                         appendLog(
@@ -1884,22 +2015,33 @@ class MainActivity : ComponentActivity() {
                     } else {
                         fastModeActive = false
                         fastModeQueue = null
-                        uiState = if (activeRequest != null) {
-                            UiState.FastMode(
+                        val failureDetail = "Fast Mode failed: " +
+                            event.message.lineSequence().firstOrNull().orEmpty().take(160)
+                        lastFailureMessage = event.message
+                        if (activeRequest != null) {
+                            uiState = UiState.FastMode(
                                 FastModeProgress(
                                     sourceLabel = event.candidate.source.label,
-                                    detail = "Fast Mode failed: ${event.message.lineSequence().firstOrNull().orEmpty().take(160)}",
+                                    detail = failureDetail,
                                     done = true,
                                     succeeded = false,
                                     result = initialCandidateResult(activeRequest)
                                 )
                             )
                         } else {
-                            UiState.Error(event.message)
+                            showFailure(
+                                event.message,
+                                event.candidate.source,
+                                event.candidate.option
+                            )
                         }
                     }
                 } else {
-                    uiState = UiState.Error(event.message)
+                    showFailure(
+                        event.message,
+                        event.candidate.source,
+                        event.candidate.option
+                    )
                 }
             }
             is DownloadJobManager.Event.ValidationMismatch -> {
@@ -1972,7 +2114,11 @@ class MainActivity : ComponentActivity() {
                     val message = "Downloaded version code does not match the request " +
                         "(found ${event.foundVersionCode ?: "unknown"})."
                     appendLog(message, LogLevel.Error)
-                    uiState = UiState.Error(message)
+                    showFailure(
+                        message,
+                        event.candidate.source,
+                        event.candidate.option
+                    )
                 }
             }
             is DownloadJobManager.Event.Cancelled -> {
@@ -2226,7 +2372,7 @@ class MainActivity : ComponentActivity() {
                         val message = (error.message ?: "Could not return selected APK to Morphe.")
                             .withManualModeHint()
                         appendLog(message, LogLevel.Error)
-                        uiState = UiState.Error(message)
+                        showFailure(message, candidate.source, candidate.option)
                     }
                 }
                 .onFailure { error ->
@@ -2238,7 +2384,7 @@ class MainActivity : ComponentActivity() {
                     val message = (error.message ?: "Selected file could not be used.")
                         .withManualModeHint()
                     appendLog(message, LogLevel.Error)
-                    uiState = UiState.Error(message)
+                    showFailure(message, candidate.source, candidate.option)
                 }
         }
     }
@@ -2795,6 +2941,10 @@ private fun HelperScreen(
     onSettingsChange: (HelperSettings) -> Unit,
     onOpenUpdates: () -> Unit,
     onRefresh: () -> Unit,
+    canRetryFailedSources: Boolean,
+    onRetryAll: () -> Unit,
+    onRetryFailedSources: () -> Unit,
+    onCopyFailureDetails: () -> Unit,
     // VirusTotal API key, threaded into the scan-flow cards (ask, progress,
     // result) so quota is shown where scanning actually happens instead of
     // cluttering the home screen. Empty when VirusTotal is disabled.
@@ -3041,7 +3191,14 @@ private fun HelperScreen(
                     item { VirusTotalQuotaCard(virusTotalApiKey) }
                 }
                 is UiState.Error -> item {
-                    ErrorState(message = state.message, onRefresh = onRefresh, onCancel = onCancel)
+                    ErrorState(
+                        message = state.message,
+                        canRetryFailedSources = canRetryFailedSources,
+                        onRetryAll = onRetryAll,
+                        onRetryFailedSources = onRetryFailedSources,
+                        onCopyDetails = onCopyFailureDetails,
+                        onCancel = onCancel
+                    )
                 }
 
                 is UiState.FastMode -> {
@@ -3057,7 +3214,11 @@ private fun HelperScreen(
                             onUseMismatch = onUseFastModeMismatch,
                             onSkipMismatch = onSkipFastModeMismatch,
                             onSkipScan = onSkipScan,
-                            onChooseVersion = onChooseVersion
+                            onChooseVersion = onChooseVersion,
+                            canRetryFailedSources = canRetryFailedSources,
+                            onRetryAll = onRetryAll,
+                            onRetryFailedSources = onRetryFailedSources,
+                            onCopyFailureDetails = onCopyFailureDetails
                         )
                     }
                     if (isScanStatus(state.progress.detail)) {
@@ -8060,7 +8221,11 @@ private fun FastModeCard(
     onUseMismatch: () -> Unit,
     onSkipMismatch: () -> Unit,
     onSkipScan: () -> Unit,
-    onChooseVersion: (FastModePolicy) -> Unit
+    onChooseVersion: (FastModePolicy) -> Unit,
+    canRetryFailedSources: Boolean,
+    onRetryAll: () -> Unit,
+    onRetryFailedSources: () -> Unit,
+    onCopyFailureDetails: () -> Unit
 ) {
     var showSwitch by remember { mutableStateOf(false) }
     var resumeOnDismiss by remember { mutableStateOf(false) }
@@ -8341,6 +8506,14 @@ private fun FastModeCard(
                     onClick = onCancel,
                     icon = Icons.Outlined.Close,
                     modifier = Modifier.fillMaxWidth()
+                )
+            } else if (!progress.succeeded) {
+                FailureActions(
+                    canRetryFailedSources = canRetryFailedSources,
+                    onRetryAll = onRetryAll,
+                    onRetryFailedSources = onRetryFailedSources,
+                    onCopyDetails = onCopyFailureDetails,
+                    onCancel = onCancel
                 )
             }
         }
@@ -9037,28 +9210,64 @@ private fun formatTransferEta(ms: Long): String {
 }
 
 @Composable
-private fun ErrorState(message: String, onRefresh: () -> Unit, onCancel: () -> Unit) {
+private fun FailureActions(
+    canRetryFailedSources: Boolean,
+    onRetryAll: () -> Unit,
+    onRetryFailedSources: () -> Unit,
+    onCopyDetails: () -> Unit,
+    onCancel: () -> Unit
+) {
+    HelperButton(
+        text = "Retry all",
+        onClick = onRetryAll,
+        modifier = Modifier.fillMaxWidth()
+    )
+    if (canRetryFailedSources) {
+        HelperOutlinedButton(
+            text = "Retry failed sources",
+            onClick = onRetryFailedSources,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
+    ) {
+        HelperOutlinedButton(
+            text = "Copy details",
+            onClick = onCopyDetails,
+            modifier = Modifier.weight(1f)
+        )
+        HelperOutlinedButton(
+            text = "Cancel",
+            onClick = onCancel,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun ErrorState(
+    message: String,
+    canRetryFailedSources: Boolean,
+    onRetryAll: () -> Unit,
+    onRetryFailedSources: () -> Unit,
+    onCopyDetails: () -> Unit,
+    onCancel: () -> Unit
+) {
     SurfaceCard {
         Column(
             modifier = Modifier.padding(MorpheDefaults.ContentPadding),
             verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
         ) {
-        Text(text = message, color = MaterialTheme.colorScheme.error)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
-        ) {
-            HelperButton(
-                text = "Retry",
-                onClick = onRefresh,
-                modifier = Modifier.weight(1f)
+            Text(text = message, color = MaterialTheme.colorScheme.error)
+            FailureActions(
+                canRetryFailedSources = canRetryFailedSources,
+                onRetryAll = onRetryAll,
+                onRetryFailedSources = onRetryFailedSources,
+                onCopyDetails = onCopyDetails,
+                onCancel = onCancel
             )
-            HelperOutlinedButton(
-                text = "Cancel",
-                onClick = onCancel,
-                modifier = Modifier.weight(1f)
-            )
-        }
         }
     }
 }
@@ -9317,6 +9526,11 @@ internal data class HelperRequest(
         }
     }
 }
+
+private data class FailedAttempt(
+    val source: DownloadSource,
+    val option: CandidateOption
+)
 
 private data class CandidateResult(
     val sourceGroups: List<SourceCandidateGroup>
