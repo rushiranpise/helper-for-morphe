@@ -32,6 +32,7 @@ class EvoziParserTest {
         EvoziParser(testParserContext(pages))
 
     private val downloaderUrl = "https://apkcube.com/apk-downloader?url=$packageName"
+    private val downloadUrl = "https://apkcube.com/battery-guru-battery-health/$packageName/download"
     private val oldVersionsUrl = "https://apkcube.com/battery-guru-battery-health/$packageName/old-versions"
 
     private fun latestRequest() = testRequest(
@@ -54,6 +55,30 @@ class EvoziParserTest {
         }
         assertEquals(1, result.size)
         assertEquals(DownloadSource.APK_CUBE, result.first().source)
+        assertEquals("2.5.0.6", result.first().versionName)
+    }
+
+    @Test
+    fun latest_readsVersionFromTheDownloadPageTitle() {
+        // The live downloader page can name the app without carrying a version;
+        // the download page title still has it.
+        val downloaderWithoutVersion = """
+            <script>self.__next_f.push([1,"3a:[\"R\",\"RL3\",null,{\"href\":\"/battery-guru-battery-health/com.paget96.batteryguru/download\"}]"])</script>
+        """.trimIndent()
+        val downloadPage = """
+            <!DOCTYPE html><html><head>
+            <title>Download Battery Guru 2.5.0.6 APK for Android - APKCube</title>
+            </head></html>
+        """.trimIndent()
+        val result = runBlocking {
+            parser(
+                mapOf(
+                    downloaderUrl to downloaderWithoutVersion,
+                    downloadUrl to downloadPage
+                )
+            ).findCandidates(latestRequest(), CandidateOption.LATEST)
+        }
+        assertEquals(1, result.size)
         assertEquals("2.5.0.6", result.first().versionName)
     }
 

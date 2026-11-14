@@ -53,10 +53,17 @@ internal abstract class ApkCubeSourceParser(
             throw SourceAppNotFoundException(request.packageName)
         }
         val flight = html.unescapeFlightPayload()
-        val versionName = flight.apkCubePageVersion() ?: return emptyList()
         val downloadHref = flight.apkCubeDownloadHref(request.packageName) ?: return emptyList()
         val downloadUrl = "https://apkcube.com$downloadHref"
             .normalizedHttpUrlOrNull()
+            ?: return emptyList()
+        // The downloader page used to carry the version in its flight payload. It now
+        // often names only the app, while the download page title still has the exact
+        // version, so prefer that and keep the payload as a fallback.
+        val versionName = runCatching { ctx.text(downloadUrl) }
+            .getOrNull()
+            ?.apkCubeVersionFromTitle()
+            ?: flight.apkCubePageVersion()
             ?: return emptyList()
         return listOf(
             DownloadCandidate(
@@ -178,8 +185,20 @@ private fun String.apkCubeDownloadHref(packageName: String): String? =
         ?.groupValues
         ?.getOrNull(1)
 
+/** The version in a title such as `Download WhatsApp 2.26.44.90 APK for Android`. */
+private fun String.apkCubeVersionFromTitle(): String? =
+    Regex(
+        """<title>\s*Download\s+.+?\s+(\d[^<]*?)\s+APK\s+for\s+Android""",
+        RegexOption.IGNORE_CASE
+    )
+        .find(this)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.trim()
+        ?.takeIf(String::isNotBlank)
+
 /**
- * The version shown next to the app name on the APKCube downloader page, e.g.
+ * The version shown next to the app name on older APKCube downloader pages, e.g.
  * `children":["2.5.0.6"," · ","","Paget96"]`. The page has other
  * `children` arrays earlier (nav labels like "apk-downloader"), so prefer a
  * token that looks like a version (starts with a digit) before falling back to
