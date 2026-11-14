@@ -456,6 +456,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         restoreAndPersistRateLimiter()
         helperSettings = loadHelperSettings()
+        ensureLauncherIconState()
         request = HelperRequest.from(intent)
         if (intent?.getBooleanExtra(UpdateManager.EXTRA_OPEN_UPDATES, false) == true) {
             showUpdates = true
@@ -997,8 +998,12 @@ class MainActivity : ComponentActivity() {
 
     private fun updateHelperSettings(settings: HelperSettings) {
         val sourcesChanged = helperSettings.disabledSources != settings.disabledSources
+        val launcherChanged = helperSettings.showLauncherIcon != settings.showLauncherIcon
         helperSettings = settings
         saveHelperSettings(settings)
+        if (launcherChanged) {
+            setLauncherIconVisible(settings.showLauncherIcon)
+        }
         // Rebuild the picker so enabled/disabled sources take effect immediately.
         if (sourcesChanged && request != null && uiState is UiState.Ready) {
             uiState = UiState.Ready(initialCandidateResult(request!!))
@@ -4340,6 +4345,8 @@ private fun AppearanceTabContent(
     onSettingsChange: (HelperSettings) -> Unit
 ) {
     var showAccentPicker by rememberSaveable { mutableStateOf(false) }
+    var confirmHideIcon by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     val supportsDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     // Wallpaper colours need a platform palette, so the option is not offered
     // where it could not work. A stored choice still resolves on the other side.
@@ -4363,6 +4370,24 @@ private fun AppearanceTabContent(
                     trailing = { RadioDot(selected = settings.themeMode == mode) }
                 )
             }
+        }
+
+        SettingsGroup(title = "App icon", icon = Icons.Outlined.Smartphone) {
+            SettingsSwitchItem(
+                icon = Icons.Outlined.Smartphone,
+                title = "Show app icon",
+                subtitle = "Keep the app visible in your launcher. When hidden, open it " +
+                    "from Android Settings or when Morphe starts a download.",
+                checked = settings.showLauncherIcon,
+                onToggle = {
+                    if (settings.showLauncherIcon) {
+                        confirmHideIcon = true
+                    } else {
+                        onSettingsChange(settings.copy(showLauncherIcon = true))
+                        Toast.makeText(context, "App icon shown.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            )
         }
 
         SettingsGroup(title = stringResource(R.string.colour_style), icon = Icons.Outlined.ColorLens) {
@@ -4411,6 +4436,36 @@ private fun AppearanceTabContent(
                     )
                 }
             }
+        }
+    }
+
+    if (confirmHideIcon) {
+        MorpheDialog(
+            title = "Hide app icon?",
+            onDismiss = { confirmHideIcon = false },
+            actions = {
+                HelperOutlinedButton(
+                    text = "Cancel",
+                    onClick = { confirmHideIcon = false },
+                    modifier = Modifier.weight(1f)
+                )
+                HelperButton(
+                    text = "Hide icon",
+                    onClick = {
+                        confirmHideIcon = false
+                        onSettingsChange(settings.copy(showLauncherIcon = false))
+                        Toast.makeText(context, "App icon hidden.", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        ) {
+            Text(
+                text = "The app will disappear from your launcher. You can still open it " +
+                    "from Android Settings > Apps > Morphe Helper > Open, or when Morphe " +
+                    "starts a download.",
+                style = MaterialTheme.typography.bodyMedium
+            )
         }
     }
 

@@ -1,6 +1,8 @@
 package dev.rushi.apkdownloadhelper
 
+import android.content.ComponentName
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
@@ -58,6 +60,7 @@ internal data class HelperSettings(
     val downloadLocation: DownloadLocation = DownloadLocation.TEMPORARY,
     val downloadRetention: DownloadRetention = DownloadRetention.KEEP,
     val downloadCustomTreeUri: String = "",
+    val showLauncherIcon: Boolean = true,
     val networkPolicy: NetworkPolicy = NetworkPolicy.WIFI_AND_MOBILE,
     val logcatLogging: Boolean = true,
     // On by default: the helper exists to hand a file back to Morphe, and Fast Mode is
@@ -295,6 +298,7 @@ internal fun Context.loadHelperSettings(): HelperSettings {
             DownloadRetention.KEEP
         ),
         downloadCustomTreeUri = prefs.getString("download_custom_tree_uri", "") ?: "",
+        showLauncherIcon = prefs.getBoolean("show_launcher_icon", true),
         networkPolicy = enumValueOrDefault(
             prefs.getString("network_policy", null),
             NetworkPolicy.WIFI_AND_MOBILE
@@ -362,6 +366,7 @@ internal fun Context.saveHelperSettings(settings: HelperSettings) {
         .putString("download_location", settings.downloadLocation.name)
         .putString("download_retention", settings.downloadRetention.name)
         .putString("download_custom_tree_uri", settings.downloadCustomTreeUri)
+        .putBoolean("show_launcher_icon", settings.showLauncherIcon)
         .remove("delete_temporary_after_handoff")
         .putString("network_policy", settings.networkPolicy.name)
         .putBoolean("logcat_logging", settings.logcatLogging)
@@ -389,6 +394,33 @@ internal fun Context.saveHelperSettings(settings: HelperSettings) {
 
 private inline fun <reified T : Enum<T>> enumValueOrDefault(name: String?, fallback: T): T =
     name?.let { runCatching { enumValueOf<T>(it) }.getOrNull() } ?: fallback
+
+/** Re-applies the saved launcher icon choice without requiring a settings reload. */
+internal fun Context.ensureLauncherIconState() {
+    val shown = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .getBoolean("show_launcher_icon", true)
+    setLauncherIconVisible(shown)
+}
+
+/**
+ * The launcher entry is an activity alias. MainActivity keeps a MAIN/INFO filter
+ * so Android Settings can still open the app while the icon is hidden.
+ */
+internal fun Context.setLauncherIconVisible(shown: Boolean) {
+    val alias = ComponentName(packageName, "$packageName.Launcher")
+    val state = if (shown) {
+        PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+    } else {
+        PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+    }
+    runCatching {
+        packageManager.setComponentEnabledSetting(
+            alias,
+            state,
+            PackageManager.DONT_KILL_APP
+        )
+    }
+}
 
 /**
  * The stored colour style, or one derived from the retired `dynamic_colors`
