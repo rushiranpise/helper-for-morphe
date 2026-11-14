@@ -2975,6 +2975,9 @@ private fun CaptchaBrowserScreen(
     val context = LocalContext.current
     var progress by remember { mutableIntStateOf(0) }
     var verificationHintVisible by remember { mutableStateOf(false) }
+    var challengeActive by remember { mutableStateOf(false) }
+    var pageFinishedCount by remember { mutableIntStateOf(0) }
+    var reloadAttempts by remember { mutableIntStateOf(0) }
     // The page that produced the link is the referer APKMirror and APKPure
     // expect. It changes as their scripts walk search -> release -> download.
     val browserPageUrl = remember { mutableStateOf(candidate.captchaUrl ?: candidate.url) }
@@ -3055,6 +3058,7 @@ private fun CaptchaBrowserScreen(
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
                     browserPageUrl.value = url ?: browserPageUrl.value
+                    pageFinishedCount++
                     view?.evaluateJavascript(CAPTCHA_CAPTURE_JS, null)
                     when (candidate.viaSource ?: candidate.source) {
                         DownloadSource.APK_MIRROR -> view?.evaluateJavascript(
@@ -3102,9 +3106,31 @@ private fun CaptchaBrowserScreen(
         browserPageUrl.value = startUrl
         webView.loadUrl(startUrl)
     }
-    LaunchedEffect(candidate.captchaUrl ?: candidate.url) {
-        delay(8_000)
-        verificationHintVisible = true
+    LaunchedEffect(webView) {
+        while (true) {
+            delay(1_200)
+            webView.evaluateJavascript(BROWSER_CHALLENGE_PROBE_JS) { value ->
+                val detected = value.reportsBrowserChallenge()
+                challengeActive = detected
+                verificationHintVisible = detected
+            }
+        }
+    }
+    LaunchedEffect(webView, pageFinishedCount, challengeActive) {
+        val browserSource = candidate.viaSource ?: candidate.source
+        if (browserSource != DownloadSource.UPTODOWN ||
+            pageFinishedCount == 0 ||
+            challengeActive ||
+            reloadAttempts >= 2
+        ) {
+            return@LaunchedEffect
+        }
+        delay(10_000)
+        if (!challengeActive && reloadAttempts < 2) {
+            reloadAttempts++
+            Log.i(TAG, "Uptodown still loading; refreshing page ($reloadAttempts/2)")
+            webView.reload()
+        }
     }
 
     fun verifyNow() {
@@ -3320,6 +3346,38 @@ private const val CAPTCHA_CAPTURE_JS = """
   };
 })();
 """
+
+/**
+ * Reports whether the page is currently showing a Cloudflare-style challenge.
+ * The probe is polled while the browser is open so a stalled page can be
+ * reloaded only after its challenge clears.
+ */
+private const val BROWSER_CHALLENGE_PROBE_JS = """
+(function () {
+  var frames = document.querySelectorAll('iframe');
+  for (var i = 0; i < frames.length; i++) {
+    var src = (frames[i].src || '').toLowerCase();
+    if (src.indexOf('challenges.cloudflare.com') < 0) continue;
+    var rect = frames[i].getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) return 'challenge';
+  }
+  var text = ((document.title || '') + ' ' +
+    (document.body ? document.body.innerText : '')).toLowerCase();
+  if (text.indexOf('verify you are human') >= 0
+      || text.indexOf('security verification') >= 0
+      || text.indexOf('checking your browser') >= 0
+      || text.indexOf('just a moment') >= 0
+      || text.indexOf('attention required') >= 0
+      || text.indexOf('enable javascript and cookies to continue') >= 0) {
+    return 'challenge';
+  }
+  return 'ready';
+})();
+"""
+
+/** The probe returns the JSON-quoted string `"challenge"` or `"ready"`. */
+internal fun String?.reportsBrowserChallenge(): Boolean =
+    this?.contains("challenge", ignoreCase = true) == true
 
 /**
  * Uptodown keeps its file behind a Turnstile widget: the page's own download button only

@@ -77,6 +77,13 @@ class BrowserCaptureUrlTest {
     }
 
     @Test
+    fun `challenge probe results are classified`() {
+        assertTrue("\"challenge\"".reportsBrowserChallenge())
+        assertFalse("\"ready\"".reportsBrowserChallenge())
+        assertFalse((null as String?).reportsBrowserChallenge())
+    }
+
+    @Test
     fun `APKCube navigation allows its file hosts and blocks prelanders`() {
         assertTrue("https://apkcube.com/whatsapp/com.whatsapp/download".isApkCubeAllowedNavigation())
         assertTrue(
