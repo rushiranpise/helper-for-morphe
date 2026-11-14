@@ -327,7 +327,7 @@ class ApkMirrorParserTest {
 
         assertEquals(1, candidates.size)
         assertEquals(200L, candidates.single().versionCode)
-        assertEquals(exactFinal, candidates.single().url)
+        assertEquals("$exactFinal&forcebaseapk=true", candidates.single().url)
     }
 
     @Test
@@ -512,6 +512,8 @@ class ApkMirrorParserTest {
             listOf("arm64-v8a / 480-640dpi", "Universal / 120-480dpi"),
             candidates.map { it.variantTag }
         )
+        assertTrue(candidates.all { it.fileKind == "apkm" })
+        assertTrue(candidates.all { "forcebaseapk" !in it.url })
 
         // The same release asked for as APK offers only the one variant, so there is
         // nothing to tell apart and no badge to show - and `nodpi` is now named
@@ -523,6 +525,97 @@ class ApkMirrorParserTest {
 
         assertEquals(listOf(null), apkOnly.map { it.variantNumber })
         assertEquals(listOf("Universal / nodpi"), apkOnly.map { it.variantTag })
+    }
+
+    @Test
+    fun findCandidates_requested_constructsAMissingReleaseUrl() = runBlocking {
+        val constructedUrl = "${appPageUrl}example-app-1-5-0-release/"
+        val downloadPageUrl = "$constructedUrl/download/"
+        val finalUrl = "https://www.apkmirror.com/download.php?id=150&key=a"
+        val fetcher = FakeSourceTextFetcher(
+            pages = mapOf(
+                searchUrl to
+                    """<html><body><a href="/apk/example-org/example-app/">Example App</a></body></html>""",
+                appPageUrl to
+                    """<html><body>
+                         <span id="$packageName">Example App</span>
+                         <a href="/apk/example-org/example-app/2-0-0-release/">2.0.0</a>
+                       </body></html>""",
+                constructedUrl to
+                    """<html><body>
+                         <table><tr><th>Version</th><td>1.5.0 (150)</td></tr></table>
+                         <a class="downloadButton" href="$downloadPageUrl">Download</a>
+                       </body></html>""",
+                downloadPageUrl to
+                    """<html><body><a id="download-link" href="$finalUrl"></a></body></html>"""
+            )
+        )
+        val parser = ApkMirrorParser(parserContext(fetcher))
+
+        val candidates = parser.findCandidates(
+            testRequest(packageName = packageName, versionName = "1.5.0", versionCode = 150L),
+            CandidateOption.REQUESTED
+        )
+
+        val candidate = candidates.single { it.directDownload }
+        assertEquals("1.5.0", candidate.versionName)
+        assertEquals(150L, candidate.versionCode)
+        assertEquals("$finalUrl&forcebaseapk=true", candidate.url)
+        assertTrue(constructedUrl in fetcher.requestedUrls())
+        assertTrue(fetcher.requestedUrls().none { it.contains("/uploads") })
+    }
+
+    @Test
+    fun findCandidates_requested_forcesBaseApkFromAnExactBundleVariant() = runBlocking {
+        val releaseUrl = "https://www.apkmirror.com/apk/example-org/example-app/2-0-0-release/"
+        val bundleVariant = "$releaseUrl/example-app-2-0-0-arm64-android-apk-download/"
+        val bundleKey = "$bundleVariant/download/?key=bundle"
+        val baseKey = "$bundleVariant/download/?key=base&forcebaseapk=true"
+        val baseFinal = "https://www.apkmirror.com/download.php?id=200&key=base"
+        val bundleFinal = "https://www.apkmirror.com/download.php?id=200&key=bundle"
+        val fetcher = FakeSourceTextFetcher(
+            pages = mapOf(
+                searchUrl to
+                    """<html><body><a href="/apk/example-org/example-app/">Example App</a></body></html>""",
+                appPageUrl to
+                    """<html><body><span id="$packageName">Example App</span></body></html>""",
+                uploadsUrl to
+                    """<html><body><a href="/apk/example-org/example-app/2-0-0-release/">2.0.0</a></body></html>""",
+                releaseUrl to
+                    """<html><body><div class="table topmargin variants-table">
+                         <div class="table-row headerFont">
+                           <div class="table-cell">Variant</div>
+                           <div class="table-cell">Architecture</div>
+                           <div class="table-cell">Minimum Version</div>
+                           <div class="table-cell">Screen DPI</div>
+                         </div>
+                         ${apkMirrorVariantRow("BUNDLE", "arm64-v8a", "Android 10+", "nodpi", bundleVariant, "200")}
+                       </div></body></html>""",
+                bundleVariant to
+                    """<html><body>
+                         <a class="downloadButton" href="$bundleKey">Bundle</a>
+                         <a class="downloadButton" href="$baseKey">Base APK</a>
+                       </body></html>""",
+                baseKey to
+                    """<html><body><a id="download-link" href="$baseFinal"></a></body></html>""",
+                bundleKey to
+                    """<html><body><a id="download-link" href="$bundleFinal"></a></body></html>"""
+            )
+        )
+        val parser = ApkMirrorParser(parserContext(fetcher))
+
+        val candidates = parser.findCandidates(
+            testRequest(packageName = packageName, versionName = "2.0.0", versionCode = 200L),
+            CandidateOption.REQUESTED
+        )
+
+        val candidate = candidates.single()
+        assertEquals("apk", candidate.fileKind)
+        assertTrue(candidate.formatMatches)
+        assertEquals(200L, candidate.versionCode)
+        assertEquals("$baseFinal&forcebaseapk=true", candidate.url)
+        assertTrue(baseKey in fetcher.requestedUrls())
+        assertTrue(bundleKey !in fetcher.requestedUrls())
     }
 
     @Test
@@ -563,7 +656,7 @@ class ApkMirrorParserTest {
 
         assertTrue(resolved != null)
         assertTrue(resolved!!.directDownload)
-        assertEquals(finalUrl, resolved.url)
+        assertEquals("$finalUrl&forcebaseapk=true", resolved.url)
         assertEquals("2.0.0", resolved.versionName)
         assertEquals(1, resolved.files.size)
     }
@@ -691,7 +784,7 @@ class ApkMirrorParserTest {
             option = CandidateOption.REQUESTED
         )?.single()
 
-        assertEquals(finalUrl, candidate?.url)
+        assertEquals("$finalUrl&forcebaseapk=true", candidate?.url)
         assertEquals(200L, candidate?.versionCode)
         assertEquals(DownloadSource.APK_MIRROR, candidate?.source)
     }

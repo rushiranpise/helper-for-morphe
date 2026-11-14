@@ -514,6 +514,9 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         apkMirrorPreferredReleaseUrl(apkMirrorReleaseLinks(appDoc, appPageUrl), requestedVersions)
             ?.let { return it }
 
+        apkMirrorConstructedReleaseUrl(appPageUrl, appDoc, requestedVersions)
+            ?.let { return it }
+
         val category = appPageUrl.trimEnd('/').substringAfterLast('/').takeIf(String::isNotBlank)
             ?: return null
         val uploadsUrl = "https://www.apkmirror.com/uploads/?appcategory=$category"
@@ -553,6 +556,67 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
             requestedVersions.any { version -> apkMirrorReleaseUrlMatchesVersion(url, version) }
         }
         return matching.firstOrNull { !it.hasVariantBuildMarker() } ?: matching.firstOrNull()
+    }
+
+    /**
+     * Builds a release URL from the app page's latest slug when the requested
+     * version is no longer listed on the app or uploads pages.
+     *
+     * APKMirror release slugs are predictable: an app page whose latest release
+     * is `example-app-2-0-0-release` can be probed for
+     * `example-app-1-5-0-release`. The app slug is stripped first because it can
+     * itself end in a digit (`file-manager-7-3-5-4-release`).
+     */
+    private fun apkMirrorConstructedReleaseUrl(
+        appPageUrl: String,
+        appDoc: Document,
+        requestedVersions: List<String>
+    ): String? {
+        val releases = apkMirrorReleaseLinks(appDoc, appPageUrl)
+        val base = releases.firstOrNull { !it.hasVariantBuildMarker() } ?: releases.firstOrNull()
+            ?: return null
+        val appPath = runCatching { java.net.URI(appPageUrl).path.trimEnd('/') }.getOrNull()
+            ?.takeIf(String::isNotBlank)
+            ?: return null
+        val appSlug = appPath.substringAfterLast('/').takeIf(String::isNotBlank) ?: return null
+        val baseSegment = runCatching {
+            java.net.URI(base).path.trimEnd('/').substringAfterLast('/')
+        }.getOrNull()
+            ?.removeSuffix("-release")
+            ?.takeIf(String::isNotBlank)
+            ?: return null
+        val versionOnly = Regex(
+            """^\d+(?:-\d+)*(?:-(?:secondary|alpha|beta|rc)\d*)?$""",
+            RegexOption.IGNORE_CASE
+        )
+        val prefix = when {
+            baseSegment.startsWith("$appSlug-") -> "$appSlug-"
+            // Some release URLs end in just the version (no app slug prefix).
+            versionOnly.matches(baseSegment) -> "$appSlug-"
+            else -> Regex("""^(.*?-)\d+(?:-\d+)*(?:-(?:alpha|beta|rc)\d*)?$""", RegexOption.IGNORE_CASE)
+                .find(baseSegment)
+                ?.groupValues
+                ?.getOrNull(1)
+        } ?: return null
+
+        for (requested in requestedVersions) {
+            val versionSlug = requested.apkMirrorVersionSlug()
+            if (versionSlug.isBlank()) continue
+            val candidate = "https://www.apkmirror.com$appPath/$prefix$versionSlug-release/"
+            val exists = try {
+                val doc = fetchDocument(candidate, referer = appPageUrl)
+                !doc.isCloudflareChallenge()
+            } catch (e: HttpRateLimitedException) {
+                throw e
+            } catch (e: Exception) {
+                false
+            }
+            if (exists) {
+                Log.i(TAG, "APKMirror constructed missing release URL: $candidate")
+                return candidate
+            }
+        }
+        return null
     }
 
     private fun apkMirrorUploadsUrl(appPageUrl: String): String {
@@ -673,7 +737,13 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
             )
             return null
         }
-        val downloadButtonUrl = apkMirrorDownloadButtonUrl(variantDoc, isBundle) ?: return null
+        // APKMirror can serve a split bundle even from an APK variant page.
+        // When the request only wants a plain APK, both the button and the
+        // final link have to ask for the base APK explicitly.
+        val forceBaseApk = !request.allowSplitArchive &&
+            request.requestedFileKinds.isNotEmpty() &&
+            request.requestedFileKinds.all { it == "apk" }
+        val downloadButtonUrl = apkMirrorDownloadButtonUrl(variantDoc, forceBaseApk) ?: return null
         val downloadDoc = fetchDocument(downloadButtonUrl, referer = variantPageUrl)
         if (downloadDoc.isCloudflareChallenge()) {
             throw SourceChallengeException(
@@ -681,10 +751,19 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
             )
         }
 
-        val finalUrl = apkMirrorFinalDownloadUrl(downloadDoc) ?: return null
+        val rawFinalUrl = apkMirrorFinalDownloadUrl(downloadDoc) ?: return null
+        val finalUrl = if (forceBaseApk) apkMirrorForceBaseApkUrl(rawFinalUrl) else rawFinalUrl
+        if (forceBaseApk) {
+            Log.i(TAG, "APKMirror forcing base APK for ${request.packageName} from $variantPageUrl")
+        }
         val resolvedVersion = versionName
             ?: apkMirrorVersionFromReleaseUrl(releaseUrl)
-        val fileKind = variant?.fileKind ?: if (isBundle) "apkm" else fileKindFromUrl(finalUrl)
+        val fileKind = when {
+            forceBaseApk -> "apk"
+            variant != null -> variant.fileKind
+            isBundle -> "apkm"
+            else -> fileKindFromUrl(finalUrl)
+        }
         val variantLabel = variant?.displayLabel()
         val variantFileSuffix = variantLabel.variantFileSuffix()
         // APKMirror publishes the file's SHA-256 in the variant page's safe-
@@ -945,7 +1024,7 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         return normalized == "nodpi" || normalized == "anydpi"
     }
 
-    private fun apkMirrorDownloadButtonUrl(doc: Document, isBundle: Boolean): String? {
+    private fun apkMirrorDownloadButtonUrl(doc: Document, forceBaseApk: Boolean): String? {
         val urls = (
             doc.select("a.downloadButton[href]").map { it.attr("href") } +
                 doc.select("a[href*=/download/?key][href]").map { it.attr("href") }
@@ -953,11 +1032,21 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
             .mapNotNull(::apkMirrorAbsoluteUrl)
             .distinct()
 
-        return if (isBundle) {
-            urls.firstOrNull { !it.contains("forcebaseapk", ignoreCase = true) } ?: urls.firstOrNull()
-        } else {
+        return if (forceBaseApk) {
             urls.firstOrNull { it.contains("forcebaseapk", ignoreCase = true) } ?: urls.firstOrNull()
+        } else {
+            urls.firstOrNull { !it.contains("forcebaseapk", ignoreCase = true) } ?: urls.firstOrNull()
         }
+    }
+
+    private fun apkMirrorForceBaseApkUrl(url: String): String {
+        if (url.contains("forcebaseapk=", ignoreCase = true)) return url
+        val host = runCatching { java.net.URI(url).host }.getOrNull() ?: return url
+        val isApkMirror = host.equals("apkmirror.com", ignoreCase = true) ||
+            host.endsWith(".apkmirror.com", ignoreCase = true)
+        if (!isApkMirror) return url
+        val separator = if ('?' in url) "&" else "?"
+        return "$url${separator}forcebaseapk=true"
     }
 
     private fun apkMirrorFinalDownloadUrl(doc: Document): String? =
