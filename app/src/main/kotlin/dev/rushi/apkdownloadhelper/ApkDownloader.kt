@@ -14,6 +14,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import okhttp3.Call
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.Request
 
 private const val MAX_DOWNLOAD_ATTEMPTS = 3
@@ -23,8 +24,10 @@ private const val HTTP_PARTIAL_CONTENT = 206
 /** Files below this size are not worth splitting into connections. */
 private const val MIN_SEGMENTED_BYTES = 8L * 1024L * 1024L
 
-/** Above this size the download uses four connections instead of two. */
-private const val FOUR_CONNECTION_BYTES = 32L * 1024L * 1024L
+/** The queue hands out ranges in these units; workers take the next free one. */
+private const val SEGMENT_CHUNK_BYTES = 4L * 1024L * 1024L
+
+private const val MAX_SEGMENT_CONNECTIONS = 32
 
 private const val SEGMENT_BUFFER_SIZE = 64 * 1024
 private const val PAUSE_POLL_MS = 100L
@@ -87,6 +90,7 @@ internal class ApkDownloader(
     suspend fun downloadToFile(
         download: CandidateDownloadFile,
         target: File,
+        maxConnections: Int = 4,
         onProgress: (copied: Long, total: Long) -> Unit,
         onConnections: (Int) -> Unit = {}
     ) {
@@ -101,8 +105,9 @@ internal class ApkDownloader(
             return
         }
 
+        val segmentedClient = segmentedDownloadClientFor(url)
         val plan = try {
-            probeSegments(download, url)
+            probeSegments(download, url, maxConnections, segmentedClient)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
@@ -111,7 +116,7 @@ internal class ApkDownloader(
         if (plan != null && plan.total >= MIN_SEGMENTED_BYTES) {
             onConnections(plan.connections)
             val complete = try {
-                downloadSegmented(download, target, plan, onProgress)
+                downloadSegmented(download, target, plan, segmentedClient, onProgress)
             } catch (error: CancellationException) {
                 throw error
             }
@@ -140,14 +145,19 @@ internal class ApkDownloader(
      * file can be split; a `200` means the server ignored the range and the
      * single-stream path should be used.
      */
-    private fun probeSegments(download: CandidateDownloadFile, url: String): SegmentPlan? {
+    private fun probeSegments(
+        download: CandidateDownloadFile,
+        url: String,
+        maxConnections: Int,
+        client: OkHttpClient
+    ): SegmentPlan? {
         val builder = Request.Builder()
             .url(url)
             .header("Range", "bytes=0-0")
             .header("Accept-Encoding", "identity")
         download.referer?.let { builder.header("Referer", it) }
 
-        val call = downloadClientFor(url).newCall(builder.build())
+        val call = client.newCall(builder.build())
         synchronized(activeCalls) { activeCalls.add(call) }
         try {
             call.execute().use { response ->
@@ -159,15 +169,20 @@ internal class ApkDownloader(
                     "Source did not return a valid APK/APKS/XAPK ($contentType)."
                 }
 
+                val encoding = response.header("Content-Encoding")
+                if (encoding != null && !encoding.equals("identity", ignoreCase = true)) {
+                    return null
+                }
                 val contentRange = response.header("Content-Range")
                 val total = contentRangeTotal(contentRange) ?: return null
                 if (!contentRangeStartsAt(contentRange, 0L)) return null
-                if (total < MIN_SEGMENTED_BYTES) return null
+                val connections = segmentedConnectionCount(total, maxConnections)
+                if (connections < 2) return null
 
                 return SegmentPlan(
                     url = response.request.url.toString(),
                     total = total,
-                    connections = if (total >= FOUR_CONNECTION_BYTES) 4 else 2,
+                    connections = connections,
                     // A weak ETag is not a valid If-Range validator; prefer a
                     // strong one and otherwise fall back to Last-Modified.
                     etag = response.header("ETag")
@@ -194,55 +209,69 @@ internal class ApkDownloader(
         download: CandidateDownloadFile,
         target: File,
         plan: SegmentPlan,
+        client: OkHttpClient,
         onProgress: (copied: Long, total: Long) -> Unit
     ): Boolean = coroutineScope {
         val infoFile = File(target.parentFile, "${target.name}.seginfo")
-        val segmentFiles = (0 until plan.connections).map { segmentFile(target, it) }
-        val ranges = segmentRanges(plan.total, plan.connections)
+        val chunkCount = segmentChunkCount(plan.total)
+        val chunkFiles = (0 until chunkCount).map { chunkFile(target, it) }
         val validator = plan.etag ?: plan.lastModified
 
-        // The layout line guards against resuming a different file; the
-        // validator line also catches a source that replaced the APK but kept
-        // its size. Both must match before the old segment bytes are trusted.
+        // The first line guards against resuming a different file. The second
+        // fixes the 4 MiB unit, so an old equal-range layout is discarded, and
+        // the validator catches a source that replaced the APK at the same size.
         val info = buildString {
             append(plan.total).append('\n')
-            append(plan.connections).append('\n')
+            append(SEGMENT_CHUNK_BYTES).append('\n')
             append(validator.orEmpty())
         }
         val savedInfo = if (infoFile.exists()) infoFile.readLines() else emptyList()
         val savedLayoutMatches = savedInfo.size >= 2 &&
             savedInfo[0].toLongOrNull() == plan.total &&
-            savedInfo[1].toIntOrNull() == plan.connections
+            savedInfo[1].toLongOrNull() == SEGMENT_CHUNK_BYTES
         val savedValidator = savedInfo.getOrNull(2)?.takeIf { it.isNotEmpty() }
         val validatorChanged = savedLayoutMatches && savedValidator != validator
         if (!savedLayoutMatches || validatorChanged) {
             allSegmentFiles(target).forEach { it.delete() }
             infoFile.writeText(info)
         }
+        allSegmentFiles(target)
+            .filterNot { file -> chunkFiles.any { it.name == file.name } }
+            .forEach { it.delete() }
 
-        // Trim a segment that is longer than its range, which can happen if a
-        // previous attempt saw a different file.
-        ranges.forEachIndexed { index, range ->
-            val file = segmentFiles[index]
-            val expectedSize = range.second - range.first + 1
+        // A chunk file is trusted only up to its 4 MiB slot. Trim leftovers
+        // from another layout before counting resumed bytes.
+        var completedBytes = 0L
+        chunkFiles.forEachIndexed { index, file ->
+            val expectedSize = segmentChunkSize(plan.total, index)
             if (file.exists() && file.length() > expectedSize) {
                 RandomAccessFile(file, "rw").use { it.setLength(expectedSize) }
             }
+            completedBytes += file.length().coerceAtLeast(0L).coerceAtMost(expectedSize)
         }
 
-        val completed = AtomicLong(segmentFiles.sumOf { it.length().coerceAtLeast(0L) })
+        val completed = AtomicLong(completedBytes)
         onProgress(completed.get(), plan.total)
-
-        val workers = (0 until plan.connections).map { index ->
+        val nextChunk = AtomicLong(0L)
+        val workers = (0 until plan.connections).map {
             async(Dispatchers.IO) {
-                downloadSegment(
-                    download = download,
-                    plan = plan,
-                    range = ranges[index],
-                    segment = segmentFiles[index],
-                    completed = completed,
-                    onProgress = onProgress
-                )
+                while (true) {
+                    val index = nextChunk.getAndIncrement()
+                    if (index >= chunkCount) return@async
+                    val chunkIndex = index.toInt()
+                    val chunk = chunkFiles[chunkIndex]
+                    val expectedSize = segmentChunkSize(plan.total, chunkIndex)
+                    if (chunk.length() >= expectedSize) continue
+                    downloadChunk(
+                        download = download,
+                        plan = plan,
+                        client = client,
+                        chunkIndex = chunkIndex,
+                        chunk = chunk,
+                        completed = completed,
+                        onProgress = onProgress
+                    )
+                }
             }
         }
 
@@ -256,11 +285,19 @@ internal class ApkDownloader(
             }
             return@coroutineScope false
         }
+        val allChunksComplete = chunkFiles.withIndex().all { (index, file) ->
+            file.length() == segmentChunkSize(plan.total, index)
+        }
+        if (!allChunksComplete) {
+            allSegmentFiles(target).forEach { it.delete() }
+            infoFile.delete()
+            return@coroutineScope false
+        }
 
         // Validate the container before assembling, so an HTML page or an error
         // body is rejected before it reaches the validator.
         val header = ByteArray(4)
-        val headerSize = segmentFiles.firstOrNull()?.inputStream()?.use { it.read(header) } ?: 0
+        val headerSize = chunkFiles.firstOrNull()?.inputStream()?.use { it.read(header) } ?: 0
         val isZip = headerSize >= 2 &&
             header[0] == 'P'.code.toByte() &&
             header[1] == 'K'.code.toByte()
@@ -271,8 +308,8 @@ internal class ApkDownloader(
         }
 
         FileOutputStream(target).use { output ->
-            segmentFiles.forEach { segment ->
-                segment.inputStream().use { input -> input.copyTo(output) }
+            chunkFiles.forEach { chunk ->
+                chunk.inputStream().use { input -> input.copyTo(output) }
             }
         }
         if (target.length() != plan.total) {
@@ -287,17 +324,19 @@ internal class ApkDownloader(
         true
     }
 
-    private fun downloadSegment(
+    private fun downloadChunk(
         download: CandidateDownloadFile,
         plan: SegmentPlan,
-        range: Pair<Long, Long>,
-        segment: File,
+        client: OkHttpClient,
+        chunkIndex: Int,
+        chunk: File,
         completed: AtomicLong,
         onProgress: (copied: Long, total: Long) -> Unit
     ) {
-        val (start, end) = range
+        val start = chunkIndex * SEGMENT_CHUNK_BYTES
+        val end = minOf(start + SEGMENT_CHUNK_BYTES, plan.total) - 1
         val expectedSize = end - start + 1
-        var position = start + segment.length()
+        var position = start + chunk.length()
         var attempt = 0
 
         while (position <= end) {
@@ -310,14 +349,14 @@ internal class ApkDownloader(
                 .header("Range", "bytes=$from-$end")
                 .header("Accept-Encoding", "identity")
             download.referer?.let { builder.header("Referer", it) }
-            // Only a resumed range needs the guard; a fresh segment must not
+            // Only a resumed range needs the guard; a fresh chunk must not
             // risk a server rejecting a weak Last-Modified validator.
             if (from > start) {
                 val validator = plan.etag ?: plan.lastModified
                 if (validator != null) builder.header("If-Range", validator)
             }
 
-            val call = downloadClientFor(plan.url).newCall(builder.build())
+            val call = client.newCall(builder.build())
             synchronized(activeCalls) { activeCalls.add(call) }
             var written = 0L
             try {
@@ -335,7 +374,7 @@ internal class ApkDownloader(
                         throw IllegalStateException("Unexpected Content-Encoding $encoding")
                     }
 
-                    RandomAccessFile(segment, "rw").use { output ->
+                    RandomAccessFile(chunk, "rw").use { output ->
                         output.seek(from - start)
                         response.body.byteStream().use { input ->
                             val buffer = ByteArray(SEGMENT_BUFFER_SIZE)
@@ -357,7 +396,7 @@ internal class ApkDownloader(
                     }
                 }
                 if (position <= end) {
-                    throw IOException("Short segment ${position - start}/$expectedSize")
+                    throw IOException("Short chunk ${position - start}/$expectedSize")
                 }
             } catch (error: CancellationException) {
                 throw error
@@ -371,7 +410,7 @@ internal class ApkDownloader(
                 val delayMs = DOWNLOAD_RETRY_BASE_MS * (1L shl (attempt - 1))
                 onRetry(attempt, delayMs)
                 sleepBeforeRetry(delayMs)
-                position = start + segment.length()
+                position = start + chunk.length()
             } finally {
                 synchronized(activeCalls) { activeCalls.remove(call) }
             }
@@ -483,10 +522,10 @@ internal class ApkDownloader(
         }
     }
 
-    private fun segmentFile(target: File, index: Int): File =
+    private fun chunkFile(target: File, index: Int): File =
         File(target.parentFile, "${target.name}.seg$index")
 
-    /** Every segment file for [target], including leftovers from another layout. */
+    /** Every chunk file for [target], including leftovers from another layout. */
     private fun allSegmentFiles(target: File): List<File> =
         target.parentFile?.listFiles()
             ?.filter { file ->
@@ -494,17 +533,6 @@ internal class ApkDownloader(
                     file.name.removePrefix("${target.name}.seg").toIntOrNull() != null
             }
             .orEmpty()
-
-    private fun segmentRanges(total: Long, count: Int): List<Pair<Long, Long>> =
-        (0 until count).map { index ->
-            val start = index * total / count
-            val end = if (index == count - 1) {
-                total - 1
-            } else {
-                (index + 1) * total / count - 1
-            }
-            start to end
-        }
 
     private fun contentRangeTotal(value: String?): Long? {
         val match = CONTENT_RANGE.matchEntire(value?.trim().orEmpty()) ?: return null
@@ -531,19 +559,47 @@ internal class ApkDownloader(
     private fun downloadClientFor(url: String): OkHttpClient =
         if (url.contains("apkpure", ignoreCase = true)) apkPureClient else client
 
+    private fun segmentedDownloadClientFor(url: String): OkHttpClient =
+        downloadClientFor(url).newBuilder()
+            // HTTP/2 multiplexes every range over one connection, which
+            // defeats the point of a parallel segmented download.
+            .protocols(listOf(Protocol.HTTP_1_1))
+            .build()
+
     private fun isTransientDownloadError(error: Throwable): Boolean {
         if (error is HttpStatusException) {
-            return error.code == 408 || error.code == 429 || error.code in 500..599
+            return error.code == 403 || error.code == 408 ||
+                error.code == 429 || error.code in 500..599
         }
         if (error is IOException) return true
         val message = error.message.orEmpty()
-        return Regex("""HTTP (408|429|5\d\d)\b""").containsMatchIn(message)
+        return Regex("""HTTP (403|408|429|5\d\d)\b""").containsMatchIn(message)
     }
 
     private companion object {
         val CONTENT_RANGE = Regex("""bytes\s+(\d+)-(\d+)/(\d+)""")
     }
 }
+
+/**
+ * Worker count for a segmented download, capped by the configured maximum,
+ * the file size, and one 4 MiB chunk per worker.
+ */
+internal fun segmentedConnectionCount(total: Long, configuredMax: Int): Int {
+    if (total < MIN_SEGMENTED_BYTES) return 0
+    val max = configuredMax.coerceIn(2, MAX_SEGMENT_CONNECTIONS)
+    val chunks = segmentChunkCount(total)
+    return minOf(max, chunks).coerceAtLeast(2)
+}
+
+private fun segmentChunkCount(total: Long): Int =
+    ((total + SEGMENT_CHUNK_BYTES - 1) / SEGMENT_CHUNK_BYTES)
+        .coerceAtMost(Int.MAX_VALUE.toLong())
+        .toInt()
+
+private fun segmentChunkSize(total: Long, index: Int): Long =
+    minOf(SEGMENT_CHUNK_BYTES, total - index.toLong() * SEGMENT_CHUNK_BYTES)
+        .coerceAtLeast(0L)
 
 private fun validateApkLikeStream(
     input: java.io.InputStream,

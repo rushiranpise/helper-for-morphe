@@ -71,6 +71,8 @@ internal data class HelperSettings(
     val downloadCustomTreeUri: String = "",
     val showLauncherIcon: Boolean = true,
     val networkPolicy: NetworkPolicy = NetworkPolicy.WIFI_AND_MOBILE,
+    /** Maximum workers for a segmented download. File size can lower this. */
+    val downloadConnections: DownloadConnectionCount = DownloadConnectionCount.FOUR,
     val logcatLogging: Boolean = true,
     // On by default: the helper exists to hand a file back to Morphe, and Fast Mode is
     // the path that does that in one step. An explicit off is stored and respected, so
@@ -268,6 +270,20 @@ internal enum class DownloadRetention(
     )
 }
 
+internal enum class DownloadConnectionCount(val count: Int) {
+    TWO(2),
+    FOUR(4),
+    EIGHT(8),
+    SIXTEEN(16),
+    THIRTY_TWO(32);
+
+    val title: String
+        get() = "$count connections"
+
+    val description: String
+        get() = "Use up to $count parallel connections. File size can reduce this."
+}
+
 internal enum class NetworkPolicy(
     val title: String,
     val description: String
@@ -328,6 +344,10 @@ internal fun Context.loadHelperSettings(): HelperSettings {
         networkPolicy = enumValueOrDefault(
             prefs.getString("network_policy", null),
             NetworkPolicy.WIFI_AND_MOBILE
+        ),
+        downloadConnections = enumValueOrDefault(
+            prefs.getString("download_connections", null),
+            DownloadConnectionCount.FOUR
         ),
         logcatLogging = prefs.getBoolean("logcat_logging", true),
         fastMode = prefs.getBoolean("fast_mode", true),
@@ -420,6 +440,7 @@ internal fun Context.saveHelperSettings(settings: HelperSettings) {
         .putBoolean("show_launcher_icon", settings.showLauncherIcon)
         .remove("delete_temporary_after_handoff")
         .putString("network_policy", settings.networkPolicy.name)
+        .putString("download_connections", settings.downloadConnections.name)
         .putBoolean("logcat_logging", settings.logcatLogging)
         .putInt(SETTINGS_VERSION_KEY, SETTINGS_VERSION)
         .putBoolean("fast_mode", settings.fastMode)

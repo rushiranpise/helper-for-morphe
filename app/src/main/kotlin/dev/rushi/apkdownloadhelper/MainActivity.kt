@@ -4697,6 +4697,7 @@ private fun SystemTabContent(
     var locationDialog by remember { mutableStateOf(false) }
     var retentionDialog by remember { mutableStateOf(false) }
     var policyDialog by remember { mutableStateOf(false) }
+    var connectionCountDialog by remember { mutableStateOf(false) }
     var fastModePolicyDialog by remember { mutableStateOf(false) }
     var sourceDialog by remember { mutableStateOf(false) }
     var pendingLocation by remember { mutableStateOf<DownloadLocation?>(null) }
@@ -4705,6 +4706,7 @@ private fun SystemTabContent(
     val locations = DownloadLocation.entries
     val retentions = DownloadRetention.entries
     val policies = NetworkPolicy.entries
+    val connectionCounts = DownloadConnectionCount.entries
     val fastPolicies = FastModePolicy.entries
 
     val folderPicker = rememberLauncherForActivityResult(
@@ -4835,6 +4837,25 @@ private fun SystemTabContent(
                 policyDialog = false
             },
             onDismiss = { policyDialog = false }
+        )
+    }
+
+    if (connectionCountDialog) {
+        SettingsChoiceDialog(
+            title = "Download connections",
+            choices = connectionCounts.map {
+                SettingsChoice(
+                    icon = Icons.Outlined.Bolt,
+                    title = it.title,
+                    description = it.description
+                )
+            },
+            selectedIndex = connectionCounts.indexOf(settings.downloadConnections),
+            onSelect = { index ->
+                onSettingsChange(settings.copy(downloadConnections = connectionCounts[index]))
+                connectionCountDialog = false
+            },
+            onDismiss = { connectionCountDialog = false }
         )
     }
 
@@ -5028,6 +5049,15 @@ private fun SystemTabContent(
                 subtitle = settings.networkPolicy.description,
                 value = settings.networkPolicy.title,
                 onClick = { policyDialog = true }
+            )
+            MorpheDivider()
+            SettingsRow(
+                icon = Icons.Outlined.Bolt,
+                title = "Download connections",
+                subtitle = "Maximum parallel connections. Large files are split into 4 MiB chunks, " +
+                    "and file size can reduce the count.",
+                value = settings.downloadConnections.title,
+                onClick = { connectionCountDialog = true }
             )
             MorpheDivider()
             SettingsSwitchItem(

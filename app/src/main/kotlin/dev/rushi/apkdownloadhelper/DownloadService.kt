@@ -563,10 +563,11 @@ internal class DownloadService : Service() {
             )
         }
 
+        val maxConnections = job.settings.downloadConnections.count
         val file = if (files.size == 1) {
-            downloadSingleFile(candidate, files.single(), downloadsDir)
+            downloadSingleFile(candidate, files.single(), downloadsDir, maxConnections)
         } else {
-            downloadSplitArchive(candidate, files, downloadsDir)
+            downloadSplitArchive(candidate, files, downloadsDir, maxConnections)
         }
         transferInProgress = false
         paused = false
@@ -853,7 +854,8 @@ internal class DownloadService : Service() {
     private suspend fun downloadSingleFile(
         candidate: DownloadCandidate,
         downloadFile: CandidateDownloadFile,
-        downloadsDir: File
+        downloadsDir: File,
+        maxConnections: Int
     ): File {
         val outputName = if (candidate.source == DownloadSource.AURORA) {
             "${candidate.packageName}-${candidate.versionName ?: "latest"}-aurora.apk"
@@ -871,6 +873,7 @@ internal class DownloadService : Service() {
         downloader.downloadToFile(
             download = downloadFile,
             target = stagedFile,
+            maxConnections = maxConnections,
             onProgress = { copied, total -> updateDownloadProgress(candidate, copied, total) },
             onConnections = { connections -> currentConnections = connections }
         )
@@ -912,7 +915,8 @@ internal class DownloadService : Service() {
     private suspend fun downloadSplitArchive(
         candidate: DownloadCandidate,
         files: List<CandidateDownloadFile>,
-        downloadsDir: File
+        downloadsDir: File,
+        maxConnections: Int
     ): File {
         val outputFile = File(
             downloadsDir,
@@ -929,6 +933,7 @@ internal class DownloadService : Service() {
             downloader.downloadToFile(
                 download = file,
                 target = stagedFile,
+                maxConnections = maxConnections,
                 onProgress = { fileCopied, total ->
                     knownTotal?.let { updateDownloadProgress(candidate, completed + fileCopied, it) }
                 },
