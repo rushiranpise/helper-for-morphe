@@ -2945,8 +2945,50 @@ private const val CAPTCHA_CAPTURE_JS = """
  */
 private const val CAPTCHA_AUTOPRESS_JS = """
 (function () {
+  if (!/(^|\.)uptodown\.(com|net)$/i.test(location.hostname)) return;
   var decoys = '#detail-download-button-know-native, [data-url*="uptodown-app-store"]';
   document.querySelectorAll(decoys).forEach(function (el) { el.style.display = 'none'; });
+
+  // Uptodown's cookie banner can sit over the download button. Reject it
+  // automatically, including inside the banner's same-origin iframe.
+  function rejectCookies(doc) {
+    var selectors = ['#onetrust-reject-all-handler', '.onetrust-reject-all-handler',
+      '.cky-btn-reject', '.fc-cta-do-not-consent', '.osano-cm-deny',
+      '[data-testid=uc-reject-all-button]'];
+    for (var s = 0; s < selectors.length; s++) {
+      var direct = doc.querySelector(selectors[s]);
+      if (direct) {
+        try { direct.click(); return true; } catch (e) {}
+      }
+    }
+    var els = doc.querySelectorAll('button,a,[role=button],[role=link]');
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      var text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      if (!text || text.length > 40) continue;
+      if (text === 'reject all' || text === 'reject' || text === 'decline'
+          || text === 'refuse' || text === 'only necessary'
+          || text === 'necessary only' || text.indexOf('reject all') >= 0
+          || text.indexOf('only necessary') >= 0) {
+        try { el.click(); return true; } catch (e) {}
+      }
+    }
+    var frames = doc.querySelectorAll('iframe');
+    for (var j = 0; j < frames.length; j++) {
+      try {
+        if (frames[j].contentDocument && rejectCookies(frames[j].contentDocument)) return true;
+      } catch (e) {}
+    }
+    return false;
+  }
+
+  var consentTries = 0;
+  var consentTimer = setInterval(function () {
+    consentTries++;
+    rejectCookies(document);
+    if (consentTries > 60 || window.__captured) clearInterval(consentTimer);
+  }, 500);
+
   var tries = 0;
   function press() {
     if (window.__captured || tries >= 4) return;
