@@ -2998,6 +2998,28 @@ private fun CaptchaBrowserScreen(
             settings.domStorageEnabled = true
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             addJavascriptInterface(bridge, CAPTCHA_BRIDGE_NAME)
+            fun handleBrowserNavigation(view: WebView?, rawUrl: String?): Boolean {
+                val url = rawUrl ?: return false
+                if (url.isCapturableDownload()) {
+                    val referer = view?.url ?: view?.originalUrl ?: browserPageUrl.value
+                    onDownloadCaptured(
+                        BrowserDownloadCapture(
+                            downloadUrl = url,
+                            refererUrl = referer,
+                            cookieHeader = CookieManager.getInstance().getCookie(referer)
+                        )
+                    )
+                    return true
+                }
+                val browserSource = candidate.viaSource ?: candidate.source
+                if (browserSource.isApkCubeBrowserFlow() &&
+                    !url.isApkCubeAllowedNavigation()
+                ) {
+                    Log.i(TAG, "Blocked off-site APKCube navigation: $url")
+                    return true
+                }
+                return false
+            }
             webViewClient = object : WebViewClient() {
                 override fun shouldInterceptRequest(
                     view: WebView?,
@@ -3022,29 +3044,13 @@ private fun CaptchaBrowserScreen(
                 override fun shouldOverrideUrlLoading(
                     view: WebView?,
                     request: WebResourceRequest?
-                ): Boolean {
-                    val url = request?.url?.toString() ?: return false
-                    if (url.isCapturableDownload()) {
-                        val referer = view?.url ?: view?.originalUrl ?: browserPageUrl.value
-                        onDownloadCaptured(
-                            BrowserDownloadCapture(
-                                downloadUrl = url,
-                                refererUrl = referer,
-                                cookieHeader = CookieManager.getInstance().getCookie(referer)
-                            )
-                        )
-                        return true
-                    }
-                    val browserSource = candidate.viaSource ?: candidate.source
-                    if (browserSource.isApkCubeBrowserFlow() &&
-                        request.isForMainFrame &&
-                        !url.isApkCubeHostedUrl()
-                    ) {
-                        Log.i(TAG, "Blocked off-site APKCube navigation: $url")
-                        return true
-                    }
-                    return false
-                }
+                ): Boolean = handleBrowserNavigation(view, request?.url?.toString())
+
+                @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+                override fun shouldOverrideUrlLoading(
+                    view: WebView?,
+                    url: String?
+                ): Boolean = handleBrowserNavigation(view, url)
 
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
@@ -3799,6 +3805,20 @@ internal fun String.isApkCubeHostedUrl(): Boolean {
     val uri = runCatching { java.net.URI(urlDecoded()) }.getOrNull() ?: return false
     val host = uri.host?.lowercase(Locale.US) ?: return false
     return host == "apkcube.com" || host.endsWith(".apkcube.com")
+}
+
+/**
+ * Navigation allowed during an APKCube download: the catalogue itself, its
+ * file hosts, and direct file links. Every other host is a prelander ad.
+ */
+internal fun String.isApkCubeAllowedNavigation(): Boolean {
+    if (isApkCubeHostedUrl() || looksLikeApkDownload()) return true
+    val uri = runCatching { java.net.URI(urlDecoded()) }.getOrNull() ?: return false
+    val host = uri.host?.lowercase(Locale.US) ?: return false
+    return host == "cloudflarestorage.com" ||
+        host.endsWith(".cloudflarestorage.com") ||
+        host == "r2.dev" ||
+        host.endsWith(".r2.dev")
 }
 
 @Composable

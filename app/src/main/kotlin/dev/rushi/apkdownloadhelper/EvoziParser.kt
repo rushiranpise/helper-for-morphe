@@ -286,8 +286,14 @@ private fun apkCubeTargetedDownloadUrl(
 ): String {
     val separator = if ('?' in baseUrl) '&' else '?'
     val params = buildList {
-        versionCode?.takeIf { it > 0L }?.let { add("vc=$it") }
+        versionCode?.takeIf { it > 0L }?.let {
+            // APKCube ignores `vc` unless it is also told to target that build.
+            add("target=version")
+            add("vc=$it")
+        }
         add("arch=${URLEncoder.encode(arch, StandardCharsets.UTF_8.name())}")
+        add("langs=standard")
+        add("dpi=all")
     }
     return "$baseUrl$separator${params.joinToString("&")}"
 }

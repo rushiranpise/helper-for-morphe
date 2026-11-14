@@ -82,7 +82,10 @@ class EvoziParserTest {
         assertEquals(1, result.size)
         assertEquals("2.5.0.6", result.first().versionName)
         assertEquals(2506L, result.first().versionCode)
-        assertEquals("$downloadUrl?vc=2506&arch=arm64-v8a", result.first().url)
+        assertEquals(
+            "$downloadUrl?target=version&vc=2506&arch=arm64-v8a&langs=standard&dpi=all",
+            result.first().url
+        )
     }
 
     @Test
@@ -94,7 +97,7 @@ class EvoziParserTest {
         val candidate = result.first()
         assertEquals("2.5.0.6", candidate.versionName)
         assertEquals(
-            "https://apkcube.com/battery-guru-battery-health/$packageName/download?arch=arm64-v8a",
+            "https://apkcube.com/battery-guru-battery-health/$packageName/download?arch=arm64-v8a&langs=standard&dpi=all",
             candidate.url
         )
         assertFalse(candidate.directDownload)
@@ -134,7 +137,7 @@ class EvoziParserTest {
         assertEquals("2.5.0.6", candidate.versionName)
         assertEquals(2506L, candidate.versionCode)
         assertEquals(
-            "https://apkcube.com/battery-guru-battery-health/$packageName/download?version=2.5.0.6&vc=2506&arch=arm64-v8a",
+            "https://apkcube.com/battery-guru-battery-health/$packageName/download?version=2.5.0.6&target=version&vc=2506&arch=arm64-v8a&langs=standard&dpi=all",
             candidate.url
         )
         assertEquals(VersionStatus.REQUESTED, candidate.versionStatus)
@@ -160,7 +163,11 @@ class EvoziParserTest {
         }
         assertEquals(1, result.size)
         assertEquals(999L, result.first().versionCode)
-        assertTrue(result.first().url.endsWith("vc=999&arch=arm64-v8a"))
+        assertTrue(
+            result.first().url.endsWith(
+                "target=version&vc=999&arch=arm64-v8a&langs=standard&dpi=all"
+            )
+        )
     }
 
     @Test
@@ -179,7 +186,11 @@ class EvoziParserTest {
             ).findCandidates(request, CandidateOption.REQUESTED)
         }
         assertEquals(1, result.size)
-        assertTrue(result.first().url.endsWith("vc=2506&arch=armeabi-v7a"))
+        assertTrue(
+            result.first().url.endsWith(
+                "target=version&vc=2506&arch=armeabi-v7a&langs=standard&dpi=all"
+            )
+        )
     }
 
     @Test
@@ -198,7 +209,11 @@ class EvoziParserTest {
             ).findCandidates(request, CandidateOption.REQUESTED)
         }
         assertEquals(1, result.size)
-        assertTrue(result.first().url.endsWith("vc=2506&arch=universal"))
+        assertTrue(
+            result.first().url.endsWith(
+                "target=version&vc=2506&arch=universal&langs=standard&dpi=all"
+            )
+        )
     }
 
     @Test

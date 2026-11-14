@@ -75,4 +75,19 @@ class BrowserCaptureUrlTest {
         assertFalse("https://s.shopee.com.my/8pnI7nf4Kp".isApkCubeHostedUrl())
         assertFalse("not a url".isApkCubeHostedUrl())
     }
+
+    @Test
+    fun `APKCube navigation allows its file hosts and blocks prelanders`() {
+        assertTrue("https://apkcube.com/whatsapp/com.whatsapp/download".isApkCubeAllowedNavigation())
+        assertTrue(
+            "https://bucket.account.cloudflarestorage.com/app.apk?X-Amz-Signature=x"
+                .isApkCubeAllowedNavigation()
+        )
+        assertTrue("https://pub-123.r2.dev/files/build".isApkCubeAllowedNavigation())
+        assertTrue("https://cdn.example.com/app-1.0.xapk".isApkCubeAllowedNavigation())
+
+        assertFalse("https://s.shopee.com.my/8pnI7nf4Kp".isApkCubeAllowedNavigation())
+        assertFalse("https://cloudflarestorage.com.evil.example/download".isApkCubeAllowedNavigation())
+        assertFalse("https://r2.dev.evil.example/download".isApkCubeAllowedNavigation())
+    }
 }
