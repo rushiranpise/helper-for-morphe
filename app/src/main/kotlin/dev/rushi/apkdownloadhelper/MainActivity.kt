@@ -2953,12 +2953,12 @@ private val historyTimeFormat = SimpleDateFormat("MMM d, HH:mm", Locale.US)
 private fun formatHistoryTimestamp(timestamp: Long): String =
     synchronized(historyTimeFormat) { historyTimeFormat.format(Date(timestamp)) }
 
-private fun fileNameMimeType(fileName: String): String =
+internal fun fileNameMimeType(fileName: String): String =
     when (fileName.substringAfterLast('.', "").lowercase(Locale.US)) {
         "apk" -> "application/vnd.android.package-archive"
-        "apks",
-        "apkm",
-        "xapk" -> "application/zip"
+        // Not application/zip: MediaStore and SAF append .zip when the display
+        // name does not already end in the MIME type's extension, turning
+        // app.apkm into app.apkm.zip. The generic type keeps the real suffix.
         else -> "application/octet-stream"
     }
 
@@ -2971,9 +2971,8 @@ private fun Context.isHistoryUriUsable(uriString: String): Boolean {
 
 internal fun File.mimeType(): String = when (extension.lowercase(Locale.US)) {
     "apk" -> "application/vnd.android.package-archive"
-    "apks",
-    "apkm",
-    "xapk" -> "application/zip"
+    // Keep the archive's own extension. Using application/zip here makes the
+    // Downloads provider save app.apkm as app.apkm.zip.
     else -> "application/octet-stream"
 }
 
