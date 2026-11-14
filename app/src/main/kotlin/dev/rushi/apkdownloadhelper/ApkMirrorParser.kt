@@ -601,7 +601,7 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         val selectedVariants = if (variants.isEmpty()) {
             listOf(null)
         } else {
-            apkMirrorSelectableVariants(request, variants)
+            apkMirrorSelectableVariants(request, variants, option)
         }
         if (selectedVariants.isEmpty()) return emptyList()
 
@@ -644,6 +644,21 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         }
 
         val isBundle = variant?.isBundle ?: apkMirrorPageLooksBundle(variantDoc)
+        val versionCode = variant?.versionCode ?: apkMirrorVersionCodeFromVariantPage(variantDoc)
+        val requestedCodes = request.requestedVersionCodes
+        if (
+            option == CandidateOption.REQUESTED &&
+            requestedCodes.isNotEmpty() &&
+            versionCode != null &&
+            versionCode !in requestedCodes
+        ) {
+            Log.w(
+                TAG,
+                "Skipping APKMirror build $versionCode at $variantPageUrl: " +
+                    "requested ${requestedCodes.joinToString()}."
+            )
+            return null
+        }
         val downloadButtonUrl = apkMirrorDownloadButtonUrl(variantDoc, isBundle) ?: return null
         val downloadDoc = fetchDocument(downloadButtonUrl, referer = variantPageUrl)
         if (downloadDoc.isCloudflareChallenge()) {
@@ -668,12 +683,12 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
             name = request.appName,
             packageName = request.packageName,
             versionName = resolvedVersion,
-            versionCode = null,
+            versionCode = versionCode,
             url = finalUrl,
             fileKind = fileKind,
             option = option,
             directDownload = true,
-            versionStatus = request.versionStatus(resolvedVersion, null),
+            versionStatus = request.versionStatus(resolvedVersion, versionCode),
             formatMatches = request.acceptsFormat(fileKind),
             variantLabel = variantLabel,
             variantTag = variant?.uiTag(),
@@ -757,11 +772,28 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
 
     private fun apkMirrorSelectableVariants(
         request: HelperRequest,
-        variants: List<ApkMirrorVariant>
+        variants: List<ApkMirrorVariant>,
+        option: CandidateOption
     ): List<ApkMirrorVariant> {
+        // A requested build pins the numeric code. Rows that publish a
+        // different code are never candidates; rows that do not publish one
+        // are kept so the variant page itself can be checked below.
+        val candidates = if (option == CandidateOption.REQUESTED) {
+            val requestedCodes = request.requestedVersionCodes
+            if (requestedCodes.isEmpty()) {
+                variants
+            } else {
+                variants.filter { it.versionCode != null && it.versionCode in requestedCodes }
+                    .ifEmpty { variants.filter { it.versionCode == null } }
+            }
+        } else {
+            variants
+        }
+        if (candidates.isEmpty()) return emptyList()
+
         val wantedKinds = apkMirrorWantedVariantKinds(request)
         for (kind in wantedKinds) {
-            val typedVariants = variants.filter {
+            val typedVariants = candidates.filter {
                 it.fileKind == kind &&
                     request.acceptsFormat(it.fileKind)
             }
@@ -771,10 +803,10 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         // No variant matches the requested format (e.g. APKS requested but the
         // release is only offered as an APKM bundle): offer the best variant anyway
         // and let the UI flag the format mismatch, like other sources do.
-        variants.filter { request.acceptsFormat(it.fileKind) }
+        candidates.filter { request.acceptsFormat(it.fileKind) }
             .preferRunnableArch(request)
             ?.let { return it }
-        return variants.preferRunnableArch(request) ?: variants
+        return candidates.preferRunnableArch(request) ?: candidates
     }
 
     /**
@@ -813,6 +845,7 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         val cells = row.select("div.table-cell")
         val arch = cells.getOrNull(1)?.text()?.trim()?.takeIf(String::isNotBlank)
         val dpi = cells.getOrNull(3)?.text()?.trim()?.takeIf(String::isNotBlank)
+        val versionCode = apkMirrorVariantVersionCode(row)
 
         return ApkMirrorVariant(
             url = url,
@@ -820,8 +853,37 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
             fileKind = fileKind,
             arch = arch,
             dpi = dpi,
-            isBundle = fileKind != "apk"
+            isBundle = fileKind != "apk",
+            versionCode = versionCode
         )
+    }
+
+    /**
+     * The build code APKMirror prints under the variant's version name. The
+     * first table cell also carries the upload date in a `.wrapText` span, so
+     * only a plain numeric `.colorLightBlack` span is the code.
+     */
+    private fun apkMirrorVariantVersionCode(row: Element): Long? {
+        val firstCell = row.selectFirst("div.table-cell") ?: return null
+        return firstCell.select("span.colorLightBlack")
+            .asSequence()
+            .filterNot { it.hasClass("wrapText") }
+            .filterNot { it.select(".dateyear_utc").isNotEmpty() }
+            .mapNotNull { span -> span.text().trim().toLongOrNull() }
+            .firstOrNull { code -> code > 0L }
+    }
+
+    /** The build code on a variant page, e.g. "Version: 1.2.3 (45) (123456)". */
+    private fun apkMirrorVersionCodeFromVariantPage(doc: Document): Long? {
+        val value = parseInfoTableValue(doc, "Version")
+            ?: parseInfoTableValue(doc, "Version code")
+            ?: return null
+        return Regex("""\((\d{1,12})\)""")
+            .findAll(value)
+            .lastOrNull()
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.toLongOrNull()
     }
 
     /**

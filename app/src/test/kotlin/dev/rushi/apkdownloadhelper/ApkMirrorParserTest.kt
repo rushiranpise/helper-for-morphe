@@ -264,18 +264,144 @@ class ApkMirrorParserTest {
         arch: String,
         minimumAndroid: String,
         dpi: String,
-        variantUrl: String
+        variantUrl: String,
+        versionCode: String = ""
     ) = """
         <div class="table-row headerFont">
           <div class="table-cell rowheight addseparator expand pad dowrap-break-all">
             <a class="accent_color" href="$variantUrl">2.0.0</a>
             <span class="apkm-badge success" data-apkm-tooltip="APK bundle with base APK and 34 splits">$badge</span>
+            ${versionCode.takeIf(String::isNotBlank)?.let { "<br><span class=\"colorLightBlack\">$it</span>" }.orEmpty()}
+            <br><span class="colorLightBlack wrapText"><span class="dateyear_utc">October 11, 2026</span></span>
           </div>
           <div class="table-cell rowheight addseparator expand pad">$arch</div>
           <div class="table-cell rowheight addseparator expand pad">$minimumAndroid</div>
           <div class="table-cell rowheight addseparator expand pad">$dpi</div>
         </div>
     """.trimIndent()
+
+    @Test
+    fun findCandidates_requested_matchesVariantBuildCodeExactly() = runBlocking {
+        val releaseUrl = "https://www.apkmirror.com/apk/example-org/example-app/2-0-0-release/"
+        val wrongVariant = "$releaseUrl/example-app-2-0-0-android-apk-download/"
+        val exactVariant = "$releaseUrl/example-app-2-0-0-2-android-apk-download/"
+        val wrongFinal = "https://www.apkmirror.com/download.php?id=100&key=a"
+        val exactFinal = "https://www.apkmirror.com/download.php?id=200&key=b"
+
+        fun variantPage(url: String) =
+            """<html><body><a class="downloadButton" href="$url/download/">Download</a></body></html>"""
+
+        val fetcher = FakeSourceTextFetcher(
+            pages = mapOf(
+                searchUrl to
+                    """<html><body><a href="/apk/example-org/example-app/">Example App</a></body></html>""",
+                appPageUrl to
+                    """<html><body><span id="$packageName">Example App</span></body></html>""",
+                uploadsUrl to
+                    """<html><body><a href="/apk/example-org/example-app/2-0-0-release/">2.0.0</a></body></html>""",
+                releaseUrl to
+                    """<html><body><div class="table topmargin variants-table">
+                         <div class="table-row headerFont">
+                           <div class="table-cell">Variant</div>
+                           <div class="table-cell">Architecture</div>
+                           <div class="table-cell">Minimum Version</div>
+                           <div class="table-cell">Screen DPI</div>
+                         </div>
+                         ${apkMirrorVariantRow("APK", "universal", "Android 10+", "nodpi", wrongVariant, "100")}
+                         ${apkMirrorVariantRow("APK", "universal", "Android 10+", "nodpi", exactVariant, "200")}
+                       </div></body></html>""",
+                wrongVariant to variantPage(wrongVariant),
+                exactVariant to variantPage(exactVariant),
+                "$wrongVariant/download/" to
+                    """<html><body><a id="download-link" href="$wrongFinal"></a></body></html>""",
+                "$exactVariant/download/" to
+                    """<html><body><a id="download-link" href="$exactFinal"></a></body></html>"""
+            )
+        )
+        val parser = ApkMirrorParser(parserContext(fetcher))
+
+        val candidates = parser.findCandidates(
+            testRequest(packageName = packageName, versionName = "2.0.0", versionCode = 200L),
+            CandidateOption.REQUESTED
+        )
+
+        assertEquals(1, candidates.size)
+        assertEquals(200L, candidates.single().versionCode)
+        assertEquals(exactFinal, candidates.single().url)
+    }
+
+    @Test
+    fun findCandidates_requested_doesNotOfferAVariantWithAnotherBuildCode() = runBlocking {
+        val releaseUrl = "https://www.apkmirror.com/apk/example-org/example-app/2-0-0-release/"
+        val firstVariant = "$releaseUrl/example-app-2-0-0-android-apk-download/"
+        val secondVariant = "$releaseUrl/example-app-2-0-0-2-android-apk-download/"
+        val fetcher = FakeSourceTextFetcher(
+            pages = mapOf(
+                searchUrl to
+                    """<html><body><a href="/apk/example-org/example-app/">Example App</a></body></html>""",
+                appPageUrl to
+                    """<html><body><span id="$packageName">Example App</span></body></html>""",
+                uploadsUrl to
+                    """<html><body><a href="/apk/example-org/example-app/2-0-0-release/">2.0.0</a></body></html>""",
+                releaseUrl to
+                    """<html><body><div class="table topmargin variants-table">
+                         <div class="table-row headerFont">
+                           <div class="table-cell">Variant</div>
+                           <div class="table-cell">Architecture</div>
+                           <div class="table-cell">Minimum Version</div>
+                           <div class="table-cell">Screen DPI</div>
+                         </div>
+                         ${apkMirrorVariantRow("APK", "universal", "Android 10+", "nodpi", firstVariant, "100")}
+                         ${apkMirrorVariantRow("APK", "universal", "Android 10+", "nodpi", secondVariant, "200")}
+                       </div></body></html>"""
+            )
+        )
+        val parser = ApkMirrorParser(parserContext(fetcher))
+
+        val candidates = parser.findCandidates(
+            testRequest(packageName = packageName, versionName = "2.0.0", versionCode = 300L),
+            CandidateOption.REQUESTED
+        )
+
+        assertTrue(candidates.none { it.directDownload })
+    }
+
+    @Test
+    fun findCandidates_requested_checksTheBuildCodeOnAVariantPageWithoutATable() = runBlocking {
+        val releaseUrl = "https://www.apkmirror.com/apk/example-org/example-app/2-0-0-release/"
+        val downloadPageUrl = "$releaseUrl/download/"
+        val finalUrl = "https://www.apkmirror.com/download.php?id=200&key=b"
+        val fetcher = FakeSourceTextFetcher(
+            pages = mapOf(
+                searchUrl to
+                    """<html><body><a href="/apk/example-org/example-app/">Example App</a></body></html>""",
+                appPageUrl to
+                    """<html><body><span id="$packageName">Example App</span></body></html>""",
+                uploadsUrl to
+                    """<html><body><a href="/apk/example-org/example-app/2-0-0-release/">2.0.0</a></body></html>""",
+                releaseUrl to
+                    """<html><body>
+                         <table><tr><th>Version</th><td>2.0.0 (200)</td></tr></table>
+                         <a class="downloadButton" href="$downloadPageUrl">Download</a>
+                       </body></html>""",
+                downloadPageUrl to
+                    """<html><body><a id="download-link" href="$finalUrl"></a></body></html>"""
+            )
+        )
+        val parser = ApkMirrorParser(parserContext(fetcher))
+
+        val matching = parser.findCandidates(
+            testRequest(packageName = packageName, versionName = "2.0.0", versionCode = 200L),
+            CandidateOption.REQUESTED
+        )
+        val mismatched = parser.findCandidates(
+            testRequest(packageName = packageName, versionName = "2.0.0", versionCode = 300L),
+            CandidateOption.REQUESTED
+        )
+
+        assertEquals(200L, matching.single { it.directDownload }.versionCode)
+        assertTrue(mismatched.none { it.directDownload })
+    }
 
     @Test
     fun findCandidates_requested_ignoresAVariantBuiltForAnotherAbi() = runBlocking {

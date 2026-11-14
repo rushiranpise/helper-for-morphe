@@ -3407,11 +3407,38 @@ private fun apkMirrorBrowserScript(
         function isAppPage(p){var s=segments(p);return s.length===3&&s[0]==='apk';}
         function rowCode(row){
             if(!row)return -1;
-            var m=(row.innerText||'').match(/\b\d{6,}\b/g);
-            if(!m)return -1;
-            for(var i=0;i<m.length;i++){
-                var v=parseInt(m[i],10);
-                if(!isNaN(v)&&v>0)return v;
+            var spans=row.querySelectorAll('span.colorLightBlack');
+            for(var i=0;i<spans.length;i++){
+                var span=spans[i];
+                if(span.classList.contains('wrapText'))continue;
+                if(span.querySelector('.dateyear_utc'))continue;
+                var t=txt(span);
+                if(/^\d+$/.test(t)){
+                    var v=parseInt(t,10);
+                    if(!isNaN(v)&&v>0)return v;
+                }
+            }
+            return -1;
+        }
+        function pageCode(){
+            var vals=document.querySelectorAll('.appspec-value');
+            for(var i=0;i<vals.length;i++){
+                var m=txt(vals[i]).match(/\((\d{1,18})\)\s*$/);
+                if(m){
+                    var v=parseInt(m[1],10);
+                    if(!isNaN(v)&&v>0)return v;
+                }
+            }
+            var rows=document.querySelectorAll('tr');
+            for(var r=0;r<rows.length;r++){
+                var th=rows[r].querySelector('th'),td=rows[r].querySelector('td');
+                if(!th||!td)continue;
+                if(txt(th).toLowerCase()!=='version')continue;
+                var tm=txt(td).match(/\((\d{1,18})\)\s*$/);
+                if(tm){
+                    var tv=parseInt(tm[1],10);
+                    if(!isNaN(tv)&&tv>0)return tv;
+                }
             }
             return -1;
         }
@@ -3485,6 +3512,7 @@ private fun apkMirrorBrowserScript(
                 var universal=rt.indexOf('universal')>=0;
                 var hasAbi=abi&&rt.indexOf(abi.toLowerCase())>=0;
                 var rc=rowCode(row);
+                if(codes.length&&(rc<=0||codes.indexOf(rc)<0))continue;
                 var exact=rc>0&&codes.indexOf(rc)>=0;
                 if(!fallback)fallback=va;
                 if(isPlain&&exact&&hasAbi&&!plainExactAbi)plainExactAbi=va;
@@ -3523,6 +3551,10 @@ private fun apkMirrorBrowserScript(
             return picked||(ver?null:first);
         }
         function pickDownload(){
+            if(codes.length){
+                var pc=pageCode();
+                if(pc>0&&codes.indexOf(pc)<0)return null;
+            }
             var ds=document.querySelectorAll('a,button');
             for(var d=0;d<ds.length;d++){
                 var dh=ds[d].href||'';
@@ -10578,6 +10610,8 @@ internal data class ApkMirrorVariant(
     val arch: String?,
     val dpi: String?,
     val isBundle: Boolean,
+    /** Build code APKMirror prints in the variant row, when present. */
+    val versionCode: Long? = null,
     /** Position of this row in the release page's variant table, 1-based. */
     val number: Int = 0
 )
