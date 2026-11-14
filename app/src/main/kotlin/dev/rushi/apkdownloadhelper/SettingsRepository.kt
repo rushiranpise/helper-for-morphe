@@ -46,7 +46,7 @@ internal var adGuardDnsEnabled = false
  * by version rather than inferred from what is on disk.
  */
 private const val SETTINGS_VERSION_KEY = "settings_version"
-private const val SETTINGS_VERSION = 3
+private const val SETTINGS_VERSION = 4
 
 internal val DEFAULT_DISABLED_SOURCES: Set<DownloadSource> = setOf(
     DownloadSource.APK_CUBE,
@@ -56,6 +56,14 @@ internal val DEFAULT_DISABLED_SOURCES: Set<DownloadSource> = setOf(
     DownloadSource.APK_DOWNLOADER,
     DownloadSource.PLAY
 )
+
+/**
+ * Morphe Link is the resolver-backed fallback, so try it before walking the
+ * individual sites. It can hand the request to any of them in one step.
+ */
+internal val DEFAULT_SOURCE_ORDER: List<DownloadSource> =
+    listOf(DownloadSource.MORPHE_LINK) +
+        DownloadSource.entries.filterNot { it == DownloadSource.MORPHE_LINK }
 
 internal data class HelperSettings(
     val downloadLocation: DownloadLocation = DownloadLocation.TEMPORARY,
@@ -78,7 +86,7 @@ internal data class HelperSettings(
     val useMorpheResolver: Boolean = true,
     val disabledSources: Set<DownloadSource> = DEFAULT_DISABLED_SOURCES,
     /** Source priority, first tried first. Missing sources are appended in enum order. */
-    val sourceOrder: List<DownloadSource> = DownloadSource.entries,
+    val sourceOrder: List<DownloadSource> = DEFAULT_SOURCE_ORDER,
     val themeMode: ThemeMode = ThemeMode.DARK,
     /** Where the palette comes from: the app's own, the wallpaper's, or neutral. */
     val themeStyle: ThemeStyle = ThemeStyle.MORPHE,
@@ -337,7 +345,7 @@ internal fun Context.loadHelperSettings(): HelperSettings {
             ?.mapNotNull { name -> DownloadSource.entries.firstOrNull { it.name == name } }
             ?.distinct()
             ?.takeIf { it.isNotEmpty() }
-            ?: DownloadSource.entries.toList(),
+            ?: DEFAULT_SOURCE_ORDER,
         themeMode = enumValueOrDefault(
             prefs.getString("theme_mode", null),
             ThemeMode.DARK
@@ -374,8 +382,9 @@ internal fun Context.loadHelperSettings(): HelperSettings {
 
     // Version 2 turned Fast Mode on and narrowed the enabled sources to the five the
     // helper is built around. Version 3 adds APKCube without re-enabling anything a
-    // user switched on or off. Each step is applied once and saved, so from the next
-    // launch on the stored values win as usual.
+    // user switched on or off. Version 4 moves Morphe Link to the front of the default
+    // order, but only when the saved order is still the old unmodified default. Each
+    // step is applied once and saved, so from the next launch on the stored values win.
     val storedVersion = prefs.getInt(SETTINGS_VERSION_KEY, 1)
     var migrated = settings
     if (storedVersion < 2) {
@@ -385,6 +394,11 @@ internal fun Context.loadHelperSettings(): HelperSettings {
         migrated = migrated.copy(
             disabledSources = migrated.disabledSources + DownloadSource.APK_CUBE
         )
+    }
+    if (storedVersion < 4 &&
+        migrated.sourceOrder == DownloadSource.entries.toList()
+    ) {
+        migrated = migrated.copy(sourceOrder = DEFAULT_SOURCE_ORDER)
     }
     if (migrated !== settings) {
         saveHelperSettings(migrated)

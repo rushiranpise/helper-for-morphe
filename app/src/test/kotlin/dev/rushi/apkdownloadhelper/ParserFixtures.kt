@@ -54,6 +54,7 @@ internal fun testParserContext(
     apkPureApi: ApkPureApi = FakeApkPureApi(),
     aptoideApi: AptoideApi = FakeAptoideApi(),
     resolveViaMorphe: ((HelperRequest) -> String?)? = null,
+    isSourceEnabled: (DownloadSource) -> Boolean = { true },
     /** Answers the direct endpoint's one hop; null means "no shortcut", as in production. */
     redirects: Map<String, String>? = null
 ): SourceParserContext = SourceParserContext(
@@ -61,6 +62,7 @@ internal fun testParserContext(
     apkPureApi = apkPureApi,
     aptoideApi = aptoideApi,
     resolveViaMorphe = resolveViaMorphe,
+    isSourceEnabled = isSourceEnabled,
     resolveRedirect = redirects?.let { table -> { url: String -> table[url] } }
 )
 

@@ -384,6 +384,7 @@ class MainActivity : ComponentActivity() {
             resolveViaMorphe = { request ->
                 if (helperSettings.useMorpheResolver) MorpheResolver.resolve(request) else null
             },
+            isSourceEnabled = { source -> source !in effectiveDisabledSources },
             // APKPure's direct endpoint names the file itself in one hop.
             resolveRedirect = { url ->
                 apkPureDirectClient.newCall(
@@ -4869,7 +4870,7 @@ private fun SystemTabContent(
                 value = "Reset",
                 onClick = {
                     onSettingsChange(
-                        latestSettings.copy(sourceOrder = DownloadSource.entries.toList())
+                        latestSettings.copy(sourceOrder = DEFAULT_SOURCE_ORDER)
                     )
                 }
             )

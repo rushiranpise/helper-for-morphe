@@ -31,23 +31,61 @@ internal class MorpheLinkParser(
         val resolved = resolveLink(request)
             ?.trim()
             ?.normalizedHttpUrlOrNull()
-            ?: return emptyList()
+        val fallback = request.fallbackWebUrl
+            .trim()
+            .normalizedHttpUrlOrNull()
+        val targets = buildList {
+            resolved?.let { add(it to false) }
+            fallback?.takeIf { it != resolved }?.let { add(it to true) }
+        }
+        if (targets.isEmpty()) return emptyList()
 
-        directFileCandidate(request, resolved, option)?.let { return listOf(it) }
+        // Try the resolver answer first, then the request's fallback page. A
+        // fallback page can be a direct file, a GitHub release or a source page,
+        // so it gets the same orchestration instead of always opening a browser.
+        for ((url, _) in targets) {
+            val candidates = resolvedCandidates(request, url, option)
+            if (candidates.isNotEmpty()) return candidates
+        }
 
-        val resolvedSource = morpheLinkSourceOf(resolved)
-        val delegated = runCatching {
+        val (browserUrl, fromFallback) = targets.firstOrNull { it.second } ?: targets.first()
+        val browser = browserCandidate(
+            request = request,
+            url = browserUrl,
+            option = option,
+            resolvedSource = morpheLinkSourceOf(browserUrl)
+        )
+        return listOf(
+            if (fromFallback) {
+                browser.copy(note = "Morphe did not return a link. Continue from the request's fallback page.")
+            } else {
+                browser
+            }
+        )
+    }
+
+    /** Direct files, GitHub releases and known source pages, in that order. */
+    private suspend fun resolvedCandidates(
+        request: HelperRequest,
+        url: String,
+        option: CandidateOption
+    ): List<DownloadCandidate> {
+        directFileCandidate(request, url, option)?.let { return listOf(it) }
+
+        val github = githubReleaseCandidates(ctx, request, url, option)
+        if (github.isNotEmpty()) return github
+
+        val resolvedSource = morpheLinkSourceOf(url) ?: return emptyList()
+        if (!ctx.isSourceEnabled(resolvedSource)) return emptyList()
+        return runCatching {
             resolvedSource
-                ?.let(delegatesBySource::get)
-                ?.findCandidatesFromResolvedUrl(request, resolved, option)
+                .let(delegatesBySource::get)
+                ?.findCandidatesFromResolvedUrl(request, url, option)
                 .orEmpty()
         }
-            .onFailure { android.util.Log.w(TAG, "Morphe Link handoff failed: $resolved", it) }
+            .onFailure { android.util.Log.w(TAG, "Morphe Link handoff failed: $url", it) }
             .getOrDefault(emptyList())
             .map { it.asMorpheLink() }
-        if (delegated.isNotEmpty()) return delegated
-
-        return listOf(browserCandidate(request, resolved, option, resolvedSource))
     }
 
     /**

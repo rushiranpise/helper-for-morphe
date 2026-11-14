@@ -101,6 +101,8 @@ internal class SourceParserContext(
      * tests and any caller that does not opt in are unaffected.
      */
     val resolveViaMorphe: ((HelperRequest) -> String?)? = null,
+    /** Whether a delegated resolver page may use this source. */
+    val isSourceEnabled: (DownloadSource) -> Boolean = { true },
     /**
      * Follows [url] without following its redirect, returning the `Location` it answers
      * with (or null). APKPure's direct endpoint puts the whole file description in that
