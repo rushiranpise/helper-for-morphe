@@ -416,6 +416,13 @@ class MainActivity : ComponentActivity() {
     private var pendingDownload: PendingDownload? = null
     // Source picked from the download screen; the next Cancelled event starts it.
     private var pendingSwitchSource: DownloadSource? = null
+    // The file the current download was fetching, kept so a source switch can
+    // resolve the same version mode and variant instead of starting over from
+    // whatever the new source lists first.
+    private var activeDownloadCandidate: DownloadCandidate? = null
+    private var pendingSwitchTarget: DownloadCandidate? = null
+    private var pendingSwitchOption: CandidateOption? = null
+    private var switchCandidatePrompt by mutableStateOf<SwitchCandidatePrompt?>(null)
     // Non-null while the in-app browser is open for a candidate whose source
     // needs a real browser to reach the APK download.
     private var captchaBrowser by mutableStateOf<DownloadCandidate?>(null)
@@ -610,6 +617,14 @@ class MainActivity : ComponentActivity() {
                             UpdateManager.snooze(applicationContext)
                             updatePrompt = null
                         }
+                    )
+                }
+                val switchPrompt = switchCandidatePrompt
+                if (switchPrompt != null) {
+                    SwitchCandidateDialog(
+                        prompt = switchPrompt,
+                        onChoose = ::chooseSwitchCandidate,
+                        onDismiss = { switchCandidatePrompt = null }
                     )
                 }
             }
@@ -911,6 +926,11 @@ class MainActivity : ComponentActivity() {
         failedAttempts = emptySet()
         lastFailureMessage = null
         lastFailureOption = null
+        pendingSwitchSource = null
+        pendingSwitchTarget = null
+        pendingSwitchOption = null
+        activeDownloadCandidate = null
+        switchCandidatePrompt = null
         AppLog.clear()
         if (request == null) {
             AppLog.setRequestSummary(null)
@@ -1259,6 +1279,7 @@ class MainActivity : ComponentActivity() {
             showFailure(message)
             return
         }
+        activeDownloadCandidate = candidate
         appendLog(
             "Downloading ${candidate.source.label} ${candidate.option.labelForLogs} " +
                 "${candidate.versionDisplay} (${candidate.fileKind.uppercase(Locale.US)})."
@@ -1339,6 +1360,19 @@ class MainActivity : ComponentActivity() {
         if (pendingSwitchSource != null) return
         if (request == null) return
         pendingSwitchSource = source
+        val currentCandidate = (uiState as? UiState.Downloading)?.candidate
+            ?: activeDownloadCandidate
+        pendingSwitchTarget = currentCandidate
+        pendingSwitchOption = when (currentCandidate?.option) {
+            CandidateOption.LATEST -> CandidateOption.LATEST
+            CandidateOption.REQUESTED -> CandidateOption.REQUESTED
+            else -> when {
+                fastModeActive && fastModeRunPolicy == FastModePolicy.LATEST -> CandidateOption.LATEST
+                fastModeActive -> defaultRetryOption()
+                lastFailureOption != null -> lastFailureOption
+                else -> defaultRetryOption()
+            }
+        }
         appendLog("Switching source to ${source.label}…", LogLevel.Warning)
         fastModeActive = false
         fastModeQueue = null
@@ -1363,34 +1397,91 @@ class MainActivity : ComponentActivity() {
         val source = pendingSwitchSource ?: return
         pendingSwitchSource = null
         val activeRequest = request ?: return
-        appendLog("Resolving ${source.label} again…", LogLevel.Info)
+        val target = pendingSwitchTarget
+        val option = pendingSwitchOption ?: defaultRetryOption()
+        pendingSwitchTarget = null
+        pendingSwitchOption = null
+        appendLog("Resolving ${source.label} for ${option.labelForLogs} again…", LogLevel.Info)
         uiState = UiState.Loading
         lifecycleScope.launch {
-            val option = if (activeRequest.hasRequestedVersionRequest) {
-                CandidateOption.REQUESTED
-            } else {
-                CandidateOption.LATEST
-            }
             val outcome = withContext(Dispatchers.IO) {
                 resolveSourceSection(activeRequest, source, option)
             }
-            val candidate = outcome.candidates.firstOrNull { it.directDownload }
-                ?: outcome.candidates.firstOrNull()
-            if (candidate == null) {
+            if (outcome.candidates.isEmpty()) {
                 val message = outcome.notFoundMessage
                     ?: outcome.errorMessage
                     ?: "No downloadable file from ${source.label}."
                 appendLog(message, LogLevel.Error)
                 showFailure(message, source, option)
-            } else if (!candidate.directDownload) {
-                appendLog(
-                    "${source.label} needs a browser check; choose the file manually.",
-                    LogLevel.Warning
-                )
-                uiState = UiState.Ready(initialCandidateResult(activeRequest))
-            } else {
-                downloadAndReturn(candidate)
+                return@launch
             }
+
+            val matching = if (target == null) {
+                outcome.candidates.filter { it.directDownload }
+            } else {
+                matchingSourceSwitchCandidates(outcome.candidates, target, activeRequest)
+            }
+            val candidate = matching.singleOrNull()
+            if (candidate != null) {
+                appendLog(
+                    "Continuing on ${source.label} with ${candidate.versionDisplay} " +
+                        "(${candidate.variantLabel ?: candidate.variantTag ?: candidate.fileKind.uppercase(Locale.US)})."
+                )
+                downloadAndReturn(candidate)
+                return@launch
+            }
+
+            val detail = when {
+                target == null -> "Pick a file from ${source.label} to continue the download."
+                matching.isEmpty() ->
+                    "No matching variant was found on ${source.label}. Pick a file to continue."
+                else -> "More than one file matched on ${source.label}. Pick the one you want."
+            }
+            showSwitchCandidatePrompt(outcome.candidates, source, option, detail)
+        }
+    }
+
+    /**
+     * A source switch should keep the file kind and ABI/variant of the download
+     * in flight. If no candidate matches, the caller shows the resolved list so
+     * the user can pick a variant instead of silently taking the first one.
+     */
+    private fun showSwitchCandidatePrompt(
+        candidates: List<DownloadCandidate>,
+        source: DownloadSource,
+        option: CandidateOption,
+        detail: String
+    ) {
+        val activeRequest = request ?: return
+        val choices = candidates
+            .filter { it.directDownload || it.captchaUrl != null }
+            .distinctBy(DownloadCandidate::identityKey)
+        if (choices.isEmpty()) {
+            appendLog(
+                "${source.label} has no selectable file for ${option.labelForLogs}.",
+                LogLevel.Warning
+            )
+            uiState = UiState.Ready(initialCandidateResult(activeRequest))
+            return
+        }
+        appendLog(
+            "${source.label} needs a choice: ${choices.size} candidate(s) for ${option.labelForLogs}.",
+            LogLevel.Warning
+        )
+        uiState = UiState.Ready(initialCandidateResult(activeRequest))
+        switchCandidatePrompt = SwitchCandidatePrompt(
+            source = source,
+            detail = detail,
+            candidates = choices
+        )
+    }
+
+    private fun chooseSwitchCandidate(candidate: DownloadCandidate) {
+        switchCandidatePrompt = null
+        if (candidate.directDownload) {
+            downloadAndReturn(candidate)
+        } else {
+            openCaptchaBrowser(candidate)
         }
     }
 
@@ -7384,6 +7475,88 @@ private fun AnimatedExpand(
 }
 
 @Composable
+private fun SwitchCandidateDialog(
+    prompt: SwitchCandidatePrompt,
+    onChoose: (DownloadCandidate) -> Unit,
+    onDismiss: () -> Unit
+) {
+    MorpheDialog(
+        title = "Choose a variant from ${prompt.source.label}",
+        onDismiss = onDismiss,
+        actions = {
+            HelperOutlinedButton(
+                text = "Cancel",
+                onClick = onDismiss,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    ) {
+        Text(
+            text = prompt.detail,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 420.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            prompt.candidates.forEach { candidate ->
+                val variant = candidate.variantLabel ?: candidate.variantTag
+                SurfaceCard(
+                    onClick = { onChoose(candidate) },
+                    cornerRadius = MorpheDefaults.CompactCornerRadius,
+                    borderWidth = 1.dp,
+                    borderColor = MaterialTheme.colorScheme.outlineVariant
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(MorpheDefaults.ContentPadding),
+                        horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                text = candidate.versionDisplay,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = listOfNotNull(
+                                    candidate.fileKind.uppercase(Locale.US),
+                                    variant?.takeIf { it.isNotBlank() }
+                                ).joinToString(" · "),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Icon(
+                            imageVector = if (candidate.directDownload) {
+                                Icons.Outlined.Download
+                            } else {
+                                Icons.Outlined.OpenInBrowser
+                            },
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun LoadingState() {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -10273,6 +10446,60 @@ internal data class DownloadCandidate(
         }
 }
 
+/**
+ * Candidates from a newly picked source that continue the same download target:
+ * same format, same version for a requested build, and the ABI/variant already
+ * in flight. Fast Mode's latest mode deliberately leaves the version open,
+ * because the new source resolves its own newest release.
+ */
+internal fun matchingSourceSwitchCandidates(
+    candidates: List<DownloadCandidate>,
+    target: DownloadCandidate,
+    request: HelperRequest
+): List<DownloadCandidate> =
+    candidates.filter { candidate ->
+        candidate.directDownload &&
+            candidate.fileKind.equals(target.fileKind, ignoreCase = true) &&
+            sourceSwitchVersionMatches(target, candidate) &&
+            sourceSwitchVariantMatches(target, candidate, request)
+    }
+
+private fun sourceSwitchVersionMatches(
+    target: DownloadCandidate,
+    candidate: DownloadCandidate
+): Boolean {
+    if (target.option == CandidateOption.LATEST) return true
+    val targetVersion = target.versionName ?: return true
+    return candidate.versionName?.versionNameEquals(targetVersion) == true
+}
+
+private fun sourceSwitchVariantMatches(
+    target: DownloadCandidate,
+    candidate: DownloadCandidate,
+    request: HelperRequest
+): Boolean {
+    val targetLabel = target.variantLabel ?: target.variantTag
+    val candidateLabel = candidate.variantLabel ?: candidate.variantTag
+
+    if (target.source == candidate.source) {
+        if (target.variantNumber != null && candidate.variantNumber != null) {
+            return target.variantNumber == candidate.variantNumber
+        }
+        if (targetLabel != null || candidateLabel != null) {
+            return targetLabel.normalizedVariantLabel() == candidateLabel.normalizedVariantLabel()
+        }
+        return true
+    }
+
+    // Labels differ between sources ("arm64-v8a", "ARM64", "arm64"), so
+    // compare how each one fits the device instead of the wording.
+    return archMatchRank(targetLabel, request.availableAbis) ==
+        archMatchRank(candidateLabel, request.availableAbis)
+}
+
+private fun String?.normalizedVariantLabel(): String =
+    this?.trim()?.lowercase(Locale.US)?.replace(Regex("\\s+"), " ").orEmpty()
+
 private data class CandidateMatchSummary(
     val matches: Boolean,
     val title: String,
@@ -10454,6 +10681,12 @@ private sealed interface FastModeFindResult {
     data class VersionMismatch(val candidate: DownloadCandidate) : FastModeFindResult
     object None : FastModeFindResult
 }
+
+private data class SwitchCandidatePrompt(
+    val source: DownloadSource,
+    val detail: String,
+    val candidates: List<DownloadCandidate>
+)
 
 private data class FastModeProgress(
     val sourceLabel: String? = null,
