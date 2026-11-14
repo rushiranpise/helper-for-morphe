@@ -77,6 +77,19 @@ internal object UpdateManager {
     private fun prefs(context: Context): SharedPreferences =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+    /** Drops the cached release after the user switches update channels. */
+    fun clearCachedLatest(context: Context) {
+        prefs(context).edit()
+            .remove(KEY_LAST_CHECK)
+            .remove(KEY_VERSION)
+            .remove(KEY_RELEASE_URL)
+            .remove(KEY_ASSET_URL)
+            .remove(KEY_ASSET_NAME)
+            .remove(KEY_ASSET_SIZE)
+            .remove(KEY_NOTES)
+            .apply()
+    }
+
     fun cachedLatest(context: Context): UpdateInfo? {
         val store = prefs(context)
         val version = store.getString(KEY_VERSION, "").orEmpty()
@@ -118,7 +131,10 @@ internal object UpdateManager {
 
         return try {
             val currentVersion = UpdateChecker.installedVersion(context)
-            val info = withContext(Dispatchers.IO) { UpdateChecker.check(currentVersion) }
+            val includePrereleases = settings.updateChannel == UpdateChannel.BETA
+            val info = withContext(Dispatchers.IO) {
+                UpdateChecker.check(currentVersion, includePrereleases)
+            }
             cacheInfo(context, info)
 
             if (!info.isNewerThan(currentVersion)) {

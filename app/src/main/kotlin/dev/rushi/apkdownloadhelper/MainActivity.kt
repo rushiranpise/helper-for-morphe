@@ -11326,6 +11326,7 @@ private fun UpdateScreen(
     var installing by remember { mutableStateOf(false) }
     var installMessage by remember { mutableStateOf<String?>(null) }
     var modeDialog by remember { mutableStateOf(false) }
+    var channelDialog by remember { mutableStateOf(false) }
     var packageDialog by remember { mutableStateOf(false) }
 
     val shizukuStatus = remember(refreshToken, settings.shizukuPackage) {
@@ -11336,7 +11337,7 @@ private fun UpdateScreen(
     }
     val updateAvailable = latest?.isNewerThan(BuildConfig.VERSION_NAME) == true
 
-    fun checkNow() {
+    fun checkNow(channel: UpdateChannel = settings.updateChannel) {
         if (checking) return
         scope.launch {
             checking = true
@@ -11344,7 +11345,7 @@ private fun UpdateScreen(
             val result = UpdateManager.checkForUpdates(
                 context = context,
                 manual = true,
-                settings = settings
+                settings = settings.copy(updateChannel = channel)
             )
             latest = result.info ?: latest
             checkMessage = result.message
@@ -11479,7 +11480,12 @@ private fun UpdateScreen(
                             title = "Latest version",
                             value = "v${info.version}",
                             subtitle = if (updateAvailable) {
-                                "Update available"
+                                val channel = if (UpdateInfo.isPrerelease(info.version)) {
+                                    "Beta"
+                                } else {
+                                    "Stable"
+                                }
+                                "$channel update available"
                             } else {
                                 "You are up to date"
                             }
@@ -11575,6 +11581,14 @@ private fun UpdateScreen(
                     )
                     MorpheDivider()
                     SettingsRow(
+                        icon = Icons.Outlined.TrendingUp,
+                        title = "Update channel",
+                        subtitle = settings.updateChannel.description,
+                        value = settings.updateChannel.title,
+                        onClick = { channelDialog = true }
+                    )
+                    MorpheDivider()
+                    SettingsRow(
                         icon = Icons.Outlined.Download,
                         title = "Update mode",
                         subtitle = settings.updateMode.description,
@@ -11610,6 +11624,38 @@ private fun UpdateScreen(
 
             item { Spacer(modifier = Modifier.height(16.dp)) }
         }
+    }
+
+    if (channelDialog) {
+        val channels = UpdateChannel.entries
+        SettingsChoiceDialog(
+            title = "Update channel",
+            choices = channels.map { channel ->
+                SettingsChoice(
+                    icon = if (channel == UpdateChannel.BETA) {
+                        Icons.Outlined.TrendingUp
+                    } else {
+                        Icons.Outlined.CheckCircle
+                    },
+                    title = channel.title,
+                    description = channel.description
+                )
+            },
+            selectedIndex = channels.indexOf(settings.updateChannel),
+            onSelect = { index ->
+                val channel = channels[index]
+                channelDialog = false
+                if (channel != settings.updateChannel) {
+                    UpdateManager.clearCachedLatest(context)
+                    latest = null
+                    checkMessage = null
+                    installMessage = null
+                    onSettingsChange(settings.copy(updateChannel = channel))
+                    checkNow(channel)
+                }
+            },
+            onDismiss = { channelDialog = false }
+        )
     }
 
     if (modeDialog) {

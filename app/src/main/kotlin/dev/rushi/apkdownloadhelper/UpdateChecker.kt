@@ -106,8 +106,10 @@ internal object UpdateChecker {
         .callTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    fun check(currentVersion: String): UpdateInfo {
-        val includePrereleases = UpdateInfo.isPrerelease(currentVersion)
+    fun check(
+        currentVersion: String,
+        includePrereleases: Boolean = UpdateInfo.isPrerelease(currentVersion)
+    ): UpdateInfo {
         val apiError: Exception
         try {
             return best(releasesFromApi(includePrereleases))

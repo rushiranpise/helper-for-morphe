@@ -92,6 +92,7 @@ internal data class HelperSettings(
     // Source opened by default when Helper launches (null = first enabled source).
     val preferredSource: DownloadSource? = null,
     val checkUpdates: Boolean = true,
+    val updateChannel: UpdateChannel = UpdateChannel.STABLE,
     val updateMode: UpdateMode = UpdateMode.NOTIFY,
     val updatePopup: Boolean = true,
     /** Empty keeps Shizuku's default package; set for forks with another name. */
@@ -113,6 +114,20 @@ internal enum class VirusTotalScanMode(
     ALWAYS(
         title = "Always scan",
         description = "Automatically scan every download before handing off."
+    )
+}
+
+internal enum class UpdateChannel(
+    val title: String,
+    val description: String
+) {
+    STABLE(
+        title = "Stable",
+        description = "Only stable releases are offered."
+    ),
+    BETA(
+        title = "Beta",
+        description = "Include pre-release builds tagged beta or rc."
     )
 }
 
@@ -332,6 +347,14 @@ internal fun Context.loadHelperSettings(): HelperSettings {
         preferredSource = prefs.getString("preferred_source", null)
             ?.let { name -> DownloadSource.entries.firstOrNull { it.name == name } },
         checkUpdates = prefs.getBoolean("check_updates", true),
+        updateChannel = enumValueOrDefault(
+            prefs.getString("update_channel", null),
+            if (UpdateInfo.isPrerelease(BuildConfig.VERSION_NAME)) {
+                UpdateChannel.BETA
+            } else {
+                UpdateChannel.STABLE
+            }
+        ),
         updateMode = enumValueOrDefault(
             prefs.getString("update_mode", null),
             UpdateMode.NOTIFY
@@ -386,6 +409,7 @@ internal fun Context.saveHelperSettings(settings: HelperSettings) {
         .putBoolean("virus_total_auto_proceed", settings.virusTotalAutoProceed)
         .putString("preferred_source", settings.preferredSource?.name)
         .putBoolean("check_updates", settings.checkUpdates)
+        .putString("update_channel", settings.updateChannel.name)
         .putString("update_mode", settings.updateMode.name)
         .putBoolean("update_popup", settings.updatePopup)
         .putString("shizuku_package", settings.shizukuPackage)
