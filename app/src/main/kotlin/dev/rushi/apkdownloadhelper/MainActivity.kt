@@ -11835,6 +11835,7 @@ private fun UpdateScreen(
     val scope = rememberCoroutineScope()
     var latest by remember { mutableStateOf(UpdateManager.cachedLatest(context)) }
     var checking by remember { mutableStateOf(false) }
+    var checkToken by remember { mutableIntStateOf(0) }
     var checkMessage by remember { mutableStateOf<String?>(null) }
     var installing by remember { mutableStateOf(false) }
     var installMessage by remember { mutableStateOf<String?>(null) }
@@ -11851,15 +11852,18 @@ private fun UpdateScreen(
     val updateAvailable = latest?.isNewerThan(BuildConfig.VERSION_NAME) == true
 
     fun checkNow(channel: UpdateChannel = settings.updateChannel) {
-        if (checking) return
+        if (checking && channel == settings.updateChannel) return
+        val token = checkToken + 1
+        checkToken = token
+        checking = true
+        checkMessage = "Checking for updates…"
         scope.launch {
-            checking = true
-            checkMessage = "Checking for updates…"
             val result = UpdateManager.checkForUpdates(
                 context = context,
                 manual = true,
                 settings = settings.copy(updateChannel = channel)
             )
+            if (token != checkToken) return@launch
             latest = result.info ?: latest
             checkMessage = result.message
             checking = false
@@ -11917,15 +11921,7 @@ private fun UpdateScreen(
             checkMessage = "Update checks are disabled."
             return@LaunchedEffect
         }
-        checking = true
-        val result = UpdateManager.checkForUpdates(
-            context = context,
-            manual = true,
-            settings = settings
-        )
-        latest = result.info ?: latest
-        checkMessage = result.message
-        checking = false
+        checkNow()
     }
 
     BackHandler(onBack = onBack)
@@ -12159,7 +12155,7 @@ private fun UpdateScreen(
                 val channel = channels[index]
                 channelDialog = false
                 if (channel != settings.updateChannel) {
-                    UpdateManager.clearCachedLatest(context)
+                    UpdateManager.resetForChannelSwitch(context)
                     latest = null
                     checkMessage = null
                     installMessage = null

@@ -24,10 +24,12 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
@@ -64,7 +66,8 @@ internal object UpdateManager {
     private const val CHECK_INTERVAL = 6L * 60L * 60L * 1000L
     private const val SNOOZE_INTERVAL = 24L * 60L * 60L * 1000L
 
-    private val checking = AtomicBoolean(false)
+    private val checkMutex = Mutex()
+    private val checkGeneration = AtomicLong(0L)
     private val HTTP: OkHttpClient = OkHttpClient.Builder()
         .protocols(listOf(Protocol.HTTP_1_1))
         .followRedirects(true)
@@ -88,6 +91,13 @@ internal object UpdateManager {
             .remove(KEY_ASSET_SIZE)
             .remove(KEY_NOTES)
             .apply()
+    }
+
+    /** Invalidates in-flight checks and clears the old channel before a recheck. */
+    fun resetForChannelSwitch(context: Context) {
+        checkGeneration.incrementAndGet()
+        clearCachedLatest(context)
+        cancelNotification(context)
     }
 
     fun cachedLatest(context: Context): UpdateInfo? {
@@ -125,60 +135,75 @@ internal object UpdateManager {
         if (!manual && !settings.checkUpdates) {
             return UpdateCheckResult(null, "Update checks are disabled.", false)
         }
-        if (!checking.compareAndSet(false, true)) {
-            return UpdateCheckResult(cachedLatest(context), "An update check is already running.", false)
-        }
-
-        return try {
-            val currentVersion = UpdateChecker.installedVersion(context)
-            val includePrereleases = settings.updateChannel == UpdateChannel.BETA
-            val info = withContext(Dispatchers.IO) {
-                UpdateChecker.check(currentVersion, includePrereleases)
+        val generation = checkGeneration.incrementAndGet()
+        return checkMutex.withLock {
+            if (generation != checkGeneration.get()) {
+                return@withLock supersededCheck()
             }
-            cacheInfo(context, info)
 
-            if (!info.isNewerThan(currentVersion)) {
-                cancelNotification(context)
-                UpdateCheckResult(info, "You are up to date (v$currentVersion).", false)
-            } else if (info.version == skippedVersion(context)) {
-                cancelNotification(context)
-                UpdateCheckResult(info, "Update v${info.version} is skipped.", false)
-            } else if (!manual && System.currentTimeMillis() < snoozedUntil(context)) {
-                UpdateCheckResult(info, "Update reminder is snoozed.", false)
-            } else if (
-                settings.updateMode == UpdateMode.SHIZUKU &&
-                ShizukuHelper.status(context) == ShizukuHelper.READY &&
-                info.assetUrl.isNotBlank()
-            ) {
-                val (ok, detail) = installSilently(context, info)
-                if (ok) {
+            try {
+                val currentVersion = UpdateChecker.installedVersion(context)
+                val includePrereleases = settings.updateChannel == UpdateChannel.BETA
+                val info = withContext(Dispatchers.IO) {
+                    UpdateChecker.check(currentVersion, includePrereleases)
+                }
+                if (generation != checkGeneration.get()) {
+                    return@withLock supersededCheck()
+                }
+                cacheInfo(context, info)
+                if (generation != checkGeneration.get()) {
+                    return@withLock supersededCheck()
+                }
+
+                val result = if (!info.isNewerThan(currentVersion)) {
                     cancelNotification(context)
-                    UpdateCheckResult(info, "Update v${info.version} installed.", true)
+                    UpdateCheckResult(info, "You are up to date (v$currentVersion).", false)
+                } else if (info.version == skippedVersion(context)) {
+                    cancelNotification(context)
+                    UpdateCheckResult(info, "Update v${info.version} is skipped.", false)
+                } else if (!manual && System.currentTimeMillis() < snoozedUntil(context)) {
+                    UpdateCheckResult(info, "Update reminder is snoozed.", false)
+                } else if (
+                    settings.updateMode == UpdateMode.SHIZUKU &&
+                    ShizukuHelper.status(context) == ShizukuHelper.READY &&
+                    info.assetUrl.isNotBlank()
+                ) {
+                    val (ok, detail) = installSilently(context, info)
+                    if (ok) {
+                        cancelNotification(context)
+                        UpdateCheckResult(info, "Update v${info.version} installed.", true)
+                    } else {
+                        notifyUpdate(context, info)
+                        UpdateCheckResult(
+                            info,
+                            "Update v${info.version} available. Automatic install failed: $detail",
+                            true
+                        )
+                    }
                 } else {
                     notifyUpdate(context, info)
+                    UpdateCheckResult(info, "Update v${info.version} available.", true)
+                }
+                if (generation != checkGeneration.get()) supersededCheck() else result
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                if (generation != checkGeneration.get()) {
+                    supersededCheck()
+                } else {
+                    Log.w(TAG, "Update check failed", error)
                     UpdateCheckResult(
-                        info,
-                        "Update v${info.version} available. Automatic install failed: $detail",
-                        true
+                        cachedLatest(context),
+                        "Update check failed: ${error.message ?: "network error"}",
+                        false
                     )
                 }
-            } else {
-                notifyUpdate(context, info)
-                UpdateCheckResult(info, "Update v${info.version} available.", true)
             }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (error: Throwable) {
-            Log.w(TAG, "Update check failed", error)
-            UpdateCheckResult(
-                cachedLatest(context),
-                "Update check failed: ${error.message ?: "network error"}",
-                false
-            )
-        } finally {
-            checking.set(false)
         }
     }
+
+    private fun supersededCheck(): UpdateCheckResult =
+        UpdateCheckResult(null, "Update check superseded by a newer one.", false)
 
     /**
      * Called once when the main activity starts. Returns a newer release when
