@@ -276,6 +276,10 @@ internal class DownloadService : Service() {
     private var currentSpeedBytesPerSec = 0.0
     private var speedSamples = 0
     @Volatile private var paused = false
+    // Pause only applies while bytes are still being transferred. Once the
+    // download has finished, scanning and handoff run to completion without a
+    // pause control that cannot stop them.
+    @Volatile private var transferInProgress = false
     @Volatile private var currentConnections = 1
 
     private val browserUserAgent =
@@ -456,6 +460,7 @@ internal class DownloadService : Service() {
         currentSpeedBytesPerSec = 0.0
         speedSamples = 0
         paused = false
+        transferInProgress = true
         currentConnections = 1
         val notification = buildProgressNotification(candidate, 0)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -563,6 +568,8 @@ internal class DownloadService : Service() {
         } else {
             downloadSplitArchive(candidate, files, downloadsDir)
         }
+        transferInProgress = false
+        paused = false
         emitPostDownloadStatus(
             candidate,
             if (lastShaVerified) "SHA-256 verified \u2713 \u00b7 validating file…" else "Validating downloaded file…"
@@ -579,6 +586,7 @@ internal class DownloadService : Service() {
 
     private fun handleSuccess(job: DownloadJobManager.DownloadJob, file: File) {
         paused = false
+        transferInProgress = false
         val request = job.request
         val candidate = job.candidate
         val settings = job.settings
@@ -625,6 +633,7 @@ internal class DownloadService : Service() {
 
     private suspend fun scanAndHandoff(job: DownloadJobManager.DownloadJob, file: File) {
         paused = false
+        transferInProgress = false
         val candidate = job.candidate
         val settings = job.settings
         val apiKey = settings.virusTotalApiKey
@@ -773,6 +782,7 @@ internal class DownloadService : Service() {
         val message = downloadFailureMessage(job.candidate, error)
         Log.w(TAG, "Download failed for ${job.candidate.packageName}", error)
         paused = false
+        transferInProgress = false
         DownloadJobManager.emit(DownloadJobManager.Event.Failed(job.candidate, message, job.epoch))
         notifyFailure(job, message)
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -781,6 +791,7 @@ internal class DownloadService : Service() {
 
     private fun handleCancelled(job: DownloadJobManager.DownloadJob) {
         paused = false
+        transferInProgress = false
         DownloadJobManager.emit(DownloadJobManager.Event.Cancelled(job.candidate, job.epoch))
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -800,6 +811,9 @@ internal class DownloadService : Service() {
 
     private fun pauseDownload() {
         val job = DownloadJobManager.activeJob ?: return
+        // A stale Pause action, or one tapped as the transfer ended, must not
+        // flip the service into a paused state while scanning or handoff runs.
+        if (!transferInProgress) return
         if (paused) return
         paused = true
         downloader.pause()
@@ -1086,8 +1100,12 @@ internal class DownloadService : Service() {
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(contentIntent)
-            .addAction(0, if (paused) "Resume" else "Pause", pauseIntent)
-            .addAction(0, "Cancel", cancelIntent)
+            .apply {
+                if (transferInProgress) {
+                    addAction(0, if (paused) "Resume" else "Pause", pauseIntent)
+                }
+                addAction(0, "Cancel", cancelIntent)
+            }
             .build()
     }
 
