@@ -924,17 +924,35 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         val ranked = sortedWith(
             compareBy(
                 { archMatchRank(it.arch, request.availableAbis) },
-                { apkMirrorDpiRank(it.dpi, request.deviceDpi) }
+                {
+                    apkMirrorDpiRank(
+                        it.dpi,
+                        request.deviceDpi,
+                        request.preferDensitySpecificVariants
+                    )
+                }
             )
         )
         val runnable = ranked.filter {
             archMatchRank(it.arch, request.availableAbis) < ARCH_RANK_MISMATCH
         }
         val pool = runnable.ifEmpty { ranked }
-        // Keep only the best density rows. With a known screen density that is
-        // the range covering it; otherwise nodpi remains the safe default.
-        val bestDpiRank = pool.minOf { apkMirrorDpiRank(it.dpi, request.deviceDpi) }
-        return pool.filter { apkMirrorDpiRank(it.dpi, request.deviceDpi) == bestDpiRank }
+        // nodpi is the safe default. A density-specific row is only preferred
+        // when the user opts in, as those rows can be split APKs.
+        val bestDpiRank = pool.minOf {
+            apkMirrorDpiRank(
+                it.dpi,
+                request.deviceDpi,
+                request.preferDensitySpecificVariants
+            )
+        }
+        return pool.filter {
+            apkMirrorDpiRank(
+                it.dpi,
+                request.deviceDpi,
+                request.preferDensitySpecificVariants
+            ) == bestDpiRank
+        }
     }
 
     private fun apkMirrorVariantFromRow(row: Element): ApkMirrorVariant? {
@@ -1152,20 +1170,28 @@ private fun apkMirrorReleaseUrlMatchesVersion(url: String, version: String): Boo
 /**
  * Orders APKMirror's density variants for a device. Lower is better.
  *
- * A range that covers the screen wins, then nodpi, then the closest
- * density-specific range. Without a known density nodpi keeps the old default.
+ * nodpi wins by default. When [preferDensitySpecific] is on, a range that
+ * covers the screen wins, then the closest density-specific range, then nodpi.
+ * Density-specific rows can be split APKs, so that choice is opt-in.
  */
-internal fun apkMirrorDpiRank(dpi: String?, deviceDpi: Int?): Int {
+internal fun apkMirrorDpiRank(
+    dpi: String?,
+    deviceDpi: Int?,
+    preferDensitySpecific: Boolean = false
+): Int {
     val normalized = dpi?.trim()?.lowercase(Locale.US).orEmpty()
-    if (normalized == "nodpi" || normalized == "anydpi") return 1
+    val isNodpi = normalized == "nodpi" || normalized == "anydpi"
+    if (!preferDensitySpecific) return if (isNodpi) 0 else 1
+    if (isNodpi) return 10_000
+
     val range = Regex("""(\d+)(?:\s*-\s*(\d+))?""").find(normalized)
         ?: return Int.MAX_VALUE
-    if (deviceDpi == null || deviceDpi <= 0) return 2
+    if (deviceDpi == null || deviceDpi <= 0) return 1
     val low = range.groupValues[1].toIntOrNull() ?: return Int.MAX_VALUE
     val high = range.groupValues[2].toIntOrNull() ?: low
     return when {
         deviceDpi in low..high -> 0
-        deviceDpi < low -> 2 + (low - deviceDpi)
-        else -> 2 + (deviceDpi - high)
+        deviceDpi < low -> 1 + (low - deviceDpi)
+        else -> 1 + (deviceDpi - high)
     }
 }

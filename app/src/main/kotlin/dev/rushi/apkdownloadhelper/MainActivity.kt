@@ -494,7 +494,10 @@ class MainActivity : ComponentActivity() {
         restoreAndPersistRateLimiter()
         helperSettings = loadHelperSettings()
         ensureLauncherIconState()
-        request = HelperRequest.from(intent)?.withDeviceDpi(resources.displayMetrics.densityDpi)
+        request = HelperRequest.from(intent)?.withDeviceDpi(
+            resources.displayMetrics.densityDpi,
+            helperSettings.preferDensitySpecificVariants
+        )
         if (intent?.getBooleanExtra(UpdateManager.EXTRA_OPEN_UPDATES, false) == true) {
             showUpdates = true
         }
@@ -728,7 +731,10 @@ class MainActivity : ComponentActivity() {
             installedPackageRefreshToken++
             return
         }
-        request = HelperRequest.from(intent)?.withDeviceDpi(resources.displayMetrics.densityDpi)
+        request = HelperRequest.from(intent)?.withDeviceDpi(
+            resources.displayMetrics.densityDpi,
+            helperSettings.preferDensitySpecificVariants
+        )
         startRequestLog(request)
         val activeRequest = request
         if (activeRequest != null) {
@@ -1264,13 +1270,24 @@ class MainActivity : ComponentActivity() {
             helperSettings.sourceOrder != settings.sourceOrder ||
             helperSettings.preferredSource != settings.preferredSource
         val launcherChanged = helperSettings.showLauncherIcon != settings.showLauncherIcon
+        val densityPreferenceChanged =
+            helperSettings.preferDensitySpecificVariants != settings.preferDensitySpecificVariants
         helperSettings = settings
         saveHelperSettings(settings)
         if (launcherChanged) {
             setLauncherIconVisible(settings.showLauncherIcon)
         }
+        if (densityPreferenceChanged) {
+            request = request?.copy(
+                preferDensitySpecificVariants = settings.preferDensitySpecificVariants
+            )
+        }
         // Rebuild the picker so enabled/disabled sources take effect immediately.
-        if (sourcesChanged && request != null && uiState is UiState.Ready) {
+        if (
+            (sourcesChanged || densityPreferenceChanged) &&
+            request != null &&
+            uiState is UiState.Ready
+        ) {
             uiState = UiState.Ready(initialCandidateResult(request!!))
         }
     }
@@ -5062,6 +5079,21 @@ private fun SystemTabContent(
                 subtitle = "${settings.downloadRetention.description} Cleanup runs when Helper opens.",
                 value = settings.downloadRetention.title,
                 onClick = { retentionDialog = true }
+            )
+            MorpheDivider()
+            SettingsSwitchItem(
+                icon = Icons.Outlined.PhoneAndroid,
+                title = "Prefer density-specific APKs",
+                subtitle = "Use APKMirror's variant for this screen's density instead of nodpi. " +
+                    "Some density rows are split APKs that may not patch or install on their own.",
+                checked = settings.preferDensitySpecificVariants,
+                onToggle = {
+                    onSettingsChange(
+                        settings.copy(
+                            preferDensitySpecificVariants = !settings.preferDensitySpecificVariants
+                        )
+                    )
+                }
             )
         }
 
@@ -10818,9 +10850,17 @@ internal data class HelperRequest(
     val fallbackWebUrl: String,
     val sourceHintUrls: List<String>,
     /** Screen density in dpi, used to rank density-specific source variants. */
-    val deviceDpi: Int? = null
+    val deviceDpi: Int? = null,
+    /** APKMirror only: opt in to density-specific rows instead of nodpi. */
+    val preferDensitySpecificVariants: Boolean = false
 ) {
-    fun withDeviceDpi(dpi: Int): HelperRequest = copy(deviceDpi = dpi.takeIf { it > 0 })
+    fun withDeviceDpi(
+        dpi: Int,
+        preferDensitySpecificVariants: Boolean = this.preferDensitySpecificVariants
+    ): HelperRequest = copy(
+        deviceDpi = dpi.takeIf { it > 0 },
+        preferDensitySpecificVariants = preferDensitySpecificVariants
+    )
 
     val availableAbis: List<String>
         get() = supportedAbis

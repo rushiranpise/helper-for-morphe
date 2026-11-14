@@ -69,6 +69,8 @@ internal data class HelperSettings(
     val downloadLocation: DownloadLocation = DownloadLocation.TEMPORARY,
     val downloadRetention: DownloadRetention = DownloadRetention.KEEP,
     val downloadCustomTreeUri: String = "",
+    /** APKMirror only: pick a density-specific row instead of nodpi. */
+    val preferDensitySpecificVariants: Boolean = false,
     val showLauncherIcon: Boolean = true,
     val networkPolicy: NetworkPolicy = NetworkPolicy.WIFI_AND_MOBILE,
     /** Maximum workers for a segmented download. File size can lower this. */
@@ -340,6 +342,7 @@ internal fun Context.loadHelperSettings(): HelperSettings {
             DownloadRetention.KEEP
         ),
         downloadCustomTreeUri = prefs.getString("download_custom_tree_uri", "") ?: "",
+        preferDensitySpecificVariants = prefs.getBoolean("prefer_density_specific_variants", false),
         showLauncherIcon = prefs.getBoolean("show_launcher_icon", true),
         networkPolicy = enumValueOrDefault(
             prefs.getString("network_policy", null),
@@ -437,6 +440,7 @@ internal fun Context.saveHelperSettings(settings: HelperSettings) {
         .putString("download_location", settings.downloadLocation.name)
         .putString("download_retention", settings.downloadRetention.name)
         .putString("download_custom_tree_uri", settings.downloadCustomTreeUri)
+        .putBoolean("prefer_density_specific_variants", settings.preferDensitySpecificVariants)
         .putBoolean("show_launcher_icon", settings.showLauncherIcon)
         .remove("delete_temporary_after_handoff")
         .putString("network_policy", settings.networkPolicy.name)
