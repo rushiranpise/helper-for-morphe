@@ -26,6 +26,7 @@ class DefaultDisabledSourcesTest {
     @Test
     fun `the remaining sources start disabled`() {
         listOf(
+            DownloadSource.APK_CUBE,
             DownloadSource.APTOIDE,
             DownloadSource.EVOZI,
             DownloadSource.MI9,

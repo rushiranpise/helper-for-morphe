@@ -46,9 +46,10 @@ internal var adGuardDnsEnabled = false
  * by version rather than inferred from what is on disk.
  */
 private const val SETTINGS_VERSION_KEY = "settings_version"
-private const val SETTINGS_VERSION = 2
+private const val SETTINGS_VERSION = 3
 
 internal val DEFAULT_DISABLED_SOURCES: Set<DownloadSource> = setOf(
+    DownloadSource.APK_CUBE,
     DownloadSource.APTOIDE,
     DownloadSource.EVOZI,
     DownloadSource.MI9,
@@ -372,13 +373,18 @@ internal fun Context.loadHelperSettings(): HelperSettings {
     )
 
     // Version 2 turned Fast Mode on and narrowed the enabled sources to the five the
-    // helper is built around. Applied once and saved, so from the next launch on the
-    // stored values (including a deliberate opt-out) win as usual.
+    // helper is built around. Version 3 adds APKCube without re-enabling anything a
+    // user switched on or off. Each step is applied once and saved, so from the next
+    // launch on the stored values win as usual.
     val storedVersion = prefs.getInt(SETTINGS_VERSION_KEY, 1)
-    val migrated = if (storedVersion < SETTINGS_VERSION) {
-        settings.copy(fastMode = true, disabledSources = DEFAULT_DISABLED_SOURCES)
-    } else {
-        settings
+    var migrated = settings
+    if (storedVersion < 2) {
+        migrated = migrated.copy(fastMode = true, disabledSources = DEFAULT_DISABLED_SOURCES)
+    }
+    if (storedVersion < 3) {
+        migrated = migrated.copy(
+            disabledSources = migrated.disabledSources + DownloadSource.APK_CUBE
+        )
     }
     if (migrated !== settings) {
         saveHelperSettings(migrated)

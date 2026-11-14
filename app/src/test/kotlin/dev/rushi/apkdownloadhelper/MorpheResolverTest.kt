@@ -22,6 +22,17 @@ class MorpheResolverTest {
     }
 
     @Test
+    fun `the query includes a single build code`() {
+        val request = testRequest(
+            packageName = "com.example.app",
+            versionName = "2.0.0",
+            versionCode = 123456L
+        )
+
+        assertEquals("com.example.app~2.0.0~arm64-v8a~123456", morpheResolveQuery(request))
+    }
+
+    @Test
     fun `with no requested version the resolver is asked for any`() {
         val request = testRequest(packageName = "com.example.app", versionName = null)
 

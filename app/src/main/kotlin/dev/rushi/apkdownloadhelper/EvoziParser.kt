@@ -3,21 +3,36 @@ package dev.rushi.apkdownloadhelper
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
-/**
- * Evozi's APK Downloader (apps.evozi.com) hands off to APKCube
- * (apkcube.com), which resolves apps and per-version download pages without
- * any bot wall. The actual APK file is gated behind a Cloudflare Turnstile
- * captcha, so this parser resolves the app and version and hands the user an
- * "Open link" candidate to the exact download page.
- */
+/** APKCube's own catalogue, entered directly instead of through Evozi. */
+internal class ApkCubeParser(
+    ctx: SourceParserContext
+) : ApkCubeSourceParser(
+    ctx = ctx,
+    source = DownloadSource.APK_CUBE,
+    captchaNote = APKCUBE_CAPTCHA_NOTE
+)
+
+/** Evozi's APK Downloader, which hands off to the same APKCube catalogue. */
 internal class EvoziParser(
-    private val ctx: SourceParserContext
+    ctx: SourceParserContext
+) : ApkCubeSourceParser(
+    ctx = ctx,
+    source = DownloadSource.EVOZI,
+    captchaNote = EVOZI_CAPTCHA_NOTE
+)
+
+/**
+ * Resolves apps and per-version download pages in APKCube's catalogue. The actual
+ * APK file is gated behind a Cloudflare Turnstile captcha, so this parser resolves
+ * the app and version and hands the user a candidate for the exact download page.
+ */
+internal abstract class ApkCubeSourceParser(
+    private val ctx: SourceParserContext,
+    override val source: DownloadSource,
+    private val captchaNote: String
 ) : ApkSourceParser {
 
-    override val source = DownloadSource.EVOZI
-
-    override fun searchUrl(packageName: String): String? =
-        "https://apkcube.com/apk-downloader?url=$packageName"
+    override fun searchUrl(packageName: String): String? = apkCubeSearchUrl(packageName)
 
     override suspend fun findCandidates(
         request: HelperRequest,
@@ -56,7 +71,7 @@ internal class EvoziParser(
                 directDownload = false,
                 versionStatus = request.versionStatus(versionName, null),
                 formatMatches = true,
-                note = EVOZI_CAPTCHA_NOTE,
+                note = captchaNote,
                 captchaUrl = downloadUrl
             )
         )
@@ -111,7 +126,7 @@ internal class EvoziParser(
                 directDownload = false,
                 versionStatus = VersionStatus.REQUESTED,
                 formatMatches = true,
-                note = EVOZI_CAPTCHA_NOTE,
+                note = captchaNote,
                 captchaUrl = downloadUrl
             )
         )
@@ -120,6 +135,13 @@ internal class EvoziParser(
 
 private const val EVOZI_CAPTCHA_NOTE =
     "APKCube (via Evozi) gates downloads behind a Cloudflare captcha. Solve it in the in-app browser or open the page manually."
+
+private const val APKCUBE_CAPTCHA_NOTE =
+    "APKCube gates downloads behind a Cloudflare captcha. Solve it in the in-app browser or open the page manually."
+
+private fun apkCubeSearchUrl(packageName: String): String =
+    "https://apkcube.com/apk-downloader?url=" +
+        URLEncoder.encode(packageName, StandardCharsets.UTF_8.name())
 
 /**
  * The Next.js flight payload JSON-escapes its content (`\"` for quotes), so

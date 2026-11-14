@@ -396,6 +396,7 @@ class MainActivity : ComponentActivity() {
             UptodownParser(parserContext),
             ApkPureParser(parserContext),
             ApkComboParser(parserContext),
+            ApkCubeParser(parserContext),
             AptoideParser(parserContext),
             EvoziParser(parserContext),
             Mi9Parser(),
@@ -7792,6 +7793,7 @@ private fun DownloadSource.brand(): SourceBrand = when (this) {
     DownloadSource.APK_MIRROR -> SourceBrand(resId = R.drawable.ic_src_apkmirror)
     DownloadSource.APK_PURE -> SourceBrand(resId = R.drawable.ic_src_apkpure)
     DownloadSource.APK_COMBO -> SourceBrand(resId = R.drawable.ic_src_apkcombo)
+    DownloadSource.APK_CUBE -> SourceBrand(resId = R.drawable.ic_src_apkcube)
     DownloadSource.UPTODOWN -> SourceBrand(resId = R.drawable.ic_src_uptodown)
     DownloadSource.AURORA -> SourceBrand(resId = R.drawable.ic_src_aurora)
     DownloadSource.APTOIDE -> SourceBrand(resId = R.drawable.ic_src_aptoide)
@@ -7982,6 +7984,7 @@ private val DownloadSource.supportsHistory: Boolean
         // is Cloudflare-gated with no version list. Mi9's history tab offers a
         // "browse the version history in the in-app browser" row. Aurora/Play
         // never offer originals.
+        DownloadSource.APK_CUBE,
         DownloadSource.EVOZI,
         DownloadSource.APK_DOWNLOADER,
         DownloadSource.AURORA,
@@ -10005,6 +10008,7 @@ internal data class HelperRequest(
             DownloadSource.APTOIDE -> listOf("aptoide.com")
             DownloadSource.APK_PURE -> listOf("apkpure.com")
             DownloadSource.UPTODOWN -> listOf("uptodown.com")
+            DownloadSource.APK_CUBE -> listOf("apkcube.com")
             DownloadSource.EVOZI -> listOf("apkcube.com", "evozi.com")
             DownloadSource.MI9 -> listOf("mi9.com")
             DownloadSource.APK_DOWNLOADER -> listOf("apkdownloader.pages.dev")
@@ -10367,12 +10371,13 @@ internal enum class DownloadSource(
     UPTODOWN("Uptodown", 1),
     APK_PURE("APKPure", 2),
     APK_COMBO("APKCombo", 3),
-    APTOIDE("Aptoide", 4),
-    EVOZI("Evozi", 5),
-    MI9("Mi9", 6),
-    APK_DOWNLOADER("APK Downloader", 7),
-    AURORA("Aurora", 8, supportsManualArtifactPicker = false),
-    PLAY("Play", 9, supportsManualArtifactPicker = false)
+    APK_CUBE("APKCube", 4),
+    APTOIDE("Aptoide", 5),
+    EVOZI("Evozi", 6),
+    MI9("Mi9", 7),
+    APK_DOWNLOADER("APK Downloader", 8),
+    AURORA("Aurora", 9, supportsManualArtifactPicker = false),
+    PLAY("Play", 10, supportsManualArtifactPicker = false)
 }
 
 internal fun DownloadSource.searchDomain(): String? = when (this) {
@@ -10380,6 +10385,7 @@ internal fun DownloadSource.searchDomain(): String? = when (this) {
     DownloadSource.UPTODOWN -> "uptodown.com"
     DownloadSource.APK_PURE -> "apkpure.com"
     DownloadSource.APK_COMBO -> "apkcombo.com"
+    DownloadSource.APK_CUBE -> "apkcube.com"
     DownloadSource.APTOIDE -> "aptoide.com"
     DownloadSource.EVOZI -> "apkcube.com"
     DownloadSource.MI9 -> "mi9.com"

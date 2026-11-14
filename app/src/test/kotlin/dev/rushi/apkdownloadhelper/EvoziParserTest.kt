@@ -47,6 +47,17 @@ class EvoziParserTest {
     )
 
     @Test
+    fun apkcube_usesTheSameCatalogue() {
+        val result = runBlocking {
+            ApkCubeParser(testParserContext(mapOf(downloaderUrl to downloaderPage())))
+                .findCandidates(latestRequest(), CandidateOption.LATEST)
+        }
+        assertEquals(1, result.size)
+        assertEquals(DownloadSource.APK_CUBE, result.first().source)
+        assertEquals("2.5.0.6", result.first().versionName)
+    }
+
+    @Test
     fun latest_findsVersionAndDownloadPage() {
         val result = runBlocking {
             parser(mapOf(downloaderUrl to downloaderPage())).findCandidates(latestRequest(), CandidateOption.LATEST)
