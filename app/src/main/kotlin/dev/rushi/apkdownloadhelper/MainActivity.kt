@@ -3035,6 +3035,14 @@ private fun CaptchaBrowserScreen(
                         )
                         return true
                     }
+                    val browserSource = candidate.viaSource ?: candidate.source
+                    if (browserSource.isApkCubeBrowserFlow() &&
+                        request.isForMainFrame &&
+                        !url.isApkCubeHostedUrl()
+                    ) {
+                        Log.i(TAG, "Blocked off-site APKCube navigation: $url")
+                        return true
+                    }
                     return false
                 }
 
@@ -3778,6 +3786,20 @@ internal fun String.isApkPureFileUrl(): Boolean {
 /** A URL the in-app browser should treat as the file it was opened to capture. */
 internal fun String.isCapturableDownload(): Boolean =
     looksLikeApkDownload() || isUptodownFileUrl() || isApkMirrorFileUrl() || isApkPureFileUrl()
+
+/** APKCube and Evozi share the APKCube catalogue and its browser flow. */
+internal fun DownloadSource.isApkCubeBrowserFlow(): Boolean =
+    this == DownloadSource.APK_CUBE || this == DownloadSource.EVOZI
+
+/**
+ * APKCube's download flow stays on its own site. Off-site links on the download
+ * page are prelander ads, so the in-app browser must not follow them.
+ */
+internal fun String.isApkCubeHostedUrl(): Boolean {
+    val uri = runCatching { java.net.URI(urlDecoded()) }.getOrNull() ?: return false
+    val host = uri.host?.lowercase(Locale.US) ?: return false
+    return host == "apkcube.com" || host.endsWith(".apkcube.com")
+}
 
 @Composable
 private fun HelperScreen(

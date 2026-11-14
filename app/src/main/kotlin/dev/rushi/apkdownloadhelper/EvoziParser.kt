@@ -44,9 +44,9 @@ internal abstract class ApkCubeSourceParser(
     }
 
     private fun latestCandidates(request: HelperRequest): List<DownloadCandidate> {
-        val pageUrl = searchUrl(request.packageName) ?: return emptyList()
+        val searchPageUrl = searchUrl(request.packageName) ?: return emptyList()
         val html = try {
-            ctx.text(pageUrl)
+            ctx.text(searchPageUrl)
         } catch (e: HttpRateLimitedException) {
             throw e
         } catch (e: Exception) {
@@ -54,29 +54,37 @@ internal abstract class ApkCubeSourceParser(
         }
         val flight = html.unescapeFlightPayload()
         val downloadHref = flight.apkCubeDownloadHref(request.packageName) ?: return emptyList()
-        val downloadUrl = "https://apkcube.com$downloadHref"
+        val downloadPageUrl = "https://apkcube.com$downloadHref"
             .normalizedHttpUrlOrNull()
             ?: return emptyList()
         // The downloader page used to carry the version in its flight payload. It now
         // often names only the app, while the download page title still has the exact
         // version, so prefer that and keep the payload as a fallback.
-        val versionName = runCatching { ctx.text(downloadUrl) }
-            .getOrNull()
+        val downloadHtml = runCatching { ctx.text(downloadPageUrl) }.getOrNull()
+        val downloadPayload = downloadHtml?.unescapeFlightPayload()
+        val versionName = downloadHtml
             ?.apkCubeVersionFromTitle()
             ?: flight.apkCubePageVersion()
             ?: return emptyList()
+        val versionCode = downloadPayload?.apkCubeLatestVersionCode()
+            ?: flight.apkCubeLatestVersionCode()
+        val downloadUrl = apkCubeTargetedDownloadUrl(
+            baseUrl = downloadPageUrl,
+            versionCode = versionCode,
+            arch = apkCubeArch(request)
+        )
         return listOf(
             DownloadCandidate(
                 source = source,
                 name = request.appName,
                 packageName = request.packageName,
                 versionName = versionName,
-                versionCode = null,
+                versionCode = versionCode,
                 url = downloadUrl,
                 fileKind = "web",
                 option = CandidateOption.LATEST,
                 directDownload = false,
-                versionStatus = request.versionStatus(versionName, null),
+                versionStatus = request.versionStatus(versionName, versionCode),
                 formatMatches = true,
                 note = captchaNote,
                 captchaUrl = downloadUrl
@@ -88,9 +96,9 @@ internal abstract class ApkCubeSourceParser(
         val requestedName = request.requestedVersionName ?: return emptyList()
         // The old-versions page lives under the app's slug path, which only the
         // app page knows  fetch it first to learn the slug.
-        val pageUrl = searchUrl(request.packageName) ?: return emptyList()
+        val searchPageUrl = searchUrl(request.packageName) ?: return emptyList()
         val html = try {
-            ctx.text(pageUrl)
+            ctx.text(searchPageUrl)
         } catch (e: HttpRateLimitedException) {
             throw e
         } catch (e: Exception) {
@@ -112,26 +120,37 @@ internal abstract class ApkCubeSourceParser(
         } catch (e: Exception) {
             return emptyList()
         }
-        val match = versionsHtml.unescapeFlightPayload().apkCubeVersionNames()
-            .firstOrNull { it.versionNameEquals(requestedName) }
-            ?: return emptyList()
+        val matches = versionsHtml.unescapeFlightPayload().apkCubeVersionEntries()
+            .filter { it.versionName.versionNameEquals(requestedName) }
+        if (matches.isEmpty()) return emptyList()
+        val match = matches.firstOrNull { entry ->
+            entry.versionCode != null && entry.versionCode in request.requestedVersionCodes
+        } ?: matches.firstOrNull { it.arch == apkCubeArch(request) }
+            ?: matches.first()
 
-        val encodedVersion = URLEncoder.encode(match, StandardCharsets.UTF_8.name())
-        val downloadUrl = "https://apkcube.com/$slug/${request.packageName}/download?version=$encodedVersion"
+        val requestedCode = request.versionCode ?: request.versionCodes.singleOrNull()
+        val versionCode = requestedCode ?: match.versionCode
+        val encodedVersion = URLEncoder.encode(match.versionName, StandardCharsets.UTF_8.name())
+        val downloadPageUrl = "https://apkcube.com/$slug/${request.packageName}/download?version=$encodedVersion"
             .normalizedHttpUrlOrNull()
             ?: return emptyList()
+        val downloadUrl = apkCubeTargetedDownloadUrl(
+            baseUrl = downloadPageUrl,
+            versionCode = versionCode,
+            arch = apkCubeArch(request)
+        )
         return listOf(
             DownloadCandidate(
                 source = source,
                 name = request.appName,
                 packageName = request.packageName,
-                versionName = match,
-                versionCode = null,
+                versionName = match.versionName,
+                versionCode = versionCode,
                 url = downloadUrl,
                 fileKind = "web",
                 option = CandidateOption.REQUESTED,
                 directDownload = false,
-                versionStatus = VersionStatus.REQUESTED,
+                versionStatus = request.versionStatus(match.versionName, versionCode),
                 formatMatches = true,
                 note = captchaNote,
                 captchaUrl = downloadUrl
@@ -216,9 +235,59 @@ private fun String.apkCubePageVersion(): String? {
         ?.takeIf(String::isNotBlank)
 }
 
-/** Version names listed on the old-versions page, from `versionName":"X"` fields. */
-private fun String.apkCubeVersionNames(): List<String> =
-    Regex("""versionName":"([^"]+)"""")
+/** One build row from the old-versions page flight payload. */
+private data class ApkCubeVersionEntry(
+    val versionName: String,
+    val versionCode: Long?,
+    val arch: String?
+)
+
+/**
+ * Build rows listed on the old-versions page. The payload repeats a version for
+ * each architecture and format, so keep the build code and ABI instead of just
+ * the version name; those are what the download page's `vc` and `arch` query
+ * parameters target.
+ */
+private fun String.apkCubeVersionEntries(): List<ApkCubeVersionEntry> =
+    Regex(
+        """"versionName":"([^"]+)"[^{}]*?"versionCode":(\d+)[^{}]*?(?:"arch":"([^"]+)")?""""
+    )
         .findAll(this)
-        .mapNotNull { it.groupValues.getOrNull(1)?.takeIf(String::isNotBlank) }
+        .mapNotNull { match ->
+            val versionName = match.groupValues.getOrNull(1)
+                ?.takeIf(String::isNotBlank)
+                ?: return@mapNotNull null
+            ApkCubeVersionEntry(
+                versionName = versionName,
+                versionCode = match.groupValues.getOrNull(2)?.toLongOrNull(),
+                arch = match.groupValues.getOrNull(3)?.takeIf(String::isNotBlank)
+            )
+        }
         .toList()
+
+/** The build code the page carries for its current release. */
+private fun String.apkCubeLatestVersionCode(): Long? =
+    Regex("""(?:playVersionCode|versionCode)\\?":(\d+)""")
+        .find(this)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.toLongOrNull()
+
+/** APKCube accepts these ABI labels for its `arch` query parameter. */
+private val APK_CUBE_ARCHS = listOf("arm64-v8a", "armeabi-v7a", "universal")
+
+private fun apkCubeArch(request: HelperRequest): String =
+    APK_CUBE_ARCHS.firstOrNull { it in request.availableAbis } ?: "universal"
+
+private fun apkCubeTargetedDownloadUrl(
+    baseUrl: String,
+    versionCode: Long?,
+    arch: String
+): String {
+    val separator = if ('?' in baseUrl) '&' else '?'
+    val params = buildList {
+        versionCode?.takeIf { it > 0L }?.let { add("vc=$it") }
+        add("arch=${URLEncoder.encode(arch, StandardCharsets.UTF_8.name())}")
+    }
+    return "$baseUrl$separator${params.joinToString("&")}"
+}

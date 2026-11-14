@@ -21,8 +21,8 @@ class EvoziParserTest {
 
     private fun oldVersionsPage(): String = """
         <!DOCTYPE html><html><head><title>Old versions</title></head><body>
-        <script>self.__next_f.push([1,"39:[\"R\",\"RL38\",null,{\"versionName\":\"2.5.0.6\"}]"])</script>
-        <script>self.__next_f.push([1,"3a:[\"R\",\"RL38\",null,{\"versionName\":\"2.5.0.5\"}]"])</script>
+        <script>self.__next_f.push([1,"39:[\"R\",\"RL38\",null,{\"versionName\":\"2.5.0.6\",\"versionCode\":2506,\"arch\":\"arm64-v8a\"}]"])</script>
+        <script>self.__next_f.push([1,"3a:[\"R\",\"RL38\",null,{\"versionName\":\"2.5.0.5\",\"versionCode\":2505,\"arch\":\"armeabi-v7a\"}]"])</script>
         <a href="/battery-guru-battery-health/com.paget96.batteryguru/download?version=2.5.0.6">2.5.0.6</a>
         <a href="/battery-guru-battery-health/com.paget96.batteryguru/download?version=2.5.0.5">2.5.0.5</a>
         </body></html>
@@ -68,6 +68,7 @@ class EvoziParserTest {
         val downloadPage = """
             <!DOCTYPE html><html><head>
             <title>Download Battery Guru 2.5.0.6 APK for Android - APKCube</title>
+            <script>self.__next_f.push([1,"39:[\"R\",\"RL38\",null,{\"playVersionCode\":2506}]"])</script>
             </head></html>
         """.trimIndent()
         val result = runBlocking {
@@ -80,6 +81,8 @@ class EvoziParserTest {
         }
         assertEquals(1, result.size)
         assertEquals("2.5.0.6", result.first().versionName)
+        assertEquals(2506L, result.first().versionCode)
+        assertEquals("$downloadUrl?vc=2506&arch=arm64-v8a", result.first().url)
     }
 
     @Test
@@ -91,7 +94,7 @@ class EvoziParserTest {
         val candidate = result.first()
         assertEquals("2.5.0.6", candidate.versionName)
         assertEquals(
-            "https://apkcube.com/battery-guru-battery-health/$packageName/download",
+            "https://apkcube.com/battery-guru-battery-health/$packageName/download?arch=arm64-v8a",
             candidate.url
         )
         assertFalse(candidate.directDownload)
@@ -129,13 +132,73 @@ class EvoziParserTest {
         assertEquals(1, result.size)
         val candidate = result.first()
         assertEquals("2.5.0.6", candidate.versionName)
+        assertEquals(2506L, candidate.versionCode)
         assertEquals(
-            "https://apkcube.com/battery-guru-battery-health/$packageName/download?version=2.5.0.6",
+            "https://apkcube.com/battery-guru-battery-health/$packageName/download?version=2.5.0.6&vc=2506&arch=arm64-v8a",
             candidate.url
         )
         assertEquals(VersionStatus.REQUESTED, candidate.versionStatus)
         assertFalse(candidate.directDownload)
         assertEquals(candidate.url, candidate.captchaUrl)
+    }
+
+    @Test
+    fun requested_explicitBuildCodeWins() {
+        val request = testRequest(
+            packageName = packageName,
+            appName = "Battery Guru",
+            versionName = "2.5.0.6",
+            versionCode = 999L
+        )
+        val result = runBlocking {
+            parser(
+                mapOf(
+                    downloaderUrl to downloaderPage(),
+                    oldVersionsUrl to oldVersionsPage()
+                )
+            ).findCandidates(request, CandidateOption.REQUESTED)
+        }
+        assertEquals(1, result.size)
+        assertEquals(999L, result.first().versionCode)
+        assertTrue(result.first().url.endsWith("vc=999&arch=arm64-v8a"))
+    }
+
+    @Test
+    fun requested_targetsAnArmv7Device() {
+        val request = testRequest(
+            packageName = packageName,
+            appName = "Battery Guru",
+            versionName = "2.5.0.6"
+        ).copy(supportedAbis = listOf("armeabi-v7a"))
+        val result = runBlocking {
+            parser(
+                mapOf(
+                    downloaderUrl to downloaderPage(),
+                    oldVersionsUrl to oldVersionsPage()
+                )
+            ).findCandidates(request, CandidateOption.REQUESTED)
+        }
+        assertEquals(1, result.size)
+        assertTrue(result.first().url.endsWith("vc=2506&arch=armeabi-v7a"))
+    }
+
+    @Test
+    fun requested_fallsBackToUniversalForNonArmDevices() {
+        val request = testRequest(
+            packageName = packageName,
+            appName = "Battery Guru",
+            versionName = "2.5.0.6"
+        ).copy(supportedAbis = listOf("x86_64"))
+        val result = runBlocking {
+            parser(
+                mapOf(
+                    downloaderUrl to downloaderPage(),
+                    oldVersionsUrl to oldVersionsPage()
+                )
+            ).findCandidates(request, CandidateOption.REQUESTED)
+        }
+        assertEquals(1, result.size)
+        assertTrue(result.first().url.endsWith("vc=2506&arch=universal"))
     }
 
     @Test

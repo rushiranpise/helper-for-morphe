@@ -57,4 +57,22 @@ class BrowserCaptureUrlTest {
         // Callers that know nothing else must keep getting a usable extension.
         assertEquals("apk", fileKindFromUrl("https://dw.uptodown.com/dwn/abc123"))
     }
+
+    @Test
+    fun `only APKCube and Evozi use the APKCube browser guard`() {
+        assertTrue(DownloadSource.APK_CUBE.isApkCubeBrowserFlow())
+        assertTrue(DownloadSource.EVOZI.isApkCubeBrowserFlow())
+        assertFalse(DownloadSource.APK_MIRROR.isApkCubeBrowserFlow())
+        assertFalse(DownloadSource.UPTODOWN.isApkCubeBrowserFlow())
+    }
+
+    @Test
+    fun `the APKCube host check rejects off-site prelanders`() {
+        assertTrue("https://apkcube.com/whatsapp/com.whatsapp/download".isApkCubeHostedUrl())
+        assertTrue("https://www.apkcube.com/whatsapp/com.whatsapp/download".isApkCubeHostedUrl())
+        assertTrue("https://icons.apkcube.com/com.whatsapp".isApkCubeHostedUrl())
+        assertFalse("https://apkcube.com.evil.example/download".isApkCubeHostedUrl())
+        assertFalse("https://s.shopee.com.my/8pnI7nf4Kp".isApkCubeHostedUrl())
+        assertFalse("not a url".isApkCubeHostedUrl())
+    }
 }
