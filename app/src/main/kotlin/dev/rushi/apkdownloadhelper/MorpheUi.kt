@@ -62,6 +62,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -122,6 +123,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -968,6 +970,23 @@ internal fun MorpheToggleSwitch(
     )
 }
 
+/**
+ * Shrink a single-line control label only as far as it needs to fit, never below
+ * [minFontSize]. The style's own size is the ceiling, so short labels keep their
+ * designed size and nothing grows beyond the theme's scale.
+ */
+internal fun fittedTextAutoSize(
+    maxFontSize: TextUnit,
+    minFontSize: TextUnit = 10.sp
+): TextAutoSize {
+    val ceiling = if (maxFontSize == TextUnit.Unspecified) 14.sp else maxFontSize
+    val floor = if (minFontSize.value > ceiling.value) ceiling else minFontSize
+    return TextAutoSize.StepBased(
+        minFontSize = floor,
+        maxFontSize = ceiling
+    )
+}
+
 /** One card of a [MorpheSelectorRow]. */
 internal data class MorpheSelectorOption(
     val label: String,
@@ -1040,6 +1059,7 @@ internal fun MorpheSelectorRow(
                     Text(
                         text = option.label,
                         style = labelStyle,
+                        autoSize = fittedTextAutoSize(labelStyle.fontSize),
                         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                         color = if (isSelected) {
                             MaterialTheme.colorScheme.onSurface
@@ -1113,13 +1133,15 @@ internal fun MorphePillButton(
                     modifier = Modifier.size(iconSize)
                 )
                 label?.let {
+                    val labelStyle = if (tall) {
+                        MaterialTheme.typography.labelLarge
+                    } else {
+                        MaterialTheme.typography.labelSmall
+                    }
                     Text(
                         text = it,
-                        style = if (tall) {
-                            MaterialTheme.typography.labelLarge
-                        } else {
-                            MaterialTheme.typography.labelSmall
-                        },
+                        style = labelStyle,
+                        autoSize = fittedTextAutoSize(labelStyle.fontSize),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -1396,9 +1418,11 @@ internal fun MorpheFilterChip(
         selected = selected,
         onClick = onClick,
         label = {
+            val labelStyle = MaterialTheme.typography.labelMedium
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelMedium,
+                style = labelStyle,
+                autoSize = fittedTextAutoSize(labelStyle.fontSize),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1541,6 +1565,7 @@ internal fun MorpheDialogButton(
     val shape = RoundedCornerShape(MorpheDefaults.CardCornerRadius)
     val border = BorderStroke(1.dp, borderColor)
     val contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+    val labelStyle = MaterialTheme.typography.labelLarge
     val content: @Composable RowScope.() -> Unit = {
         if (icon != null) {
             Icon(
@@ -1552,7 +1577,8 @@ internal fun MorpheDialogButton(
         }
         Text(
             text = text,
-            style = MaterialTheme.typography.labelLarge,
+            style = labelStyle,
+            autoSize = fittedTextAutoSize(labelStyle.fontSize),
             maxLines = 1,
             overflow = if (textSuffix == null) TextOverflow.Ellipsis else TextOverflow.Clip
         )
@@ -1560,7 +1586,8 @@ internal fun MorpheDialogButton(
             Spacer(Modifier.width(4.dp))
             Text(
                 text = textSuffix,
-                style = MaterialTheme.typography.labelLarge,
+                style = labelStyle,
+                autoSize = fittedTextAutoSize(labelStyle.fontSize),
                 maxLines = 1,
                 overflow = TextOverflow.Clip,
                 modifier = Modifier.weight(1f, fill = false)
