@@ -19,13 +19,23 @@ internal enum class ApkMirrorPage { VARIANT, RELEASE }
 private const val APKMIRROR_HOST = "www.apkmirror.com"
 private const val RESOLVER_HOST = "api.morphe.software"
 
-/** `pkg~version~abi`, the query form Morphe's own download dialog uses. */
+/**
+ * `pkg~version~abi` plus the build code when the request names exactly one.
+ *
+ * Morphe added the build code (and an optional form factor after it) so the resolver
+ * can pick one APKMirror variant instead of a release page. The helper has no form
+ * factor in the intent, and a request with several candidate build codes cannot name
+ * one safely, so those requests keep the shorter three-part form.
+ */
 internal fun morpheResolveQuery(request: HelperRequest): String {
     val version = request.requestedVersionNames.firstOrNull()?.takeIf(String::isNotBlank)
         ?: request.versionName?.trim()?.takeIf(String::isNotBlank)
         ?: "any"
     val abi = request.availableAbis.firstOrNull()?.takeIf(String::isNotBlank) ?: "arm64-v8a"
-    return "${request.packageName}~$version~$abi"
+    val parts = mutableListOf(request.packageName, version, abi)
+    val buildCode = request.versionCode ?: request.versionCodes.singleOrNull()
+    if (buildCode != null && buildCode > 0L) parts += buildCode.toString()
+    return parts.joinToString("~")
 }
 
 /** The host of [url], lowercased, or null when it cannot be read. */

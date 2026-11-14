@@ -186,21 +186,23 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
                         releaseUrl,
                         appPageUrl = apkMirrorAppPageOfReleaseUrl(releaseUrl)
                     )
-                listOfNotNull(
-                    runCatching {
-                        apkMirrorDirectCandidateFromReleaseUrl(
-                            request = request,
-                            // A variant page is treated as the page to read: the variant
-                            // page carries its own download button.
-                            releaseUrl = resolved,
-                            versionName = version,
-                            option = option,
-                            variant = null
-                        )
-                    }
-                        .onFailure { Log.w(TAG, "Morphe resolver variant page failed: $resolved", it) }
-                        .getOrNull()
-                ).takeIf { it.isNotEmpty() }
+                val direct = runCatching {
+                    apkMirrorDirectCandidateFromReleaseUrl(
+                        request = request,
+                        // A variant page is treated as the page to read: the variant
+                        // page carries its own download button.
+                        releaseUrl = resolved,
+                        versionName = version,
+                        option = option,
+                        variant = null
+                    )
+                }
+                    .onFailure { Log.w(TAG, "Morphe resolver variant page failed: $resolved", it) }
+                    .getOrNull()
+                // APKMirror now answers the helper's HTTP client with a Cloudflare
+                // challenge. Keep the exact page the resolver named and open it in
+                // the in-app browser instead of discarding the shortcut.
+                listOf(direct ?: apkMirrorResolvedWebCandidate(request, resolved, version, option))
             }
 
             ApkMirrorPage.RELEASE -> {
@@ -209,7 +211,7 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
                         resolved,
                         appPageUrl = apkMirrorAppPageOfReleaseUrl(resolved)
                     )
-                runCatching {
+                val candidates = runCatching {
                     apkMirrorCandidatesFromReleaseUrl(
                         request = request,
                         releaseUrl = resolved,
@@ -219,12 +221,37 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
                 }
                     .onFailure { Log.w(TAG, "Morphe resolver release page failed: $resolved", it) }
                     .getOrNull()
-                    ?.takeIf { it.isNotEmpty() }
+                    .orEmpty()
+                candidates.ifEmpty {
+                    listOf(apkMirrorResolvedWebCandidate(request, resolved, version, option))
+                }
             }
 
             null -> null
         }
     }
+
+    /** The exact APKMirror page the resolver named, offered to the in-app browser. */
+    private fun apkMirrorResolvedWebCandidate(
+        request: HelperRequest,
+        pageUrl: String,
+        versionName: String?,
+        option: CandidateOption
+    ): DownloadCandidate = DownloadCandidate(
+        source = DownloadSource.APK_MIRROR,
+        name = request.appName,
+        packageName = request.packageName,
+        versionName = versionName,
+        versionCode = request.versionCode ?: request.versionCodes.singleOrNull(),
+        url = pageUrl,
+        fileKind = "web",
+        option = option,
+        directDownload = false,
+        versionStatus = request.versionStatus(versionName, null),
+        formatMatches = true,
+        note = APKMIRROR_BROWSER_NOTE,
+        captchaUrl = pageUrl
+    )
 
     private fun apkMirrorLatestWebCandidate(
         request: HelperRequest,
