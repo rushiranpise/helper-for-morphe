@@ -2,6 +2,8 @@ package dev.rushi.apkdownloadhelper
 
 import java.net.URLEncoder
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -180,13 +182,29 @@ internal object MorpheResolver {
         .build()
 
     private val cache = ResolvedLinkCache()
+    private val inFlight = ConcurrentHashMap<String, FutureTask<String?>>()
 
     fun resolve(request: HelperRequest): String? {
         val query = morpheResolveQuery(request)
         cache.get(query)?.let { return it }
-        val resolved = resolveUncached(query) ?: return null
-        cache.put(query, resolved)
-        return resolved
+
+        // Sources can resolve in parallel. Coalesce the same query so they wait
+        // for one resolver chain instead of each starting their own.
+        val task = FutureTask { resolveUncached(query) }
+        val running = inFlight.putIfAbsent(query, task)
+        if (running != null) {
+            return runCatching { running.get() }.getOrNull()
+        }
+        return try {
+            task.run()
+            val resolved = task.get()
+            if (resolved != null) cache.put(query, resolved)
+            resolved
+        } catch (error: Exception) {
+            null
+        } finally {
+            inFlight.remove(query, task)
+        }
     }
 
     private fun resolveUncached(query: String): String? = runCatching {

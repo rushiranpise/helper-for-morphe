@@ -77,6 +77,20 @@ class BrowserCaptureUrlTest {
     }
 
     @Test
+    fun `build mismatch navigation is recognised`() {
+        assertTrue("morphe-helper://build-mismatch?code=123".isBrowserBuildMismatchUrl())
+        assertFalse("morphe-helper://download?code=123".isBrowserBuildMismatchUrl())
+        assertEquals(
+            "Download page is build 123, expected 456.",
+            "123".browserBuildMismatchMessage("456")
+        )
+        assertEquals(
+            "Download page is build unknown, expected the requested build.",
+            (null as String?).browserBuildMismatchMessage(null)
+        )
+    }
+
+    @Test
     fun `challenge probe results are classified`() {
         assertTrue("\"challenge\"".reportsBrowserChallenge())
         assertFalse("\"ready\"".reportsBrowserChallenge())

@@ -550,7 +550,8 @@ class MainActivity : ComponentActivity() {
                         requiredAppName = request?.appName,
                         requiredVersion = request?.requestedVersionName,
                         onClose = ::closeCaptchaBrowser,
-                        onDownloadCaptured = ::onBrowserDownloadCaptured
+                        onDownloadCaptured = ::onBrowserDownloadCaptured,
+                        onBuildMismatch = ::onBrowserBuildMismatch
                     )
                 } else {
                     HelperScreen(
@@ -1700,6 +1701,18 @@ class MainActivity : ComponentActivity() {
 
     private fun closeCaptchaBrowser() {
         captchaBrowser = null
+    }
+
+    /**
+     * The browser rejected a page whose build does not match the request.
+     * Mark the wrapper source as failed, not the provider whose page it was.
+     */
+    private fun onBrowserBuildMismatch(code: String?) {
+        val candidate = captchaBrowser ?: return
+        captchaBrowser = null
+        val message = code.browserBuildMismatchMessage(request?.versionCodeSummary)
+        appendLog(message, LogLevel.Warning)
+        showFailure(message, candidate.source, candidate.option)
     }
 
     private fun onBrowserDownloadCaptured(capture: BrowserDownloadCapture) {
@@ -2971,7 +2984,8 @@ private fun CaptchaBrowserScreen(
     requiredAppName: String?,
     requiredVersion: String?,
     onClose: () -> Unit,
-    onDownloadCaptured: (BrowserDownloadCapture) -> Unit
+    onDownloadCaptured: (BrowserDownloadCapture) -> Unit,
+    onBuildMismatch: (String?) -> Unit
 ) {
     val context = LocalContext.current
     var progress by remember { mutableIntStateOf(0) }
@@ -3004,6 +3018,12 @@ private fun CaptchaBrowserScreen(
             addJavascriptInterface(bridge, CAPTCHA_BRIDGE_NAME)
             fun handleBrowserNavigation(view: WebView?, rawUrl: String?): Boolean {
                 val url = rawUrl ?: return false
+                if (url.isBrowserBuildMismatchUrl()) {
+                    onBuildMismatch(
+                        runCatching { Uri.parse(url).getQueryParameter("code") }.getOrNull()
+                    )
+                    return true
+                }
                 if (url.isCapturableDownload()) {
                     val referer = view?.url ?: view?.originalUrl ?: browserPageUrl.value
                     onDownloadCaptured(
@@ -3645,7 +3665,14 @@ private fun apkMirrorBrowserScript(
         function pickDownload(){
             if(codes.length){
                 var pc=pageCode();
-                if(pc>0&&codes.indexOf(pc)<0)return null;
+                if(pc>0&&codes.indexOf(pc)<0){
+                    if(!window.__mhBuildMismatch){
+                        window.__mhBuildMismatch=true;
+                        location.href='morphe-helper://build-mismatch?code='
+                            +encodeURIComponent(pc);
+                    }
+                    return null;
+                }
             }
             var ds=document.querySelectorAll('a,button');
             for(var d=0;d<ds.length;d++){
@@ -3851,6 +3878,14 @@ internal fun String.isApkPureFileUrl(): Boolean {
 /** A URL the in-app browser should treat as the file it was opened to capture. */
 internal fun String.isCapturableDownload(): Boolean =
     looksLikeApkDownload() || isUptodownFileUrl() || isApkMirrorFileUrl() || isApkPureFileUrl()
+
+/** Navigation sent by a page script when its build code is not the requested one. */
+internal fun String.isBrowserBuildMismatchUrl(): Boolean =
+    startsWith("morphe-helper://build-mismatch", ignoreCase = true)
+
+internal fun String?.browserBuildMismatchMessage(expected: String?): String =
+    "Download page is build ${this?.takeIf(String::isNotBlank) ?: "unknown"}, " +
+        "expected ${expected?.takeIf(String::isNotBlank) ?: "the requested build"}."
 
 /** APKCube and Evozi share the APKCube catalogue and its browser flow. */
 internal fun DownloadSource.isApkCubeBrowserFlow(): Boolean =
