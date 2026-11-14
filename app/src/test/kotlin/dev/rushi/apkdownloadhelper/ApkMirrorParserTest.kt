@@ -664,4 +664,35 @@ class ApkMirrorParserTest {
         assertTrue(compareVersionNames(null, "1.0.0") < 0)
         assertTrue(compareVersionNames("1.0.0", null) > 0)
     }
+
+    @Test
+    fun findCandidatesFromResolvedUrl_readsTheVariantPageTheResolverNamed() = runBlocking {
+        val releaseUrl = "https://www.apkmirror.com/apk/example-org/example-app/2-0-0-release/"
+        val variantUrl = "$releaseUrl/example-app-2-0-0-2-android-apk-download/"
+        val finalUrl = "https://www.apkmirror.com/download.php?id=200&key=b"
+        val fetcher = FakeSourceTextFetcher(
+            pages = mapOf(
+                variantUrl to
+                    """<html><body>
+                         <table>
+                           <tr><th>Version</th><td>2.0.0 (200)</td></tr>
+                         </table>
+                         <a class="downloadButton" href="$variantUrl/download/">Download</a>
+                       </body></html>""",
+                "$variantUrl/download/" to
+                    """<html><body><a id="download-link" href="$finalUrl"></a></body></html>"""
+            )
+        )
+        val parser = ApkMirrorParser(parserContext(fetcher))
+
+        val candidate = parser.findCandidatesFromResolvedUrl(
+            request = testRequest(packageName = packageName, versionName = "2.0.0", versionCode = 200L),
+            url = variantUrl,
+            option = CandidateOption.REQUESTED
+        )?.single()
+
+        assertEquals(finalUrl, candidate?.url)
+        assertEquals(200L, candidate?.versionCode)
+        assertEquals(DownloadSource.APK_MIRROR, candidate?.source)
+    }
 }

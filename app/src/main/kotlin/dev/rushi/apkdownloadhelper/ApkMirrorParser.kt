@@ -175,6 +175,20 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         option: CandidateOption
     ): List<DownloadCandidate>? {
         val resolved = ctx.resolveViaMorphe?.invoke(request) ?: return null
+        return apkMirrorCandidatesFromResolvedUrl(request, resolved, option)
+    }
+
+    override suspend fun findCandidatesFromResolvedUrl(
+        request: HelperRequest,
+        url: String,
+        option: CandidateOption
+    ): List<DownloadCandidate>? = apkMirrorCandidatesFromResolvedUrl(request, url, option)
+
+    private fun apkMirrorCandidatesFromResolvedUrl(
+        request: HelperRequest,
+        resolved: String,
+        option: CandidateOption
+    ): List<DownloadCandidate>? {
         if (resolved.isBlank()) return null
 
         return when (apkMirrorPageOf(resolved)) {

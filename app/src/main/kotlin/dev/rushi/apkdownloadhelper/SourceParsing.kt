@@ -198,6 +198,19 @@ internal interface ApkSourceParser {
         option: CandidateOption
     ): List<DownloadCandidate>
 
+    /**
+     * Continue from a page the Morphe resolver named for this source.
+     *
+     * The resolver-backed source delegates to the matching parser instead of
+     * duplicating every site walk. Returning null means this parser cannot continue
+     * from that URL, and the caller falls back to the in-app browser.
+     */
+    suspend fun findCandidatesFromResolvedUrl(
+        request: HelperRequest,
+        url: String,
+        option: CandidateOption
+    ): List<DownloadCandidate>? = null
+
     /** Web search/info URL for manual mode; null when the source has no web page. */
     fun searchUrl(packageName: String): String? = null
 

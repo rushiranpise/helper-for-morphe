@@ -18,6 +18,47 @@ internal enum class ApkMirrorPage { VARIANT, RELEASE }
 
 private const val APKMIRROR_HOST = "www.apkmirror.com"
 private const val RESOLVER_HOST = "api.morphe.software"
+private const val RESOLVED_LINK_TTL_MILLIS = 10L * 60L * 1000L
+private const val RESOLVED_LINK_CACHE_SIZE = 64
+
+/**
+ * Small in-memory cache for resolver answers.
+ *
+ * Every source asks the same question for one request, and a fallback source asks it
+ * again after the first source fails. The TTL stays short because a resolver answer can
+ * be a signed CDN link whose signature expires.
+ */
+internal class ResolvedLinkCache(
+    private val ttlMillis: Long = RESOLVED_LINK_TTL_MILLIS,
+    private val maxEntries: Int = RESOLVED_LINK_CACHE_SIZE
+) {
+    private data class Entry(val url: String, val storedAt: Long)
+
+    // Access order makes the first key the least recently used one, so eviction does
+    // not throw away a link that a later source is about to ask for again.
+    private val entries = LinkedHashMap<String, Entry>(16, 0.75f, true)
+
+    @Synchronized
+    fun get(key: String, now: Long = System.currentTimeMillis()): String? {
+        val entry = entries[key] ?: return null
+        if (now - entry.storedAt > ttlMillis) {
+            entries.remove(key)
+            return null
+        }
+        return entry.url
+    }
+
+    @Synchronized
+    fun put(key: String, url: String, now: Long = System.currentTimeMillis()) {
+        entries[key] = Entry(url, now)
+        while (entries.size > maxEntries) {
+            entries.remove(entries.keys.first())
+        }
+    }
+
+    @Synchronized
+    fun clear() = entries.clear()
+}
 
 /**
  * `pkg~version~abi` plus the build code when the request names exactly one.
@@ -138,8 +179,18 @@ internal object MorpheResolver {
         .readTimeout(8, TimeUnit.SECONDS)
         .build()
 
-    fun resolve(request: HelperRequest): String? = runCatching {
-        var url = "$API/v2/web-search/" + URLEncoder.encode(morpheResolveQuery(request), "UTF-8")
+    private val cache = ResolvedLinkCache()
+
+    fun resolve(request: HelperRequest): String? {
+        val query = morpheResolveQuery(request)
+        cache.get(query)?.let { return it }
+        val resolved = resolveUncached(query) ?: return null
+        cache.put(query, resolved)
+        return resolved
+    }
+
+    private fun resolveUncached(query: String): String? = runCatching {
+        var url = "$API/v2/web-search/" + URLEncoder.encode(query, "UTF-8")
             .replace("+", "%20")
             .replace("%7E", "~")
 

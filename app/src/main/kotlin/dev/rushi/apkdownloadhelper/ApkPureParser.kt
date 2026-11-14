@@ -42,6 +42,87 @@ internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourcePa
     override fun latestFallbackCandidate(request: HelperRequest): DownloadCandidate? =
         apkPureBrowserCandidate(request, CandidateOption.LATEST)
 
+    /**
+     * Continue from the APKPure page the resolver named. The page usually names the
+     * exact build, so the normal APKPure download-page reader can turn it into a file
+     * link without walking the search and versions pages again.
+     */
+    override suspend fun findCandidatesFromResolvedUrl(
+        request: HelperRequest,
+        url: String,
+        option: CandidateOption
+    ): List<DownloadCandidate>? {
+        val uri = runCatching { java.net.URI(url) }.getOrNull() ?: return null
+        val host = uri.host?.lowercase(Locale.US).orEmpty()
+        if (host != "apkpure.com" && !host.endsWith(".apkpure.com")) return null
+
+        val segments = uri.path.orEmpty().trim('/').split('/').filter(String::isNotBlank)
+        val appPageUrl = segments.take(2)
+            .takeIf { it.size == 2 }
+            ?.joinToString("/")
+            ?.let { "https://$host/$it" }
+        val downloadPageUrl = when {
+            segments.size >= 3 &&
+                (segments[2].equals("downloading", ignoreCase = true) ||
+                    segments[2].equals("download", ignoreCase = true)) -> url
+            appPageUrl != null -> apkPureDownloadingUrl(appPageUrl, request.requestedVersionName)
+            else -> null
+        }
+
+        if (downloadPageUrl != null) {
+            val versionName = request.requestedVersionNames.firstOrNull()
+                .takeIf { option == CandidateOption.REQUESTED }
+            val versionCode = (request.versionCode ?: request.versionCodes.singleOrNull())
+                .takeIf { option == CandidateOption.REQUESTED }
+            val direct = runCatching {
+                apkPureCandidateFromDownloadPage(
+                    request = request,
+                    appPageUrl = appPageUrl ?: url,
+                    downloadPageUrl = downloadPageUrl,
+                    versionName = versionName,
+                    versionCode = versionCode,
+                    option = option
+                )
+            }
+                .onFailure { Log.w(TAG, "APKPure resolver page failed: $url", it) }
+                .getOrNull()
+            if (direct != null &&
+                (option != CandidateOption.REQUESTED ||
+                    request.matchesRequestedVersionStrict(direct.versionName, direct.versionCode))
+            ) {
+                return listOf(direct)
+            }
+        }
+
+        return listOf(apkPureResolvedBrowserCandidate(request, url, option))
+    }
+
+    private fun apkPureResolvedBrowserCandidate(
+        request: HelperRequest,
+        pageUrl: String,
+        option: CandidateOption
+    ): DownloadCandidate {
+        val versionName = request.requestedVersionNames.firstOrNull()
+            .takeIf { option == CandidateOption.REQUESTED }
+        val versionCode = (request.versionCode ?: request.versionCodes.singleOrNull())
+            .takeIf { option == CandidateOption.REQUESTED }
+        return DownloadCandidate(
+            source = DownloadSource.APK_PURE,
+            name = request.appName,
+            packageName = request.packageName,
+            versionName = versionName,
+            versionCode = versionCode,
+            url = pageUrl,
+            fileKind = "web",
+            option = option,
+            directDownload = false,
+            versionStatus = request.versionStatus(versionName, versionCode),
+            formatMatches = true,
+            note = APKPURE_BROWSER_NOTE,
+            captchaUrl = pageUrl
+        )
+    }
+
     override suspend fun resolveHistory(request: HelperRequest): List<DownloadCandidate> {
         val appPageUrl = runCatching { apkPureAppPageUrl(request) }
             .onFailure { Log.w(TAG, "APKPure app page resolve failed", it) }

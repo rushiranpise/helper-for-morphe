@@ -391,16 +391,35 @@ class MainActivity : ComponentActivity() {
                 ).execute().use { response -> response.header("Location") }
             }
         )
+        val apkMirrorParser = ApkMirrorParser(parserContext)
+        val uptodownParser = UptodownParser(parserContext)
+        val apkPureParser = ApkPureParser(parserContext)
+        val apkComboParser = ApkComboParser(parserContext)
+        val apkCubeParser = ApkCubeParser(parserContext)
+        val aptoideParser = AptoideParser(parserContext)
+        val evoziParser = EvoziParser(parserContext)
         listOf(
-            ApkMirrorParser(parserContext),
-            UptodownParser(parserContext),
-            ApkPureParser(parserContext),
-            ApkComboParser(parserContext),
-            ApkCubeParser(parserContext),
-            AptoideParser(parserContext),
-            EvoziParser(parserContext),
+            apkMirrorParser,
+            uptodownParser,
+            apkPureParser,
+            apkComboParser,
+            apkCubeParser,
+            aptoideParser,
+            evoziParser,
             Mi9Parser(),
             ApkDownloaderPagesParser(),
+            MorpheLinkParser(
+                ctx = parserContext,
+                delegates = listOf(
+                    apkMirrorParser,
+                    uptodownParser,
+                    apkPureParser,
+                    apkComboParser,
+                    apkCubeParser,
+                    aptoideParser,
+                    evoziParser
+                )
+            ),
             AuroraParser(parserContext)
         ).associateBy { it.source }
     }
@@ -3023,7 +3042,7 @@ private fun CaptchaBrowserScreen(
                     super.onPageFinished(view, url)
                     browserPageUrl.value = url ?: browserPageUrl.value
                     view?.evaluateJavascript(CAPTCHA_CAPTURE_JS, null)
-                    when (candidate.source) {
+                    when (candidate.viaSource ?: candidate.source) {
                         DownloadSource.APK_MIRROR -> view?.evaluateJavascript(
                             apkMirrorBrowserScript(
                                 candidate = candidate,
@@ -3716,7 +3735,7 @@ private fun String.urlDecoded(): String = runCatching {
 }.getOrDefault(this)
 
 /** True for URLs that point at an APK-family file (extension or filename hint). */
-private fun String.looksLikeApkDownload(): Boolean {
+internal fun String.looksLikeApkDownload(): Boolean {
     val decoded = urlDecoded().lowercase(Locale.US)
     return Regex("""\.(apk|apks|apkm|xapk)(\?|#|$)""").containsMatchIn(decoded) ||
         Regex("""filename[^.]*\.(apk|apks|apkm|xapk)""").containsMatchIn(decoded)
@@ -8222,6 +8241,7 @@ private fun DownloadSource.brand(): SourceBrand = when (this) {
     DownloadSource.EVOZI -> SourceBrand(resId = R.drawable.ic_src_evozi)
     DownloadSource.MI9 -> SourceBrand(resId = R.drawable.ic_src_mi9)
     DownloadSource.APK_DOWNLOADER -> SourceBrand(resId = R.drawable.ic_src_apkdownloader)
+    DownloadSource.MORPHE_LINK -> SourceBrand(resId = R.drawable.ic_src_morphe)
 }
 
 @Composable
@@ -10437,6 +10457,7 @@ internal data class HelperRequest(
             DownloadSource.EVOZI -> listOf("apkcube.com", "evozi.com")
             DownloadSource.MI9 -> listOf("mi9.com")
             DownloadSource.APK_DOWNLOADER -> listOf("apkdownloader.pages.dev")
+            DownloadSource.MORPHE_LINK -> listOf("morphe.software")
         }
 
         return (sourceHintUrls + fallbackWebUrl).distinct().filter { url ->
@@ -10673,7 +10694,11 @@ internal data class DownloadCandidate(
     // only a real browser can pass. The card then offers a "Solve captcha in
     // app" action that opens this URL in an embedded WebView and captures the
     // download the page produces.
-    val captchaUrl: String? = null
+    val captchaUrl: String? = null,
+    // The source whose page a wrapper such as Morphe Link resolved. It keeps the
+    // candidate branded as the wrapper while still selecting that source's browser
+    // script for a captcha page.
+    val viaSource: DownloadSource? = null
 ) {
     val sortIndex: Int get() = source.sortIndex
 
@@ -10857,8 +10882,9 @@ internal enum class DownloadSource(
     EVOZI("Evozi", 6),
     MI9("Mi9", 7),
     APK_DOWNLOADER("APK Downloader", 8),
-    AURORA("Aurora", 9, supportsManualArtifactPicker = false),
-    PLAY("Play", 10, supportsManualArtifactPicker = false)
+    MORPHE_LINK("Morphe Link", 9, supportsManualArtifactPicker = false),
+    AURORA("Aurora", 10, supportsManualArtifactPicker = false),
+    PLAY("Play", 11, supportsManualArtifactPicker = false)
 }
 
 internal fun DownloadSource.searchDomain(): String? = when (this) {
@@ -10871,6 +10897,7 @@ internal fun DownloadSource.searchDomain(): String? = when (this) {
     DownloadSource.EVOZI -> "apkcube.com"
     DownloadSource.MI9 -> "mi9.com"
     DownloadSource.APK_DOWNLOADER -> "apkdownloader.pages.dev"
+    DownloadSource.MORPHE_LINK -> null
     DownloadSource.PLAY -> "play.google.com"
     DownloadSource.AURORA -> null
 }

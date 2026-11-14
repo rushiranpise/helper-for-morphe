@@ -20,6 +20,19 @@ internal class ApkComboParser(private val ctx: SourceParserContext) : ApkSourceP
 
     override fun searchUrl(packageName: String): String? = apkComboSearchUrl(packageName)
 
+    override suspend fun findCandidatesFromResolvedUrl(
+        request: HelperRequest,
+        url: String,
+        option: CandidateOption
+    ): List<DownloadCandidate>? {
+        val host = urlHostOf(url) ?: return null
+        if (host != "apkcombo.com" && !host.endsWith(".apkcombo.com")) return null
+        return runCatching { apkComboCandidatesFromPage(request, url, option) }
+            .onFailure { android.util.Log.w(TAG, "APKCombo resolver page failed: $url", it) }
+            .getOrNull()
+            ?.takeIf(List<DownloadCandidate>::isNotEmpty)
+    }
+
     override suspend fun resolveHistory(request: HelperRequest): List<DownloadCandidate> {
         val latestPageUrl = apkComboDownloadPageUrls(request).firstOrNull() ?: return emptyList()
         val oldVersionsUrls = listOf(

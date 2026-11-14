@@ -126,6 +126,21 @@ internal class UptodownParser(private val ctx: SourceParserContext) : ApkSourceP
     ): List<DownloadCandidate>? {
         if (option == CandidateOption.MANUAL) return null
         val resolved = ctx.resolveViaMorphe?.invoke(request) ?: return null
+        return uptodownCandidatesFromResolvedUrl(request, resolved, option)
+    }
+
+    override suspend fun findCandidatesFromResolvedUrl(
+        request: HelperRequest,
+        url: String,
+        option: CandidateOption
+    ): List<DownloadCandidate>? = uptodownCandidatesFromResolvedUrl(request, url, option)
+
+    private fun uptodownCandidatesFromResolvedUrl(
+        request: HelperRequest,
+        resolved: String,
+        option: CandidateOption
+    ): List<DownloadCandidate>? {
+        if (option == CandidateOption.MANUAL) return null
         val page = uptodownResolvedPageOf(resolved) ?: return null
         val doc = runCatching { fetchDocument(page.url) }
             .onFailure { Log.w(TAG, "Uptodown resolver page failed: $resolved", it) }
