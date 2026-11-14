@@ -13,6 +13,9 @@ private val APKMIRROR_EDITION_SLUG_REGEX = Regex(
     RegexOption.IGNORE_CASE
 )
 
+private const val APKMIRROR_BROWSER_NOTE =
+    "Complete any browser check, then choose the file on the APKMirror page."
+
 internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSourceParser {
     override val source: DownloadSource = DownloadSource.APK_MIRROR
 
@@ -111,19 +114,24 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
             ?.firstOrNull { it.directDownload }
     }
 
-    private fun apkMirrorRequested(request: HelperRequest) = DownloadCandidate(
-        source = DownloadSource.APK_MIRROR,
-        name = request.appName,
-        packageName = request.packageName,
-        versionName = request.versionName,
-        versionCode = request.versionCode ?: request.versionCodes.singleOrNull(),
-        url = request.sourceHintUrlsFor(DownloadSource.APK_MIRROR).firstOrNull() ?: request.fallbackWebUrl,
-        fileKind = request.requestedFormatLabel,
-        option = CandidateOption.REQUESTED,
-        directDownload = false,
-        versionStatus = VersionStatus.REQUESTED,
-        formatMatches = true
-    )
+    private fun apkMirrorRequested(request: HelperRequest): DownloadCandidate {
+        val browserUrl = apkMirrorBrowserUrl(request)
+        return DownloadCandidate(
+            source = DownloadSource.APK_MIRROR,
+            name = request.appName,
+            packageName = request.packageName,
+            versionName = request.versionName,
+            versionCode = request.versionCode ?: request.versionCodes.singleOrNull(),
+            url = browserUrl,
+            fileKind = request.requestedFormatLabel,
+            option = CandidateOption.REQUESTED,
+            directDownload = false,
+            versionStatus = VersionStatus.REQUESTED,
+            formatMatches = true,
+            note = APKMIRROR_BROWSER_NOTE,
+            captchaUrl = browserUrl
+        )
+    }
 
     private fun apkMirrorLatest(request: HelperRequest): DownloadCandidate =
         apkMirrorLatestWebCandidate(request, runCatching {
@@ -222,19 +230,21 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         request: HelperRequest,
         latestInfo: ApkMirrorLatestInfo?
     ): DownloadCandidate {
-        val searchUrl = apkMirrorPackageSearchUrl(request.packageName)
+        val browserUrl = latestInfo?.openUrl ?: apkMirrorPackageSearchUrl(request.packageName)
         return DownloadCandidate(
             source = DownloadSource.APK_MIRROR,
             name = request.appName,
             packageName = request.packageName,
             versionName = latestInfo?.versionName,
             versionCode = null,
-            url = latestInfo?.openUrl ?: searchUrl,
+            url = browserUrl,
             fileKind = "web",
             option = CandidateOption.LATEST,
             directDownload = false,
             versionStatus = VersionStatus.LATEST,
-            formatMatches = true
+            formatMatches = true,
+            note = APKMIRROR_BROWSER_NOTE,
+            captchaUrl = browserUrl
         )
     }
 
@@ -696,8 +706,15 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         directDownload = false,
         versionStatus = request.versionStatus(versionName ?: apkMirrorVersionFromReleaseUrl(releaseUrl), null),
         formatMatches = true,
-        note = note
+        note = note,
+        captchaUrl = releaseUrl
     )
+
+    private fun apkMirrorBrowserUrl(request: HelperRequest): String =
+        request.sourceHintUrlsFor(DownloadSource.APK_MIRROR)
+            .firstOrNull { it.contains("apkmirror.com", ignoreCase = true) }
+            ?.let(::apkMirrorAbsoluteUrl)
+            ?: apkMirrorPackageSearchUrl(request.packageName)
 
     /**
      * The release page's variant rows, numbered in the order it lists them.

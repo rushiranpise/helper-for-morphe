@@ -6,6 +6,9 @@ import java.net.URLEncoder
 import java.util.Locale
 import org.jsoup.nodes.Document
 
+private const val APKPURE_BROWSER_NOTE =
+    "APKPure did not return a direct file. Use the in-app browser to download it."
+
 internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourceParser {
     override val source: DownloadSource = DownloadSource.APK_PURE
 
@@ -32,6 +35,12 @@ internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourcePa
     }
 
     override fun searchUrl(packageName: String): String? = apkPureInfoUrl(packageName)
+
+    override fun requestedFallbackCandidate(request: HelperRequest): DownloadCandidate? =
+        apkPureBrowserCandidate(request, CandidateOption.REQUESTED)
+
+    override fun latestFallbackCandidate(request: HelperRequest): DownloadCandidate? =
+        apkPureBrowserCandidate(request, CandidateOption.LATEST)
 
     override suspend fun resolveHistory(request: HelperRequest): List<DownloadCandidate> {
         val appPageUrl = runCatching { apkPureAppPageUrl(request) }
@@ -267,6 +276,58 @@ internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourcePa
     private fun apkPureInfoUrl(packageName: String): String =
         "https://apkpure.com/apk-info/$packageName"
 
+    /**
+     * The last resort after APKPure's direct endpoint, update API, and web pages
+     * all fail: open APKPure in the in-app browser and let its own download
+     * button produce the file.
+     */
+    private fun apkPureBrowserCandidate(
+        request: HelperRequest,
+        option: CandidateOption
+    ): DownloadCandidate? {
+        // APKPure's browser download is an APK or its XAPK bundle. A request
+        // for split archives can still use the same page when split archives
+        // are allowed, as in the reference WebView flow.
+        if (!request.acceptsFormat("apk") &&
+            !request.acceptsFormat("xapk") &&
+            !request.allowSplitArchive
+        ) {
+            return null
+        }
+
+        val browserUrl = request.sourceHintUrlsFor(DownloadSource.APK_PURE)
+            .firstOrNull { it.contains("apkpure.com", ignoreCase = true) }
+            ?.normalizedHttpUrlOrNull()
+            ?: apkPureSearchUrl(request.packageName)
+        val versionName = request.requestedVersionNames.firstOrNull()
+            .takeIf { option == CandidateOption.REQUESTED }
+        val versionCode = (request.versionCode ?: request.versionCodes.singleOrNull())
+            .takeIf { option == CandidateOption.REQUESTED }
+
+        return DownloadCandidate(
+            source = DownloadSource.APK_PURE,
+            name = request.appName,
+            packageName = request.packageName,
+            versionName = versionName,
+            versionCode = versionCode,
+            url = browserUrl,
+            fileKind = "web",
+            option = option,
+            directDownload = false,
+            versionStatus = if (option == CandidateOption.REQUESTED) {
+                VersionStatus.REQUESTED
+            } else {
+                VersionStatus.LATEST
+            },
+            formatMatches = true,
+            note = APKPURE_BROWSER_NOTE,
+            captchaUrl = browserUrl
+        )
+    }
+
+    private fun apkPureSearchUrl(packageName: String): String =
+        "https://apkpure.com/search?q=${URLEncoder.encode(packageName, "UTF-8")}"
+
     private fun apkPureAppPageUrl(request: HelperRequest): String? {
         val doc = fetchDocument(apkPureInfoUrl(request.packageName))
         return doc.selectFirst("link[rel=canonical]")
@@ -331,7 +392,9 @@ internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourcePa
             option = CandidateOption.REQUESTED,
             directDownload = false,
             versionStatus = request.versionStatus(versionName, versionCode),
-            formatMatches = request.acceptsFormat(fileKind)
+            formatMatches = request.acceptsFormat(fileKind),
+            note = APKPURE_BROWSER_NOTE,
+            captchaUrl = versionPageUrl
         )
     }
 
@@ -364,7 +427,9 @@ internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourcePa
             option = CandidateOption.REQUESTED,
             directDownload = false,
             versionStatus = request.versionStatus(entry.versionName, entry.versionCode),
-            formatMatches = request.acceptsFormat(entry.fileKind)
+            formatMatches = request.acceptsFormat(entry.fileKind),
+            note = APKPURE_BROWSER_NOTE,
+            captchaUrl = entry.downloadPageUrl
         )
     }
 

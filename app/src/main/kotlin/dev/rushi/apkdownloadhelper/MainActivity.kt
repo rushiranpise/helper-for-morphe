@@ -513,6 +513,7 @@ class MainActivity : ComponentActivity() {
                 if (captcha != null) {
                     CaptchaBrowserScreen(
                         candidate = captcha,
+                        request = request,
                         requiredAppName = request?.appName,
                         requiredVersion = request?.requestedVersionName,
                         onClose = ::closeCaptchaBrowser,
@@ -1133,7 +1134,19 @@ class MainActivity : ComponentActivity() {
         val manual = manualCandidates(request).firstOrNull { it.source == source } ?: return null
         val requestedVersionName = request.requestedVersionNames.firstOrNull()
         val requestedVersionCode = request.versionCode ?: request.versionCodes.singleOrNull()
-        val url = when (option) {
+        // Keep the browser on the source itself when its search page is the
+        // thing that hit Cloudflare, instead of sending the user to a Google
+        // result for the app.
+        val browserUrl = when (source) {
+            DownloadSource.APK_MIRROR -> request.sourceHintUrlsFor(source)
+                .firstOrNull { it.contains("apkmirror.com", ignoreCase = true) }
+                ?: parsers[source]?.searchUrl(request.packageName)
+            DownloadSource.APK_PURE -> request.sourceHintUrlsFor(source)
+                .firstOrNull { it.contains("apkpure.com", ignoreCase = true) }
+                ?: parsers[source]?.searchUrl(request.packageName)
+            else -> null
+        }
+        val url = browserUrl ?: when (option) {
             CandidateOption.REQUESTED -> request.sourceHintUrlsFor(source).firstOrNull()
                 ?: sourceVersionSearchUrl(request, source)
                 ?: manual.url
@@ -1152,7 +1165,8 @@ class MainActivity : ComponentActivity() {
             formatMatches = true,
             note = null,
             variantLabel = null,
-            files = emptyList()
+            files = emptyList(),
+            captchaUrl = browserUrl
         )
     }
 
@@ -1378,7 +1392,7 @@ class MainActivity : ComponentActivity() {
     private fun openCaptchaBrowser(candidate: DownloadCandidate) {
         if (candidate.source == DownloadSource.AURORA || candidate.source == DownloadSource.PLAY) return
         appendLog(
-            "Opening in-app browser for ${candidate.source.label} to solve the captcha.",
+            "Opening in-app browser for ${candidate.source.label} to continue the download.",
             LogLevel.Info
         )
         captchaBrowser = candidate
@@ -2617,6 +2631,7 @@ private fun HelperOutlinedButton(
 @Composable
 private fun CaptchaBrowserScreen(
     candidate: DownloadCandidate,
+    request: HelperRequest?,
     requiredAppName: String?,
     requiredVersion: String?,
     onClose: () -> Unit,
@@ -2624,16 +2639,18 @@ private fun CaptchaBrowserScreen(
 ) {
     val context = LocalContext.current
     var progress by remember { mutableIntStateOf(0) }
+    // The page that produced the link is the referer APKMirror and APKPure
+    // expect. It changes as their scripts walk search -> release -> download.
+    val browserPageUrl = remember { mutableStateOf(candidate.captchaUrl ?: candidate.url) }
     val bridge = remember {
         CaptchaCaptureBridge { url ->
             Handler(Looper.getMainLooper()).post {
+                val referer = browserPageUrl.value
                 onDownloadCaptured(
                     BrowserDownloadCapture(
                         downloadUrl = url,
-                        refererUrl = candidate.captchaUrl ?: candidate.url,
-                        cookieHeader = CookieManager.getInstance().getCookie(
-                            candidate.captchaUrl ?: candidate.url
-                        )
+                        refererUrl = referer,
+                        cookieHeader = CookieManager.getInstance().getCookie(referer)
                     )
                 )
             }
@@ -2672,7 +2689,7 @@ private fun CaptchaBrowserScreen(
                 ): Boolean {
                     val url = request?.url?.toString() ?: return false
                     if (url.isCapturableDownload()) {
-                        val referer = view?.url ?: view?.originalUrl ?: candidate.captchaUrl ?: candidate.url
+                        val referer = view?.url ?: view?.originalUrl ?: browserPageUrl.value
                         onDownloadCaptured(
                             BrowserDownloadCapture(
                                 downloadUrl = url,
@@ -2687,13 +2704,33 @@ private fun CaptchaBrowserScreen(
 
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
+                    browserPageUrl.value = url ?: browserPageUrl.value
                     view?.evaluateJavascript(CAPTCHA_CAPTURE_JS, null)
-                    view?.evaluateJavascript(CAPTCHA_AUTOPRESS_JS, null)
+                    when (candidate.source) {
+                        DownloadSource.APK_MIRROR -> view?.evaluateJavascript(
+                            apkMirrorBrowserScript(
+                                candidate = candidate,
+                                request = request,
+                                appName = requiredAppName ?: candidate.name,
+                                version = requiredVersion ?: candidate.versionName
+                            ),
+                            null
+                        )
+                        DownloadSource.APK_PURE -> view?.evaluateJavascript(
+                            apkPureBrowserScript(
+                                candidate = candidate,
+                                appName = requiredAppName ?: candidate.name,
+                                version = requiredVersion ?: candidate.versionName
+                            ),
+                            null
+                        )
+                        else -> view?.evaluateJavascript(CAPTCHA_AUTOPRESS_JS, null)
+                    }
                 }
             }
             setDownloadListener { url, _, _, _, _ ->
                 // Authoritative signal: the page started a real download.
-                val referer = candidate.captchaUrl ?: candidate.url
+                val referer = browserPageUrl.value
                 onDownloadCaptured(
                     BrowserDownloadCapture(
                         downloadUrl = url,
@@ -2711,7 +2748,9 @@ private fun CaptchaBrowserScreen(
         }
     }
     LaunchedEffect(candidate.captchaUrl ?: candidate.url) {
-        webView.loadUrl(candidate.captchaUrl ?: candidate.url)
+        val startUrl = candidate.captchaUrl ?: candidate.url
+        browserPageUrl.value = startUrl
+        webView.loadUrl(startUrl)
     }
     BackHandler {
         if (webView.canGoBack()) {
@@ -2739,13 +2778,15 @@ private fun CaptchaBrowserScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    val browserTitle = if (candidate.captchaUrl != null && !candidate.directDownload) {
-                        "Solve captcha"
-                    } else {
-                        "Open in app"
+                    val browserTitle = when {
+                        candidate.source == DownloadSource.APK_MIRROR ||
+                            candidate.source == DownloadSource.APK_PURE -> candidate.source.label
+                        candidate.captchaUrl != null && !candidate.directDownload ->
+                            "Solve captcha  ${candidate.source.label}"
+                        else -> "Open in app  ${candidate.source.label}"
                     }
                     Text(
-                        text = "$browserTitle  ${candidate.source.label}",
+                        text = browserTitle,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
@@ -2780,7 +2821,18 @@ private fun CaptchaBrowserScreen(
                     modifier = Modifier.widthIn(min = MorpheDefaults.CompactButtonWidth)
                 )
             }
-            if (candidate.captchaUrl != null && !candidate.directDownload) {
+            if (candidate.source == DownloadSource.APK_MIRROR ||
+                candidate.source == DownloadSource.APK_PURE
+            ) {
+                InfoBox(title = "Download from ${candidate.source.label}", icon = Icons.Outlined.OpenInBrowser) {
+                    Text(
+                        text = "Complete any browser check on the page. The file returns to " +
+                            "Morphe automatically when its download starts.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else if (candidate.captchaUrl != null && !candidate.directDownload) {
                 InfoBox(title = stringResource(R.string.solve_the_captcha), icon = Icons.Outlined.Shield) {
                     Text(
                         text = stringResource(R.string.when_the_page_starts_the_download) +
@@ -2849,10 +2901,17 @@ private const val CAPTCHA_CAPTURE_JS = """
   function isDw(u) {
     return /^https?:\/\/[^\/]*uptodown\.(com|net)\//i.test(u) && /\/dwn\//i.test(u);
   }
+  function isApkMirrorFile(u) {
+    return /^https?:\/\/([^\/]*\.)?apkmirror\.com\//i.test(u) && /download\.php/i.test(u);
+  }
+  function isApkPureFile(u) {
+    return /^https?:\/\/([^\/]*\.)?apkpure\.com\/b\//i.test(u);
+  }
   function looksLike(u) {
     if (!u) return false;
     try { u = decodeURIComponent(u); } catch (e) {}
-    return re.test(u) || /filename[^.]*\.(apk|apks|apkm|xapk)/i.test(u) || isDw(u);
+    return re.test(u) || /filename[^.]*\.(apk|apks|apkm|xapk)/i.test(u)
+      || isDw(u) || isApkMirrorFile(u) || isApkPureFile(u);
   }
   function capture(u) {
     window.__captured = true;
@@ -2899,6 +2958,324 @@ private const val CAPTCHA_AUTOPRESS_JS = """
 """
 
 /**
+ * Walks APKMirror's search -> release -> variant -> download chain in the
+ * in-app browser. The HTTP parser already does this with plain requests; this
+ * is the same walk on a page that can pass Cloudflare, with the requested
+ * version, ABI and build code used to pick the right variant.
+ */
+private fun apkMirrorBrowserScript(
+    candidate: DownloadCandidate,
+    request: HelperRequest?,
+    appName: String?,
+    version: String?
+): String {
+    val fileType = candidate.fileKind.lowercase(Locale.US)
+        .takeIf { it in DOWNLOAD_FILE_KIND_SET }
+        ?: request?.requestedFileKinds?.orderedFileKinds()?.firstOrNull()
+        ?: "apk"
+    return """
+        (function () {
+        if (window.__mhApkMirrorStarted) return;
+        window.__mhApkMirrorStarted = true;
+        var pkg=__MH_PKG__,ver=__MH_VER__,name=__MH_NAME__,fileType=__MH_TYPE__,abi=__MH_ABI__;
+        var codes=__MH_CODES__;
+        var nameLower=(name||'').toLowerCase();
+        var nameSlug=nameLower.replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+        var pkgParts=(pkg||'').toLowerCase().split('.').filter(function(p){
+            return p.length>2&&p!=='com'&&p!=='org'&&p!=='net'&&p!=='android';
+        });
+        var verSlug=(ver||'').toLowerCase().split('.').join('-');
+        var verCore=(ver||'').split('-')[0];
+        var verCoreSlug=(verCore||'').toLowerCase().split('.').join('-');
+        function txt(el){return (el&&el.innerText||'').trim();}
+        function digits(s){return (s||'').replace(/[^0-9]/g,'');}
+        function hasVer(s){
+            var d=digits(s);
+            if(ver&&d.indexOf(digits(ver))>=0)return true;
+            return verCore&&verCore!==ver&&d.indexOf(digits(verCore))>=0;
+        }
+        function pathOf(href){
+            try{return new URL(href,location.href).pathname.toLowerCase();}
+            catch(e){return (href||'').toLowerCase();}
+        }
+        function segments(p){return p.split('/').filter(function(s){return s.length>0;});}
+        function isApkPath(p){var s=segments(p);return s.length>=3&&s[0]==='apk';}
+        function isRelease(p){return /-release\/?$/.test(p);}
+        function isVariant(p){
+            return /-android-(apk|apkm|apks)-download\/?$/.test(p);
+        }
+        function isAppPage(p){var s=segments(p);return s.length===3&&s[0]==='apk';}
+        function rowCode(row){
+            if(!row)return -1;
+            var m=(row.innerText||'').match(/\b\d{6,}\b/g);
+            if(!m)return -1;
+            for(var i=0;i<m.length;i++){
+                var v=parseInt(m[i],10);
+                if(!isNaN(v)&&v>0)return v;
+            }
+            return -1;
+        }
+        function pickSearch(){
+            var bestRelease=null,bestReleaseScore=-1,bestApp=null,bestAppScore=-1;
+            var firstRelease=null,ls=document.querySelectorAll('a[href]');
+            for(var i=0;i<ls.length;i++){
+                var a=ls[i],h=a.href||'';
+                if(!h||h.indexOf('#')>=0)continue;
+                var hp=pathOf(h);
+                if(!isApkPath(hp))continue;
+                var rel=isRelease(hp),appPage=isAppPage(hp);
+                if(!rel&&!appPage)continue;
+                var t=txt(a).toLowerCase();
+                if(!t)continue;
+                var seg=segments(hp);
+                var app=seg.length>2?seg[2]:'';
+                var score=0;
+                if(nameSlug&&app===nameSlug)score+=120;
+                else if(nameSlug&&app.indexOf(nameSlug)>=0)score+=60;
+                for(var j=0;j<pkgParts.length;j++){
+                    if(app===pkgParts[j])score+=80;
+                    else if(app.indexOf(pkgParts[j])>=0)score+=30;
+                }
+                if(nameLower&&t.indexOf(nameLower)>=0)score+=60;
+                if(rel){
+                    if(!firstRelease)firstRelease=a;
+                    if(ver&&!(hp.indexOf(verSlug)>=0||hp.indexOf(verCoreSlug)>=0
+                        ||hasVer(t)||hasVer(hp)))continue;
+                    score+=20;
+                    if(score>bestReleaseScore){bestReleaseScore=score;bestRelease=a;}
+                }else if(appPage){
+                    if(score>bestAppScore){bestAppScore=score;bestApp=a;}
+                }
+            }
+            if(bestRelease&&bestReleaseScore>=60)return bestRelease;
+            if(bestApp&&bestAppScore>=60)return bestApp;
+            if(!ver&&bestRelease)return bestRelease;
+            if(firstRelease){
+                var relPath=pathOf(firstRelease.href);
+                var slash=relPath.lastIndexOf('/');
+                if(slash>0)return relPath.substring(0,slash+1);
+            }
+            return null;
+        }
+        function pickRelease(){
+            if(ver&&!(location.pathname.toLowerCase().indexOf(verSlug)>=0
+                ||location.pathname.toLowerCase().indexOf(verCoreSlug)>=0
+                ||hasVer(location.pathname)))return null;
+            var vs=document.querySelectorAll('a[href]');
+            var fallback=null,plain=null,plainAbi=null,plainExact=null;
+            var plainExactAbi=null,plainUniversal=null,bundle=null,bundleAbi=null;
+            var bundleExact=null,bundleExactAbi=null;
+            for(var v=0;v<vs.length;v++){
+                var va=vs[v],vh=va.href||'';
+                if(!vh||vh.indexOf('#')>=0)continue;
+                var vp=pathOf(vh);
+                if(!isVariant(vp))continue;
+                var row=va.closest('.table-row'),rt=txt(row).toLowerCase();
+                if(!rt){
+                    var par=va.parentElement;
+                    for(var u=0;u<4&&par;u++){
+                        rt=txt(par).toLowerCase();
+                        if(rt.indexOf('apk')>=0||rt.indexOf('bundle')>=0)break;
+                        par=par.parentElement;
+                    }
+                }
+                var isBundle=rt.indexOf('bundle')>=0||rt.indexOf('apkm')>=0
+                    ||rt.indexOf('apks')>=0;
+                var isPlain=!isBundle;
+                var universal=rt.indexOf('universal')>=0;
+                var hasAbi=abi&&rt.indexOf(abi.toLowerCase())>=0;
+                var rc=rowCode(row);
+                var exact=rc>0&&codes.indexOf(rc)>=0;
+                if(!fallback)fallback=va;
+                if(isPlain&&exact&&hasAbi&&!plainExactAbi)plainExactAbi=va;
+                if(isPlain&&exact&&!plainExact)plainExact=va;
+                if(isPlain&&universal&&!plainUniversal)plainUniversal=va;
+                if(isPlain&&hasAbi&&!plainAbi)plainAbi=va;
+                if(isPlain&&!plain)plain=va;
+                if(isBundle&&exact&&hasAbi&&!bundleExactAbi)bundleExactAbi=va;
+                if(isBundle&&exact&&!bundleExact)bundleExact=va;
+                if(isBundle&&hasAbi&&!bundleAbi)bundleAbi=va;
+                if(isBundle&&!bundle)bundle=va;
+            }
+            var wantBundle=fileType&&fileType.toLowerCase()!=='apk';
+            if(wantBundle){
+                if(bundleExactAbi)return bundleExactAbi;
+                if(bundleExact)return bundleExact;
+                if(plainExactAbi)return plainExactAbi;
+                if(plainExact)return plainExact;
+                return bundleAbi||bundle||plain||fallback;
+            }
+            if(plainExactAbi)return plainExactAbi;
+            if(plainExact)return plainExact;
+            return plainUniversal||plainAbi||plain||fallback;
+        }
+        function pickApp(){
+            var rs=document.querySelectorAll('a[href]'),picked=null,first=null;
+            for(var r=0;r<rs.length;r++){
+                var ra=rs[r],rh=ra.href||'';
+                if(!rh||rh.indexOf('#')>=0)continue;
+                if(!isRelease(pathOf(rh)))continue;
+                if(!first)first=ra;
+                if(ver&&(rh.toLowerCase().indexOf(verSlug)>=0
+                    ||rh.toLowerCase().indexOf(verCoreSlug)>=0
+                    ||hasVer(txt(ra)))){picked=ra;break;}
+            }
+            return picked||(ver?null:first);
+        }
+        function pickDownload(){
+            var ds=document.querySelectorAll('a,button');
+            for(var d=0;d<ds.length;d++){
+                var dh=ds[d].href||'';
+                if(dh.indexOf('download.php')>=0
+                    ||dh.indexOf('/download/?key=')>=0)return ds[d];
+                var dt=txt(ds[d]).toLowerCase();
+                if(dt.indexOf('download apk')>=0)return ds[d];
+            }
+            return null;
+        }
+        function pick(){
+            var p=location.pathname.toLowerCase();
+            var q=location.search.toLowerCase();
+            if(q.indexOf('searchtype=')>=0)return pickSearch();
+            if(isRelease(p))return pickRelease();
+            if(isAppPage(p))return pickApp();
+            if(isVariant(p))return pickDownload();
+            return pickDownload();
+        }
+        var n=0,t=setInterval(function(){
+            n++;
+            var target=pick();
+            if(target){
+                clearInterval(t);
+                if(typeof target==='string'){location.href=target;return;}
+                try{target.scrollIntoView({block:'center'});}catch(e){}
+                setTimeout(function(){try{target.click();}catch(e){}},300);
+                return;
+            }
+            if(n>900)clearInterval(t);
+        },400);
+        })();
+    """.trimIndent()
+        .replace("__MH_PKG__", JSONObject.quote(candidate.packageName))
+        .replace("__MH_VER__", JSONObject.quote(version.orEmpty()))
+        .replace("__MH_NAME__", JSONObject.quote(appName.orEmpty()))
+        .replace("__MH_TYPE__", JSONObject.quote(fileType))
+        .replace(
+            "__MH_ABI__",
+            JSONObject.quote(request?.availableAbis?.firstOrNull().orEmpty())
+        )
+        .replace(
+            "__MH_CODES__",
+            request?.requestedVersionCodes
+                ?.joinToString(separator = ",", prefix = "[", postfix = "]")
+                ?: "[]"
+        )
+}
+
+/**
+ * Walks APKPure's search -> versions -> app -> download chain in the in-app
+ * browser, the last resort after the direct endpoint and web parsers fail.
+ */
+private fun apkPureBrowserScript(
+    candidate: DownloadCandidate,
+    appName: String?,
+    version: String?
+): String = """
+    (function () {
+      if (window.__mhApkPureStarted) return;
+      window.__mhApkPureStarted = true;
+      var pkg=__MH_PKG__,ver=__MH_VER__,name=__MH_NAME__;
+      var nameLower=(name||'').toLowerCase();
+      var pkgLower=(pkg||'').toLowerCase();
+      function txt(el){return (el&&el.innerText||'').trim();}
+      function digits(s){return (s||'').replace(/[^0-9]/g,'');}
+      function hasVer(s){
+        var d=digits(s);
+        return !!ver&&d.indexOf(digits(ver))>=0;
+      }
+      function pathOf(href){
+        try{return new URL(href,location.href).pathname.toLowerCase();}
+        catch(e){return (href||'').toLowerCase();}
+      }
+      function pickSearch(){
+        var ls=document.querySelectorAll('a');
+        for(var i=0;i<ls.length;i++){
+          var h=ls[i].href||'',t=txt(ls[i]).toLowerCase();
+          if(!h||h.indexOf('/search')>=0)continue;
+          if(h.toLowerCase().indexOf(pkgLower)>=0
+            ||(nameLower.length>2&&t.indexOf(nameLower)>=0&&t.length<100))return ls[i];
+        }
+        return null;
+      }
+      function pickVersions(){
+        var vs=document.querySelectorAll('a');
+        for(var j=0;j<vs.length;j++){
+          var vt=txt(vs[j]),vh=vs[j].href||'';
+          if(hasVer(vt)||hasVer(vh))return vs[j];
+        }
+        return null;
+      }
+      function pickInfo(){
+        var canonical=document.querySelector('link[rel=canonical]');
+        if(canonical&&canonical.href
+          &&canonical.href.toLowerCase().indexOf(pkgLower)>=0
+          &&canonical.href.toLowerCase().indexOf('/apk-info')<0)return canonical.href;
+        var ls=document.querySelectorAll('a[href]');
+        for(var i=0;i<ls.length;i++){
+          var h=ls[i].href||'';
+          if(h.toLowerCase().indexOf(pkgLower)>=0
+            &&h.toLowerCase().indexOf('/apk-info')<0)return ls[i];
+        }
+        return null;
+      }
+      function pickDownloadLink(){
+        var a=document.querySelector('a[href*="d.apkpure.com"]');
+        if(a)return a;
+        var vs=document.querySelectorAll(
+          'a.go-version-btn[href],a.dt-version-name-link[href],a#download_link[href]');
+        for(var v=0;v<vs.length;v++){
+          var vh=vs[v].href||'';
+          if(!ver||hasVer(txt(vs[v]))||hasVer(vh))return vs[v];
+        }
+        var bs=document.querySelectorAll('a,button');
+        for(var k=0;k<bs.length;k++){
+          var bt=txt(bs[k]).toLowerCase();
+          if(bt.indexOf('download apk')>=0&&bt.indexOf('apkpure app')<0)return bs[k];
+        }
+        return null;
+      }
+      function pick(){
+        var p=location.pathname.toLowerCase();
+        if(p.indexOf('/search')>=0)return pickSearch();
+        if(p.indexOf('/apk-info')>=0)return pickInfo();
+        if(p.indexOf('/versions')>=0)return pickVersions();
+        var direct=pickDownloadLink();
+        if(direct)return direct;
+        if(p.indexOf('/download')<0&&ver&&!hasVer(document.body.innerText)){
+          var old=document.querySelector('a[href*="/versions"]');
+          if(old)return old;
+        }
+        return null;
+      }
+      var n=0,t=setInterval(function(){
+        n++;
+        var target=pick();
+        if(target){
+          clearInterval(t);
+          if(typeof target==='string'){location.href=target;return;}
+          try{target.scrollIntoView({block:'center'});}catch(e){}
+          setTimeout(function(){try{target.click();}catch(e){}},500);
+          return;
+        }
+        if(n>80)clearInterval(t);
+      },700);
+    })();
+""".trimIndent()
+    .replace("__MH_PKG__", JSONObject.quote(candidate.packageName))
+    .replace("__MH_VER__", JSONObject.quote(version.orEmpty()))
+    .replace("__MH_NAME__", JSONObject.quote(appName.orEmpty()))
+
+/**
  * Percent-decodes a URL without touching `+` (which is a literal plus in a path) and
  * without `Uri.decode`, so these predicates stay usable off-device in unit tests.
  */
@@ -2925,9 +3302,31 @@ internal fun String.isUptodownFileUrl(): Boolean {
     return uri.path.orEmpty().contains("/dwn/", ignoreCase = true)
 }
 
+/**
+ * APKMirror's final file endpoint. The link carries no extension; the site
+ * answers it with a redirect to the CDN, so it is safe to capture here.
+ */
+internal fun String.isApkMirrorFileUrl(): Boolean {
+    val uri = runCatching { java.net.URI(urlDecoded()) }.getOrNull() ?: return false
+    val host = uri.host?.lowercase(Locale.US) ?: return false
+    val apkMirrorHost = host == "apkmirror.com" || host.endsWith(".apkmirror.com")
+    return apkMirrorHost && uri.path.orEmpty().contains("download.php", ignoreCase = true)
+}
+
+/**
+ * APKPure's direct file endpoint (`d.apkpure.com/b/APK/<pkg>`). Capturing it
+ * lets the downloader follow the signed CDN redirect with the page's cookies.
+ */
+internal fun String.isApkPureFileUrl(): Boolean {
+    val uri = runCatching { java.net.URI(urlDecoded()) }.getOrNull() ?: return false
+    val host = uri.host?.lowercase(Locale.US) ?: return false
+    val apkPureHost = host == "apkpure.com" || host.endsWith(".apkpure.com")
+    return apkPureHost && uri.path.orEmpty().trim('/').startsWith("b/", ignoreCase = true)
+}
+
 /** A URL the in-app browser should treat as the file it was opened to capture. */
 internal fun String.isCapturableDownload(): Boolean =
-    looksLikeApkDownload() || isUptodownFileUrl()
+    looksLikeApkDownload() || isUptodownFileUrl() || isApkMirrorFileUrl() || isApkPureFileUrl()
 
 @Composable
 private fun HelperScreen(
