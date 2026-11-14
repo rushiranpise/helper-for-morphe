@@ -190,6 +190,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
@@ -551,7 +552,8 @@ class MainActivity : ComponentActivity() {
                         requiredVersion = request?.requestedVersionName,
                         onClose = ::closeCaptchaBrowser,
                         onDownloadCaptured = ::onBrowserDownloadCaptured,
-                        onBuildMismatch = ::onBrowserBuildMismatch
+                        onBuildMismatch = ::onBrowserBuildMismatch,
+                        onChallengeTimeout = ::onBrowserChallengeTimeout
                     )
                 } else {
                     HelperScreen(
@@ -1719,6 +1721,14 @@ class MainActivity : ComponentActivity() {
         val candidate = captchaBrowser ?: return
         captchaBrowser = null
         val message = code.browserBuildMismatchMessage(request?.versionCodeSummary)
+        appendLog(message, LogLevel.Warning)
+        showFailure(message, candidate.source, candidate.option)
+    }
+
+    private fun onBrowserChallengeTimeout() {
+        val candidate = captchaBrowser ?: return
+        captchaBrowser = null
+        val message = "Verification on ${candidate.source.label} did not finish within five minutes."
         appendLog(message, LogLevel.Warning)
         showFailure(message, candidate.source, candidate.option)
     }
@@ -2993,14 +3003,32 @@ private fun CaptchaBrowserScreen(
     requiredVersion: String?,
     onClose: () -> Unit,
     onDownloadCaptured: (BrowserDownloadCapture) -> Unit,
-    onBuildMismatch: (String?) -> Unit
+    onBuildMismatch: (String?) -> Unit,
+    onChallengeTimeout: () -> Unit
 ) {
     val context = LocalContext.current
     var progress by remember { mutableIntStateOf(0) }
     var verificationHintVisible by remember { mutableStateOf(false) }
     var challengeActive by remember { mutableStateOf(false) }
+    var challengeProbeKnown by remember { mutableStateOf(false) }
+    var challengeStartedAt by remember { mutableStateOf(0L) }
     var pageFinishedCount by remember { mutableIntStateOf(0) }
+    var injectedPage by remember { mutableIntStateOf(-1) }
+    var readyLogged by remember { mutableStateOf(false) }
+    var lastProgressAt by remember { mutableStateOf(System.currentTimeMillis()) }
     var reloadAttempts by remember { mutableIntStateOf(0) }
+    val webFlowStartedAt = remember { System.currentTimeMillis() }
+
+    fun logWebFlowState(state: String, detail: String = "") {
+        val source = (candidate.viaSource ?: candidate.source).name.lowercase(Locale.US)
+        val elapsed = System.currentTimeMillis() - webFlowStartedAt
+        Log.i(
+            TAG,
+            "webflow state $source $state" +
+                (detail.takeIf(String::isNotBlank)?.let { " $it" } ?: "") +
+                " (+${elapsed}ms)"
+        )
+    }
     // The page that produced the link is the referer APKMirror and APKPure
     // expect. It changes as their scripts walk search -> release -> download.
     val browserPageUrl = remember { mutableStateOf(candidate.captchaUrl ?: candidate.url) }
@@ -3084,31 +3112,20 @@ private fun CaptchaBrowserScreen(
                     url: String?
                 ): Boolean = handleBrowserNavigation(view, url)
 
+                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                    super.onPageStarted(view, url, favicon)
+                    browserPageUrl.value = url ?: browserPageUrl.value
+                    readyLogged = false
+                    challengeProbeKnown = false
+                    lastProgressAt = System.currentTimeMillis()
+                }
+
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
                     browserPageUrl.value = url ?: browserPageUrl.value
                     pageFinishedCount++
+                    lastProgressAt = System.currentTimeMillis()
                     view?.evaluateJavascript(CAPTCHA_CAPTURE_JS, null)
-                    when (candidate.viaSource ?: candidate.source) {
-                        DownloadSource.APK_MIRROR -> view?.evaluateJavascript(
-                            apkMirrorBrowserScript(
-                                candidate = candidate,
-                                request = request,
-                                appName = requiredAppName ?: candidate.name,
-                                version = requiredVersion ?: candidate.versionName
-                            ),
-                            null
-                        )
-                        DownloadSource.APK_PURE -> view?.evaluateJavascript(
-                            apkPureBrowserScript(
-                                candidate = candidate,
-                                appName = requiredAppName ?: candidate.name,
-                                version = requiredVersion ?: candidate.versionName
-                            ),
-                            null
-                        )
-                        else -> view?.evaluateJavascript(CAPTCHA_AUTOPRESS_JS, null)
-                    }
                 }
             }
             setDownloadListener { url, _, _, _, _ ->
@@ -3140,9 +3157,60 @@ private fun CaptchaBrowserScreen(
             delay(1_200)
             webView.evaluateJavascript(BROWSER_CHALLENGE_PROBE_JS) { value ->
                 val detected = value.reportsBrowserChallenge()
-                challengeActive = detected
-                verificationHintVisible = detected
+                challengeProbeKnown = true
+                if (!detected && !readyLogged && pageFinishedCount > 0) {
+                    readyLogged = true
+                    logWebFlowState("READY")
+                }
+                if (detected != challengeActive) {
+                    challengeActive = detected
+                    verificationHintVisible = detected
+                    if (detected) {
+                        challengeStartedAt = System.currentTimeMillis()
+                        logWebFlowState("CHALLENGE")
+                    } else {
+                        logWebFlowState("CHALLENGE_CLEARED")
+                    }
+                }
             }
+        }
+    }
+    LaunchedEffect(webView, pageFinishedCount, challengeActive, challengeProbeKnown) {
+        if (pageFinishedCount == 0 ||
+            challengeActive ||
+            !challengeProbeKnown ||
+            injectedPage == pageFinishedCount
+        ) {
+            return@LaunchedEffect
+        }
+        injectedPage = pageFinishedCount
+        when (candidate.viaSource ?: candidate.source) {
+            DownloadSource.APK_MIRROR -> webView.evaluateJavascript(
+                apkMirrorBrowserScript(
+                    candidate = candidate,
+                    request = request,
+                    appName = requiredAppName ?: candidate.name,
+                    version = requiredVersion ?: candidate.versionName
+                ),
+                null
+            )
+            DownloadSource.APK_PURE -> webView.evaluateJavascript(
+                apkPureBrowserScript(
+                    candidate = candidate,
+                    appName = requiredAppName ?: candidate.name,
+                    version = requiredVersion ?: candidate.versionName
+                ),
+                null
+            )
+            else -> webView.evaluateJavascript(CAPTCHA_AUTOPRESS_JS, null)
+        }
+    }
+    LaunchedEffect(challengeActive, challengeStartedAt) {
+        if (!challengeActive || challengeStartedAt <= 0L) return@LaunchedEffect
+        delay(BROWSER_CHALLENGE_TIMEOUT_MS)
+        if (challengeActive) {
+            logWebFlowState("CHALLENGE_TIMEOUT")
+            onChallengeTimeout()
         }
     }
     LaunchedEffect(webView, pageFinishedCount, challengeActive) {
@@ -3156,8 +3224,9 @@ private fun CaptchaBrowserScreen(
         }
         delay(10_000)
         if (!challengeActive && reloadAttempts < 2) {
+            val idle = System.currentTimeMillis() - lastProgressAt
             reloadAttempts++
-            Log.i(TAG, "Uptodown still loading; refreshing page ($reloadAttempts/2)")
+            logWebFlowState("STALLED", "idle=${idle}ms reload $reloadAttempts/2")
             webView.reload()
         }
     }
@@ -3375,6 +3444,8 @@ private const val CAPTCHA_CAPTURE_JS = """
   };
 })();
 """
+
+private const val BROWSER_CHALLENGE_TIMEOUT_MS = 5 * 60_000L
 
 /**
  * Reports whether the page is currently showing a Cloudflare-style challenge.
