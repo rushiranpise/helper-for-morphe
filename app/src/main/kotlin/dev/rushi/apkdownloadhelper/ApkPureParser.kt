@@ -149,7 +149,7 @@ internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourcePa
                     option = CandidateOption.LATEST,
                     directDownload = false,
                     versionStatus = request.versionStatus(versionName, entry.versionCode),
-                    formatMatches = request.acceptsFormat(entry.fileKind),
+                    formatMatches = request.acceptsCandidateFormat(entry.fileKind),
                     note = null
                 )
             }
@@ -195,6 +195,7 @@ internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourcePa
                 .onFailure { Log.w(TAG, "APKPure direct $kind lookup failed", it) }
                 .getOrNull()
             val file = apkPureDirectFile(location, request.packageName) ?: continue
+            if (!request.acceptsCandidateFormat(file.fileKind)) continue
 
             // A pinned build must be the build that came back: the endpoint answers
             // with the newest file when it does not know the requested code.
@@ -210,12 +211,22 @@ internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourcePa
         return null
     }
 
-    /** Which file kinds to ask for, cheapest match first: the request's own order. */
+    /** Which file kinds to ask for, cheapest match first. */
     private fun apkPureDirectKinds(request: HelperRequest): List<String> =
+        request.apkPurePreferredKinds().map { it.uppercase(Locale.US) }
+
+    /** APKPure serves split archives as XAPK, their stand-in for APKS and APKM. */
+    private fun HelperRequest.apkPurePreferredKinds(): List<String> =
         buildList {
-            if (request.acceptsFormat("apk")) add("APK")
-            if (request.acceptsFormat("xapk")) add("XAPK")
+            if (acceptsCandidateFormat("apk")) add("apk")
+            if (acceptsCandidateFormat("xapk")) add("xapk")
         }.distinct()
+
+    private fun HelperRequest.apkPureKindRank(fileKind: String): Int {
+        val preferred = apkPurePreferredKinds()
+        val index = preferred.indexOf(fileKind)
+        return if (index >= 0) index else preferred.size
+    }
 
     private fun apkPureDirectCandidate(
         request: HelperRequest,
@@ -235,7 +246,7 @@ internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourcePa
             option = option,
             directDownload = true,
             versionStatus = request.versionStatus(file.versionName, versionCode),
-            formatMatches = request.acceptsFormat(file.fileKind),
+            formatMatches = request.acceptsCandidateFormat(file.fileKind),
             files = listOf(
                 CandidateDownloadFile(
                     url = file.url,
@@ -260,6 +271,7 @@ internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourcePa
         val apiLatestCandidates = response.app_update_response
             .filter { it.package_name == request.packageName }
             .mapNotNull { item -> apkPureApiCandidate(item, request, CandidateOption.LATEST) }
+            .sortedBy { request.apkPureKindRank(it.fileKind) }
 
         val appPageUrl = runCatching { apkPureAppPageUrl(request) }
             .onFailure { Log.w(TAG, "APKPure app page resolve failed", it) }
@@ -293,7 +305,9 @@ internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourcePa
     ): DownloadCandidate? {
         val url = item.asset.url.replace("http://", "https://").normalizedHttpUrlOrNull()
             ?: return null
-        val fileKind = if (url.contains("/XAPK", ignoreCase = true)) "xapk" else "apk"
+        val fileKind = item.asset.type.trim().lowercase(Locale.US)
+            .takeIf { it in DOWNLOAD_FILE_KIND_SET }
+            ?: if (url.contains("/XAPK", ignoreCase = true)) "xapk" else "apk"
 
         return DownloadCandidate(
             source = DownloadSource.APK_PURE,
@@ -306,7 +320,7 @@ internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourcePa
             option = option,
             directDownload = true,
             versionStatus = request.versionStatus(item.version_name, item.version_code),
-            formatMatches = request.acceptsFormat(fileKind),
+            formatMatches = request.acceptsCandidateFormat(fileKind),
             files = listOf(
                 CandidateDownloadFile(
                     url = url,
@@ -347,11 +361,12 @@ internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourcePa
             )
         )
         return response.app_update_response
-            .firstOrNull { item ->
+            .filter { item ->
                 item.package_name == request.packageName &&
                     request.matchesRequestedVersion(item.version_name, item.version_code)
             }
-            ?.let { item -> apkPureApiCandidate(item, request, CandidateOption.REQUESTED) }
+            .mapNotNull { item -> apkPureApiCandidate(item, request, CandidateOption.REQUESTED) }
+            .minByOrNull { request.apkPureKindRank(it.fileKind) }
     }
 
     private fun apkPureInfoUrl(packageName: String): String =
@@ -473,7 +488,7 @@ internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourcePa
             option = CandidateOption.REQUESTED,
             directDownload = false,
             versionStatus = request.versionStatus(versionName, versionCode),
-            formatMatches = request.acceptsFormat(fileKind),
+            formatMatches = request.acceptsCandidateFormat(fileKind),
             note = APKPURE_BROWSER_NOTE,
             captchaUrl = versionPageUrl
         )
@@ -508,7 +523,7 @@ internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourcePa
             option = CandidateOption.REQUESTED,
             directDownload = false,
             versionStatus = request.versionStatus(entry.versionName, entry.versionCode),
-            formatMatches = request.acceptsFormat(entry.fileKind),
+            formatMatches = request.acceptsCandidateFormat(entry.fileKind),
             note = APKPURE_BROWSER_NOTE,
             captchaUrl = entry.downloadPageUrl
         )
@@ -594,7 +609,7 @@ internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourcePa
             option = option,
             directDownload = true,
             versionStatus = request.versionStatus(resolvedVersion, versionCode),
-            formatMatches = request.acceptsFormat(fileKind),
+            formatMatches = request.acceptsCandidateFormat(fileKind),
             files = listOf(
                 CandidateDownloadFile(
                     url = downloadUrl,

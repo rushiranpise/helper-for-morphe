@@ -222,4 +222,129 @@ class ApkPureDirectTest {
 
         assertTrue(asked.none { it.contains("/XAPK/") })
     }
+
+    @Test
+    fun `split requests ask for the xapk substitute`() = runBlocking {
+        val xapkUrl = signedUrl.replace("/APK/", "/XAPK/").replace(".apk", ".xapk")
+
+        for (kind in listOf("APKS", "APKM")) {
+            val asked = mutableListOf<String>()
+            val context = SourceParserContext(
+                fetcher = FakeSourceTextFetcher(emptyMap()),
+                apkPureApi = FakeApkPureApi(),
+                aptoideApi = FakeAptoideApi(),
+                resolveRedirect = { url ->
+                    asked += url
+                    if (url.contains("/XAPK/")) xapkUrl else null
+                }
+            )
+
+            val candidates = ApkPureParser(context).findCandidates(
+                testRequest(
+                    packageName = packageName,
+                    requestedFileType = kind,
+                    allowSplitArchive = true
+                ),
+                CandidateOption.LATEST
+            )
+
+            assertEquals(listOf("https://d.apkpure.com/b/XAPK/$packageName?version=latest"), asked)
+            val candidate = candidates.single()
+            assertEquals("xapk", candidate.fileKind)
+            assertTrue(candidate.formatMatches)
+        }
+    }
+
+    @Test
+    fun `a pinned split request asks for the xapk substitute by build code`() = runBlocking {
+        val asked = mutableListOf<String>()
+        val xapkUrl = signedUrl.replace("/APK/", "/XAPK/").replace(".apk", ".xapk")
+        val context = SourceParserContext(
+            fetcher = FakeSourceTextFetcher(emptyMap()),
+            apkPureApi = FakeApkPureApi(),
+            aptoideApi = FakeAptoideApi(),
+            resolveRedirect = { url ->
+                asked += url
+                if (url.contains("/XAPK/")) xapkUrl else null
+            }
+        )
+
+        val candidates = ApkPureParser(context).findCandidates(
+            testRequest(
+                packageName = packageName,
+                versionName = "453.0.0.57.79",
+                versionCode = 385914557L,
+                requestedFileType = "APKS",
+                allowSplitArchive = true
+            ),
+            CandidateOption.REQUESTED
+        )
+
+        assertEquals(
+            listOf("https://d.apkpure.com/b/XAPK/$packageName?versionCode=385914557"),
+            asked
+        )
+        val candidate = candidates.single()
+        assertEquals("xapk", candidate.fileKind)
+        assertEquals(385914557L, candidate.versionCode)
+        assertTrue(candidate.formatMatches)
+    }
+
+    @Test
+    fun `split requests prefer the xapk asset from the api`() = runBlocking {
+        val infoUrl = "https://apkpure.com/apk-info/$packageName"
+        val canonicalUrl = "https://apkpure.com/$packageName"
+        val api = FakeApkPureApi(
+            response = ApkPureUpdateResponse(
+                app_update_response = listOf(
+                    ApkPureAppUpdate(
+                        package_name = packageName,
+                        version_code = 593L,
+                        version_name = "8.72.0",
+                        label = "Instagram",
+                        asset = ApkPureAsset(
+                            type = "APK",
+                            url = "https://download.apkpure.com/b/APK/$packageName?version=8.72.0"
+                        )
+                    ),
+                    ApkPureAppUpdate(
+                        package_name = packageName,
+                        version_code = 593L,
+                        version_name = "8.72.0",
+                        label = "Instagram",
+                        asset = ApkPureAsset(
+                            type = "XAPK",
+                            url = "https://download.apkpure.com/b/XAPK/$packageName?version=8.72.0"
+                        )
+                    )
+                )
+            )
+        )
+        val parser = ApkPureParser(
+            testParserContext(
+                pages = mapOf(
+                    infoUrl to
+                        """<html><head><link rel="canonical" href="$canonicalUrl"></head><body></body></html>""",
+                    "$canonicalUrl/versions" to "<html></html>"
+                ),
+                apkPureApi = api
+            )
+        )
+
+        val candidates = parser.findCandidates(
+            testRequest(
+                packageName = packageName,
+                versionName = "8.72.0",
+                versionCode = 593L,
+                requestedFileType = "APKS",
+                allowSplitArchive = true
+            ),
+            CandidateOption.REQUESTED
+        )
+
+        val candidate = candidates.single()
+        assertEquals("xapk", candidate.fileKind)
+        assertTrue(candidate.formatMatches)
+        assertTrue(candidate.url.contains("/XAPK/"))
+    }
 }

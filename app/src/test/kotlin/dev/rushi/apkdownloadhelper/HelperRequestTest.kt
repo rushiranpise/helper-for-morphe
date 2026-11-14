@@ -48,6 +48,19 @@ class HelperRequestTest {
         assertTrue(request.acceptsFormat("APK/APKM/APKS/XAPK"))
     }
 
+    @Test
+    fun acceptsCandidateFormat_acceptsXapkAsSplitSubstitute() {
+        for (kind in listOf("APKS", "APKM")) {
+            val request = testRequest(requestedFileType = kind, allowSplitArchive = true)
+            assertTrue(request.acceptsCandidateFormat("xapk"))
+        }
+
+        // Without permission to install split archives, XAPK is not a substitute.
+        val noSplit = testRequest(requestedFileType = "APKS", allowSplitArchive = false)
+        assertFalse(noSplit.acceptsCandidateFormat("xapk"))
+        assertFalse(testRequest(requestedFileType = "APK").acceptsCandidateFormat("xapk"))
+    }
+
     // ---- Fast Mode strict version matching (exact name AND code) ----
 
     @Test

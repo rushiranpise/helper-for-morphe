@@ -10400,6 +10400,17 @@ internal data class HelperRequest(
         return kinds.any { it in requestedFileKinds }
     }
 
+    /**
+     * A split request can use APKPure's XAPK asset: it is the same kind of
+     * split archive under a different name, and Morphe accepts it whenever
+     * split archives are allowed.
+     */
+    fun acceptsCandidateFormat(fileKind: String): Boolean =
+        acceptsFormat(fileKind) ||
+            (fileKind.equals("xapk", ignoreCase = true) &&
+                allowSplitArchive &&
+                requestedFileKinds.any { it == "apks" || it == "apkm" })
+
     fun matchesKnownVersion(candidateVersionName: String?, candidateVersionCode: Long?): Boolean =
         if (!hasKnownVersionRequest) {
             false
@@ -10815,7 +10826,8 @@ private fun DownloadCandidate.matchSummary(request: HelperRequest): CandidateMat
     val versionCodeMatches = requestedVersionCodes.isEmpty() ||
         versionCode == null ||
         versionCode in requestedVersionCodes
-    val formatMatches = fileKind.equals("web", ignoreCase = true) || request.acceptsFormat(fileKind)
+    val formatMatches = fileKind.equals("web", ignoreCase = true) ||
+        request.acceptsCandidateFormat(fileKind)
 
     val mismatchNames = buildList {
         if (!versionNameMatches) add("Version")
