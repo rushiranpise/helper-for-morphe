@@ -469,9 +469,15 @@ class MainActivity : ComponentActivity() {
         if (intent?.getBooleanExtra(UpdateManager.EXTRA_OPEN_UPDATES, false) == true) {
             showUpdates = true
         }
+        // A Morphe request takes over the screen as soon as it arrives. Its
+        // update check still runs and can post a notification, but it must not
+        // put an update popup on top of the download flow.
+        val normalLaunch = request == null &&
+            intent?.action != DownloadHelperContract.ACTION_DOWNLOAD_ORIGINAL_APK
         lifecycleScope.launch {
             val prompt = UpdateManager.checkOnLaunch(applicationContext)
             if (prompt != null &&
+                normalLaunch &&
                 helperSettings.updatePopup &&
                 helperSettings.updateMode == UpdateMode.NOTIFY &&
                 !showUpdates
