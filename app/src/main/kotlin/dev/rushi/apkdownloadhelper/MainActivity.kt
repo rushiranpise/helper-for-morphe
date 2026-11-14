@@ -3530,6 +3530,24 @@ private fun apkMirrorBrowserScript(
                     if(!isNaN(v)&&v>0)return v;
                 }
             }
+            var cells=row.querySelectorAll('.table-cell');
+            for(var c=0;c<cells.length;c++){
+                var cellText=txt(cells[c]);
+                if(/^\d+$/.test(cellText)){
+                    var cv=parseInt(cellText,10);
+                    if(!isNaN(cv)&&cv>0)return cv;
+                }
+            }
+            var parts=(row.innerText||'').split(/[^0-9]+/);
+            for(var k=0;k<codes.length;k++){
+                if(parts.indexOf(String(codes[k]))>=0)return codes[k];
+            }
+            var m=(row.innerText||'').match(/\b\d{6,}\b/g);
+            if(!m)return -1;
+            for(var j=0;j<m.length;j++){
+                var mv=parseInt(m[j],10);
+                if(!isNaN(mv)&&mv>0)return mv;
+            }
             return -1;
         }
         function pageCode(){

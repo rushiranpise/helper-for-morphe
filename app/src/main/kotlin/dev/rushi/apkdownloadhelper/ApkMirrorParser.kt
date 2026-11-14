@@ -868,16 +868,23 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         variants: List<ApkMirrorVariant>,
         option: CandidateOption
     ): List<ApkMirrorVariant> {
-        // A requested build pins the numeric code. Rows that publish a
-        // different code are never candidates; rows that do not publish one
-        // are kept so the variant page itself can be checked below.
+        // A requested build pins the numeric code. Once the page publishes any
+        // code, a row without the requested one is rejected before its variant
+        // page is fetched, rather than downloading a mismatched build and
+        // relying on file validation afterwards.
         val candidates = if (option == CandidateOption.REQUESTED) {
             val requestedCodes = request.requestedVersionCodes
             if (requestedCodes.isEmpty()) {
                 variants
             } else {
-                variants.filter { it.versionCode != null && it.versionCode in requestedCodes }
-                    .ifEmpty { variants.filter { it.versionCode == null } }
+                val exact = variants.filter {
+                    it.versionCode != null && it.versionCode in requestedCodes
+                }
+                when {
+                    exact.isNotEmpty() -> exact
+                    variants.any { it.versionCode != null } -> emptyList()
+                    else -> variants
+                }
             }
         } else {
             variants
