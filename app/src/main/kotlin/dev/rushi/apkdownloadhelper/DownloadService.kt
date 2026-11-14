@@ -43,6 +43,8 @@ import okhttp3.Request
 internal const val ACTION_START_DOWNLOAD = "dev.rushi.apkdownloadhelper.action.START_DOWNLOAD"
 internal const val ACTION_CANCEL_DOWNLOAD = "dev.rushi.apkdownloadhelper.action.CANCEL_DOWNLOAD"
 internal const val ACTION_RETRY_DOWNLOAD = "dev.rushi.apkdownloadhelper.action.RETRY_DOWNLOAD"
+internal const val ACTION_PAUSE_DOWNLOAD = "dev.rushi.apkdownloadhelper.action.PAUSE_DOWNLOAD"
+internal const val ACTION_RESUME_DOWNLOAD = "dev.rushi.apkdownloadhelper.action.RESUME_DOWNLOAD"
 internal const val ACTION_SCAN_PROCEED = "dev.rushi.apkdownloadhelper.action.SCAN_PROCEED"
 internal const val ACTION_SCAN_CANCEL = "dev.rushi.apkdownloadhelper.action.SCAN_CANCEL"
 internal const val ACTION_SCAN_SKIP = "dev.rushi.apkdownloadhelper.action.SCAN_SKIP"
@@ -94,11 +96,24 @@ internal object DownloadJobManager {
             val candidate: DownloadCandidate,
             val percent: Int,
             val speedBytesPerSec: Double = 0.0,
-            val etaMs: Long? = null
+            val etaMs: Long? = null,
+            val connections: Int = 1
         ) : Event
         data class Completed(val result: PendingDownloadResult, val epoch: Long = 0) : Event
-        data class Failed(val candidate: DownloadCandidate, val message: String) : Event
-        data class Cancelled(val candidate: DownloadCandidate) : Event
+        data class Paused(
+            val candidate: DownloadCandidate,
+            val paused: Boolean,
+            val epoch: Long = 0
+        ) : Event
+        data class Failed(
+            val candidate: DownloadCandidate,
+            val message: String,
+            val epoch: Long = 0
+        ) : Event
+        data class Cancelled(
+            val candidate: DownloadCandidate,
+            val epoch: Long = 0
+        ) : Event
         // The downloaded file is valid except for its version code (which the
         // parser could not know up front). The file is kept so the UI can ask
         // whether to use it anyway.
@@ -183,8 +198,18 @@ internal object DownloadJobManager {
 
     fun emit(event: Event) {
         _events.value = event
-        if (event is Event.Completed || event is Event.Cancelled) {
-            activeJob = null
+        val clearingEpoch = when (event) {
+            is Event.Completed -> event.epoch
+            is Event.Cancelled -> event.epoch
+            else -> null
+        }
+        if (clearingEpoch != null) {
+            val active = activeJob
+            // A stale cancellation from a job that was replaced must not clear
+            // the job that is now running.
+            if (active == null || clearingEpoch == 0L || active.epoch == clearingEpoch) {
+                activeJob = null
+            }
         }
     }
 
@@ -250,6 +275,8 @@ internal class DownloadService : Service() {
     private var lastProgressTime = 0L
     private var currentSpeedBytesPerSec = 0.0
     private var speedSamples = 0
+    @Volatile private var paused = false
+    @Volatile private var currentConnections = 1
 
     private val browserUserAgent =
         "Mozilla/5.0 (Linux; Android ${Build.VERSION.RELEASE}; ${Build.MODEL}) AppleWebKit/537.36 " +
@@ -301,6 +328,14 @@ internal class DownloadService : Service() {
                 cancelDownload()
                 return START_NOT_STICKY
             }
+            ACTION_PAUSE_DOWNLOAD -> {
+                pauseDownload()
+                return START_NOT_STICKY
+            }
+            ACTION_RESUME_DOWNLOAD -> {
+                resumeDownload()
+                return START_NOT_STICKY
+            }
             ACTION_SCAN_PROCEED -> {
                 val job = DownloadJobManager.activeJob
                 val pending = DownloadJobManager.pendingScan
@@ -328,7 +363,9 @@ internal class DownloadService : Service() {
                             is DownloadJobManager.PendingScan.Ask -> handleSuccess(job, pending.file)
                             // User chose not to hand off after seeing the result.
                             is DownloadJobManager.PendingScan.Decided -> {
-                                DownloadJobManager.emit(DownloadJobManager.Event.Cancelled(job.candidate))
+                                DownloadJobManager.emit(
+                                    DownloadJobManager.Event.Cancelled(job.candidate, job.epoch)
+                                )
                                 stopForeground(STOP_FOREGROUND_REMOVE)
                                 stopSelf()
                             }
@@ -418,6 +455,8 @@ internal class DownloadService : Service() {
         lastProgressTime = 0L
         currentSpeedBytesPerSec = 0.0
         speedSamples = 0
+        paused = false
+        currentConnections = 1
         val notification = buildProgressNotification(candidate, 0)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
@@ -434,9 +473,13 @@ internal class DownloadService : Service() {
         // coroutine cancellation alone cannot interrupt a blocking OkHttp read,
         // which would otherwise keep writing to the same staged file.
         downloader.cancelCurrent()
+        downloader.prepare()
         downloadJob = serviceScope.launch {
             try {
                 val file = runDownload(job)
+                // The transfer is over; a pause that landed on the last bytes
+                // must not leave the scan/handoff notifications saying "Paused".
+                paused = false
                 // Check if VirusTotal scanning is needed before handoff.
                 val settings = job.settings
                 if (settings.virusTotalEnabled && settings.virusTotalApiKey.isNotBlank()) {
@@ -535,6 +578,7 @@ internal class DownloadService : Service() {
     }
 
     private fun handleSuccess(job: DownloadJobManager.DownloadJob, file: File) {
+        paused = false
         val request = job.request
         val candidate = job.candidate
         val settings = job.settings
@@ -574,6 +618,7 @@ internal class DownloadService : Service() {
     }
 
     private suspend fun scanAndHandoff(job: DownloadJobManager.DownloadJob, file: File) {
+        paused = false
         val candidate = job.candidate
         val settings = job.settings
         val apiKey = settings.virusTotalApiKey
@@ -721,14 +766,16 @@ internal class DownloadService : Service() {
     private fun handleFailure(job: DownloadJobManager.DownloadJob, error: Throwable) {
         val message = downloadFailureMessage(job.candidate, error)
         Log.w(TAG, "Download failed for ${job.candidate.packageName}", error)
-        DownloadJobManager.emit(DownloadJobManager.Event.Failed(job.candidate, message))
+        paused = false
+        DownloadJobManager.emit(DownloadJobManager.Event.Failed(job.candidate, message, job.epoch))
         notifyFailure(job, message)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
     private fun handleCancelled(job: DownloadJobManager.DownloadJob) {
-        DownloadJobManager.emit(DownloadJobManager.Event.Cancelled(job.candidate))
+        paused = false
+        DownloadJobManager.emit(DownloadJobManager.Event.Cancelled(job.candidate, job.epoch))
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -745,7 +792,36 @@ internal class DownloadService : Service() {
         )
     }
 
+    private fun pauseDownload() {
+        val job = DownloadJobManager.activeJob ?: return
+        if (paused) return
+        paused = true
+        downloader.pause()
+        DownloadJobManager.emit(
+            DownloadJobManager.Event.Paused(job.candidate, true, job.epoch)
+        )
+        notifySafe(
+            NOTIFICATION_ID_PROGRESS,
+            buildProgressNotification(job.candidate, lastPostedPercent.coerceAtLeast(0), "Paused")
+        )
+    }
+
+    private fun resumeDownload() {
+        val job = DownloadJobManager.activeJob ?: return
+        if (!paused) return
+        paused = false
+        downloader.resume()
+        DownloadJobManager.emit(
+            DownloadJobManager.Event.Paused(job.candidate, false, job.epoch)
+        )
+        notifySafe(
+            NOTIFICATION_ID_PROGRESS,
+            buildProgressNotification(job.candidate, lastPostedPercent.coerceAtLeast(0))
+        )
+    }
+
     private fun cancelDownload() {
+        paused = false
         downloader.cancelCurrent()
         downloadJob?.cancel()
         // Flag any in-flight scan (ALWAYS or ASK mode) so its next
@@ -766,10 +842,18 @@ internal class DownloadService : Service() {
         }
         val safeName = outputName.sanitizeFileName()
         val outputFile = File(downloadsDir, safeName)
-        val stagedFile = File(downloadsDir, "$safeName.part")
-        downloader.downloadToFile(downloadFile, stagedFile) { copied, total ->
-            updateDownloadProgress(candidate, copied, total)
-        }
+        // Keep the source in the staged name so switching sources can never
+        // resume one source's partial bytes with another source's URL.
+        val stagedFile = File(
+            downloadsDir,
+            "$safeName.${candidate.source.name.lowercase(Locale.US)}.part"
+        )
+        downloader.downloadToFile(
+            download = downloadFile,
+            target = stagedFile,
+            onProgress = { copied, total -> updateDownloadProgress(candidate, copied, total) },
+            onConnections = { connections -> currentConnections = connections }
+        )
         if (outputFile.exists()) outputFile.delete()
         if (!stagedFile.renameTo(outputFile)) {
             stagedFile.copyTo(outputFile, overwrite = true)
@@ -822,9 +906,14 @@ internal class DownloadService : Service() {
                 downloadsDir,
                 "${candidate.packageName}-${candidate.source.name}-split_$index.part".sanitizeFileName()
             )
-            downloader.downloadToFile(file, stagedFile) { fileCopied, total ->
-                knownTotal?.let { updateDownloadProgress(candidate, completed + fileCopied, it) }
-            }
+            downloader.downloadToFile(
+                download = file,
+                target = stagedFile,
+                onProgress = { fileCopied, total ->
+                    knownTotal?.let { updateDownloadProgress(candidate, completed + fileCopied, it) }
+                },
+                onConnections = { connections -> currentConnections = connections }
+            )
             completed += stagedFile.length()
             stagedFile to file.fileName.ifBlank { "split_$index.apk" }.sanitizeFileName()
         }
@@ -855,6 +944,7 @@ internal class DownloadService : Service() {
     private fun downloadClientFor(url: String): OkHttpClient =
         if (url.contains("apkpure", ignoreCase = true)) apkPureClient else client
 
+    @Synchronized
     private fun updateDownloadProgress(candidate: DownloadCandidate, copied: Long, total: Long) {
         if (total <= 0L) return
         val now = SystemClock.elapsedRealtime()
@@ -890,12 +980,20 @@ internal class DownloadService : Service() {
             ((total - copied) / currentSpeedBytesPerSec * 1000.0).toLong()
         } else null
         DownloadJobManager.emit(
-            DownloadJobManager.Event.Progress(candidate, percent, currentSpeedBytesPerSec, etaMs)
+            DownloadJobManager.Event.Progress(
+                candidate,
+                percent,
+                currentSpeedBytesPerSec,
+                etaMs,
+                currentConnections
+            )
         )
         // Refresh at least once a second so speed/ETA stay fresh even when
         // percent changes slowly (big files, slow links); percent-gating alone
         // would leave a stale ETA up for many seconds.
-        if (percent != lastPostedPercent || now - lastPostedTime >= 1000L) {
+        // While paused, leave the Paused notification alone; a read that was
+        // already in flight may still deliver one more progress callback.
+        if (!paused && (percent != lastPostedPercent || now - lastPostedTime >= 1000L)) {
             lastPostedPercent = percent
             lastPostedTime = now
             val speed = formatSpeed(currentSpeedBytesPerSec)
@@ -960,14 +1058,29 @@ internal class DownloadService : Service() {
             Intent(this, DownloadService::class.java).setAction(ACTION_CANCEL_DOWNLOAD),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val pauseIntent = PendingIntent.getService(
+            this,
+            1,
+            Intent(this, DownloadService::class.java).setAction(
+                if (paused) ACTION_RESUME_DOWNLOAD else ACTION_PAUSE_DOWNLOAD
+            ),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         return NotificationCompat.Builder(this, CHANNEL_PROGRESS)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle("Downloading ${candidate.name}")
-            .setContentText(contentText ?: if (percent <= 0) "Preparing…" else "$percent%")
+            .setContentTitle(if (paused) "Paused: ${candidate.name}" else "Downloading ${candidate.name}")
+            .setContentText(
+                contentText ?: when {
+                    paused -> "Paused"
+                    percent <= 0 -> "Preparing…"
+                    else -> "$percent%"
+                }
+            )
             .setProgress(100, percent.coerceIn(0, 100), false)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(contentIntent)
+            .addAction(0, if (paused) "Resume" else "Pause", pauseIntent)
             .addAction(0, "Cancel", cancelIntent)
             .build()
     }

@@ -111,6 +111,9 @@ import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.OpenInBrowser
+import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.NetworkCheck
 import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Refresh
@@ -135,6 +138,7 @@ import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -390,6 +394,8 @@ class MainActivity : ComponentActivity() {
     private var installedPackageRefreshToken by mutableIntStateOf(0)
     private val historyTimeFormat = SimpleDateFormat("MMM d, HH:mm", Locale.US)
     private var pendingDownload: PendingDownload? = null
+    // Source picked from the download screen; the next Cancelled event starts it.
+    private var pendingSwitchSource: DownloadSource? = null
     // Non-null while the in-app browser is open for a candidate whose source
     // needs a real browser to reach the APK download.
     private var captchaBrowser by mutableStateOf<DownloadCandidate?>(null)
@@ -501,6 +507,9 @@ class MainActivity : ComponentActivity() {
                             finish()
                         },
                         onCancelDownload = ::cancelDownload,
+                        onPauseDownload = ::pauseDownload,
+                        onResumeDownload = ::resumeDownload,
+                        onSwitchDownloadSource = ::switchDownloadSource,
                         onSkipScanWait = { VirusTotalScanner.rateLimiter.requestSkip() },
                         onCancelFastMode = ::cancelFastMode,
                         onUseFastModeMismatch = { fastModeChoose(FastModeChoice.USE) },
@@ -1094,6 +1103,87 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun pauseDownload() {
+        appendLog("Pausing download…", LogLevel.Info)
+        runCatching {
+            startService(
+                Intent(this, DownloadService::class.java).setAction(ACTION_PAUSE_DOWNLOAD)
+            )
+        }.onFailure {
+            appendLog("Could not pause the download.", LogLevel.Error)
+        }
+    }
+
+    private fun resumeDownload() {
+        appendLog("Resuming download…", LogLevel.Info)
+        runCatching {
+            startService(
+                Intent(this, DownloadService::class.java).setAction(ACTION_RESUME_DOWNLOAD)
+            )
+        }.onFailure {
+            appendLog("Could not resume the download.", LogLevel.Error)
+        }
+    }
+
+    private fun switchDownloadSource(source: DownloadSource) {
+        if (pendingSwitchSource != null) return
+        if (request == null) return
+        pendingSwitchSource = source
+        appendLog("Switching source to ${source.label}…", LogLevel.Warning)
+        fastModeActive = false
+        fastModeQueue = null
+        fastModeDecision?.complete(null)
+        fastModeDecision = null
+        fastModeVersionDecision?.complete(null)
+        fastModeVersionDecision = null
+        if (DownloadJobManager.activeJob != null) {
+            cancelDownload()
+            // If the service already stopped and no Cancelled event comes back,
+            // start the new source without waiting forever.
+            lifecycleScope.launch {
+                delay(2_000)
+                if (pendingSwitchSource == source) startPendingSwitch()
+            }
+        } else {
+            startPendingSwitch()
+        }
+    }
+
+    private fun startPendingSwitch() {
+        val source = pendingSwitchSource ?: return
+        pendingSwitchSource = null
+        val activeRequest = request ?: return
+        appendLog("Resolving ${source.label} again…", LogLevel.Info)
+        uiState = UiState.Loading
+        lifecycleScope.launch {
+            val option = if (activeRequest.hasRequestedVersionRequest) {
+                CandidateOption.REQUESTED
+            } else {
+                CandidateOption.LATEST
+            }
+            val outcome = withContext(Dispatchers.IO) {
+                resolveSourceSection(activeRequest, source, option)
+            }
+            val candidate = outcome.candidates.firstOrNull { it.directDownload }
+                ?: outcome.candidates.firstOrNull()
+            if (candidate == null) {
+                val message = outcome.notFoundMessage
+                    ?: outcome.errorMessage
+                    ?: "No downloadable file from ${source.label}."
+                appendLog(message, LogLevel.Error)
+                uiState = UiState.Error(message)
+            } else if (!candidate.directDownload) {
+                appendLog(
+                    "${source.label} needs a browser check; choose the file manually.",
+                    LogLevel.Warning
+                )
+                uiState = UiState.Ready(initialCandidateResult(activeRequest))
+            } else {
+                downloadAndReturn(candidate)
+            }
+        }
+    }
+
     // ---- In-app captcha browser: let the user solve a captcha in a real
     // browser and capture the download URL it produces ----
 
@@ -1499,7 +1589,20 @@ class MainActivity : ComponentActivity() {
     private fun handleDownloadEvent(event: DownloadJobManager.Event?) {
         when (event) {
             null -> Unit
+            is DownloadJobManager.Event.Paused -> {
+                val current = uiState
+                uiState = when (current) {
+                    is UiState.Downloading -> current.copy(paused = event.paused)
+                    is UiState.FastMode -> current.copy(
+                        progress = current.progress.copy(paused = event.paused)
+                    )
+                    else -> current
+                }
+            }
             is DownloadJobManager.Event.Progress -> {
+                val wasPaused = (uiState as? UiState.Downloading)?.paused
+                    ?: (uiState as? UiState.FastMode)?.progress?.paused
+                    ?: false
                 uiState = if (fastModeActive) {
                     UiState.FastMode(
                         FastModeProgress(
@@ -1507,7 +1610,9 @@ class MainActivity : ComponentActivity() {
                             detail = "Downloading from ${event.candidate.source.label}…",
                             percent = event.percent,
                             speedBytesPerSec = event.speedBytesPerSec,
-                            etaMs = event.etaMs
+                            etaMs = event.etaMs,
+                            paused = wasPaused,
+                            connections = event.connections
                         )
                     )
                 } else {
@@ -1515,7 +1620,9 @@ class MainActivity : ComponentActivity() {
                         event.candidate,
                         event.percent,
                         event.speedBytesPerSec,
-                        event.etaMs
+                        event.etaMs,
+                        paused = wasPaused,
+                        connections = event.connections
                     )
                 }
             }
@@ -1679,6 +1786,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
             is DownloadJobManager.Event.Failed -> {
+                if (event.epoch != 0L && event.epoch != DownloadJobManager.currentEpoch) return
+                if (pendingSwitchSource != null) {
+                    startPendingSwitch()
+                    return
+                }
                 // Only the owning activity may act on a failure. A stale
                 // instance (no request, or a different package) must ignore
                 // it  and must NOT clear it first, or the owner's collector
@@ -1790,6 +1902,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
             is DownloadJobManager.Event.Cancelled -> {
+                if (event.epoch != 0L && event.epoch != DownloadJobManager.currentEpoch) return
+                if (pendingSwitchSource != null) {
+                    startPendingSwitch()
+                    return
+                }
                 // Only the owning activity may act on a cancellation. A stale
                 // instance (no request, or a different package) must ignore
                 // it  and must NOT clear it first, or the owner's collector
@@ -2610,6 +2727,9 @@ private fun HelperScreen(
     onClearLogs: () -> Unit,
     onCancel: () -> Unit,
     onCancelDownload: () -> Unit,
+    onPauseDownload: () -> Unit,
+    onResumeDownload: () -> Unit,
+    onSwitchDownloadSource: (DownloadSource) -> Unit,
     onSkipScanWait: () -> Unit,
     onCancelFastMode: () -> Unit,
     onUseFastModeMismatch: () -> Unit,
@@ -2624,6 +2744,7 @@ private fun HelperScreen(
 ) {
     var showSettings by remember { mutableStateOf(false) }
     var showAppBrowser by remember { mutableStateOf(false) }
+    val availableSources = DownloadSource.entries.filter { it !in settings.disabledSources }
     var pendingFilePick by remember { mutableStateOf<DownloadCandidate?>(null) }
     var primaryAction by remember { mutableStateOf<PrimaryAction?>(null) }
     val context = LocalContext.current
@@ -2799,7 +2920,11 @@ private fun HelperScreen(
                     item {
                         DownloadingState(
                             state = state,
+                            availableSources = availableSources,
                             onCancel = onCancelDownload,
+                            onPause = onPauseDownload,
+                            onResume = onResumeDownload,
+                            onSwitchSource = onSwitchDownloadSource,
                             onSkipWait = onSkipScanWait,
                             onSkipScan = onSkipScan
                         )
@@ -2839,7 +2964,11 @@ private fun HelperScreen(
                     item {
                         FastModeCard(
                             progress = state.progress,
+                            availableSources = availableSources,
                             onCancel = onCancelFastMode,
+                            onPause = onPauseDownload,
+                            onResume = onResumeDownload,
+                            onSwitchSource = onSwitchDownloadSource,
                             onSkipWait = onSkipScanWait,
                             onUseMismatch = onUseFastModeMismatch,
                             onSkipMismatch = onSkipFastModeMismatch,
@@ -7704,13 +7833,59 @@ private fun CheckingPickedFileState(state: UiState.CheckingPickedFile) {
 @Composable
 private fun FastModeCard(
     progress: FastModeProgress,
+    availableSources: List<DownloadSource>,
     onCancel: () -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onSwitchSource: (DownloadSource) -> Unit,
     onSkipWait: () -> Unit,
     onUseMismatch: () -> Unit,
     onSkipMismatch: () -> Unit,
     onSkipScan: () -> Unit,
     onChooseVersion: (FastModePolicy) -> Unit
 ) {
+    var showSwitch by remember { mutableStateOf(false) }
+    var resumeOnDismiss by remember { mutableStateOf(false) }
+
+    if (showSwitch) {
+        AlertDialog(
+            onDismissRequest = {
+                showSwitch = false
+                if (resumeOnDismiss) onResume()
+                resumeOnDismiss = false
+            },
+            title = { Text("Switch source") },
+            text = {
+                Column {
+                    availableSources
+                        .filter { it.label != progress.sourceLabel }
+                        .forEach { source ->
+                            TextButton(
+                                onClick = {
+                                    showSwitch = false
+                                    resumeOnDismiss = false
+                                    onSwitchSource(source)
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(source.label)
+                            }
+                        }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showSwitch = false
+                        if (resumeOnDismiss) onResume()
+                        resumeOnDismiss = false
+                    }
+                ) { Text("Cancel") }
+            }
+        )
+    }
+
     SurfaceCard(cornerRadius = MorpheDefaults.SectionCornerRadius) {
         Column(
             modifier = Modifier
@@ -7886,10 +8061,17 @@ private fun FastModeCard(
                     Text(
                         text = buildString {
                             append(progress.percent).append('%')
-                            val speed = formatTransferSpeed(progress.speedBytesPerSec)
-                            if (speed.isNotEmpty()) append("  ·  ").append(speed)
-                            if (progress.etaMs != null && progress.etaMs > 0L) {
-                                append("  ·  ").append(formatTransferEta(progress.etaMs)).append(" left")
+                            if (!isScanStatus(progress.detail) && progress.percent < 100) {
+                                val connections = progress.connections
+                                append("  ·  ").append(connections)
+                                    .append(if (connections == 1) " connection" else " connections")
+                            }
+                            if (!progress.paused) {
+                                val speed = formatTransferSpeed(progress.speedBytesPerSec)
+                                if (speed.isNotEmpty()) append("  ·  ").append(speed)
+                                if (progress.etaMs != null && progress.etaMs > 0L) {
+                                    append("  ·  ").append(formatTransferEta(progress.etaMs)).append(" left")
+                                }
                             }
                         },
                         fontWeight = FontWeight.Medium
@@ -7899,6 +8081,29 @@ private fun FastModeCard(
                         onClick = onCancel,
                         icon = Icons.Outlined.Close
                     )
+                }
+                if (!isScanStatus(progress.detail) && progress.percent < 100) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        HelperOutlinedButton(
+                            text = if (progress.paused) "Resume" else "Pause",
+                            onClick = if (progress.paused) onResume else onPause,
+                            modifier = Modifier.weight(1f),
+                            icon = if (progress.paused) Icons.Outlined.PlayArrow else Icons.Outlined.Pause
+                        )
+                        HelperOutlinedButton(
+                            text = "Switch source",
+                            onClick = {
+                                resumeOnDismiss = !progress.paused
+                                if (!progress.paused) onPause()
+                                showSwitch = true
+                            },
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Outlined.SwapHoriz
+                        )
+                    }
                 }
                 SkipWaitButton(
                     active = isRateLimitWait(progress.detail),
@@ -8013,16 +8218,63 @@ private fun scanPhaseSplit(status: String): Pair<String, String> {
 @Composable
 private fun DownloadingState(
     state: UiState.Downloading,
+    availableSources: List<DownloadSource>,
     onCancel: () -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onSwitchSource: (DownloadSource) -> Unit,
     onSkipWait: () -> Unit,
     onSkipScan: () -> Unit
 ) {
+    var showSwitch by remember { mutableStateOf(false) }
+    var resumeOnDismiss by remember { mutableStateOf(false) }
+
+    if (showSwitch) {
+        AlertDialog(
+            onDismissRequest = {
+                showSwitch = false
+                if (resumeOnDismiss) onResume()
+                resumeOnDismiss = false
+            },
+            title = { Text("Switch source") },
+            text = {
+                Column {
+                    availableSources
+                        .filter { it != state.candidate.source }
+                        .forEach { source ->
+                            TextButton(
+                                onClick = {
+                                    showSwitch = false
+                                    resumeOnDismiss = false
+                                    onSwitchSource(source)
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(source.label)
+                            }
+                        }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showSwitch = false
+                        if (resumeOnDismiss) onResume()
+                        resumeOnDismiss = false
+                    }
+                ) { Text("Cancel") }
+            }
+        )
+    }
+
     SurfaceCard {
         Column(
             modifier = Modifier.padding(MorpheDefaults.ContentPadding),
             verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
         ) {
-            val statusText = state.statusMessage ?: "Downloading from ${state.candidate.source.label}"
+            val statusText = state.statusMessage
+                ?: if (state.paused) "Paused" else "Downloading from ${state.candidate.source.label}"
             val isScan = isScanStatus(statusText)
             val (phase, detail) = if (isScan) scanPhaseSplit(statusText) else (statusText to "")
             Text(
@@ -8049,10 +8301,16 @@ private fun DownloadingState(
                 Text(
                     text = buildString {
                         append(state.percent).append('%')
-                        val speed = formatTransferSpeed(state.speedBytesPerSec)
-                        if (speed.isNotEmpty()) append("  ·  ").append(speed)
-                        if (state.etaMs != null && state.etaMs > 0L) {
-                            append("  ·  ").append(formatTransferEta(state.etaMs)).append(" left")
+                        if (!isScan && state.percent < 100) {
+                            append("  ·  ").append(state.connections)
+                                .append(if (state.connections == 1) " connection" else " connections")
+                        }
+                        if (!state.paused) {
+                            val speed = formatTransferSpeed(state.speedBytesPerSec)
+                            if (speed.isNotEmpty()) append("  ·  ").append(speed)
+                            if (state.etaMs != null && state.etaMs > 0L) {
+                                append("  ·  ").append(formatTransferEta(state.etaMs)).append(" left")
+                            }
                         }
                     },
                     fontWeight = FontWeight.Medium
@@ -8062,6 +8320,29 @@ private fun DownloadingState(
                     onClick = onCancel,
                     icon = Icons.Outlined.Close
                 )
+            }
+            if (!isScan && state.percent < 100) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    HelperOutlinedButton(
+                        text = if (state.paused) "Resume" else "Pause",
+                        onClick = if (state.paused) onResume else onPause,
+                        modifier = Modifier.weight(1f),
+                        icon = if (state.paused) Icons.Outlined.PlayArrow else Icons.Outlined.Pause
+                    )
+                    HelperOutlinedButton(
+                        text = "Switch source",
+                        onClick = {
+                            resumeOnDismiss = !state.paused
+                            if (!state.paused) onPause()
+                            showSwitch = true
+                        },
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Outlined.SwapHoriz
+                    )
+                }
             }
             SkipWaitButton(
                 active = isRateLimitWait(statusText),
@@ -9162,7 +9443,9 @@ private sealed interface UiState {
         val percent: Int,
         val speedBytesPerSec: Double = 0.0,
         val etaMs: Long? = null,
-        val statusMessage: String? = null
+        val statusMessage: String? = null,
+        val paused: Boolean = false,
+        val connections: Int = 1
     ) : UiState
     data class Error(val message: String) : UiState
     data class FastMode(val progress: FastModeProgress) : UiState
@@ -9191,6 +9474,8 @@ private data class FastModeProgress(
     val percent: Int? = null,
     val speedBytesPerSec: Double = 0.0,
     val etaMs: Long? = null,
+    val paused: Boolean = false,
+    val connections: Int = 1,
     val done: Boolean = false,
     val succeeded: Boolean = false,
     // Present once Fast Mode finishes so the regular source list stays reachable.
