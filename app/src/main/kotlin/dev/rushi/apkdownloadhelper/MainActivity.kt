@@ -625,7 +625,7 @@ class MainActivity : ComponentActivity() {
                         onChooseVersion = ::fastModeChooseVersion,
                         onOpenMorphe = ::openMorpheManager,
                         onSolveCaptcha = ::openCaptchaBrowser,
-                        onRequestFileTypeChange = ::changeRequestedFileType,
+                        onFormatToggle = ::toggleRequestedFileKind,
                         onProceedAfterScan = ::proceedAfterScan,
                         onCancelAfterScan = ::cancelAfterScan,
                         onSkipScan = ::skipScanAndHandoff
@@ -1233,15 +1233,29 @@ class MainActivity : ComponentActivity() {
         AppLog.record(level, message)
     }
 
-    private fun changeRequestedFileType(kind: String) {
+    private fun toggleRequestedFileKind(kind: String) {
         val active = request ?: return
-        if (active.requestedFileType?.equals(kind, ignoreCase = true) == true) return
-        // Pin the request to a single format so resolution only looks for it.
+        val normalized = kind.lowercase(Locale.US)
+        val available = active.availableFileKinds
+        if (normalized !in available) return
+
+        val selected = active.requestedFileKinds
+        val updated = if (normalized in selected) {
+            // Keep at least one format selected; an empty set would accept anything.
+            if (selected.size == 1) return
+            selected - normalized
+        } else {
+            selected + normalized
+        }
+        if (updated == selected) return
+
         request = active.copy(
-            requestedFileType = kind,
-            allowSplitArchive = false
+            requestedFileKindsOverride = updated.takeUnless { it == available }
         )
-        appendLog("Request format narrowed to ${kind.uppercase(Locale.US)}.", LogLevel.Info)
+        appendLog(
+            "Request formats: ${updated.orderedFileKinds().joinToString("/") { it.uppercase(Locale.US) }}.",
+            LogLevel.Info
+        )
         loadCandidates()
     }
 
@@ -2217,17 +2231,28 @@ class MainActivity : ComponentActivity() {
         request: HelperRequest,
         source: DownloadSource
     ): FastModeFindResult {
-        val outcome = resolveSourceSection(request, source, CandidateOption.REQUESTED)
-        val exact = outcome.candidates.firstOrNull { candidate ->
-            // Format differences are fine, but the exact version name AND
-            // version code are both required. A captcha-gated page is still an
-            // exact match: the in-app browser can reveal its file after the user
-            // solves the challenge. A candidate that reports a code outside the
-            // request is surfaced as a mismatch the user can accept or skip
-            // never silently downloaded.
-            (candidate.directDownload || candidate.captchaUrl != null) &&
-                request.matchesRequestedVersionStrict(candidate)
-        }
+                val outcome = resolveSourceSection(request, source, CandidateOption.REQUESTED)
+        // Multiple formats can be selected now, so take the first one in the
+        // picker's order (APK before APKM/APKS/XAPK) instead of whichever order
+        // the source happened to list.
+        val exact = outcome.candidates.withIndex()
+            .filter { (_, candidate) ->
+                // Format differences are fine, but the exact version name AND
+                // version code are both required. A captcha-gated page is still an
+                // exact match: the in-app browser can reveal its file after the user
+                // solves the challenge. A candidate that reports a code outside the
+                // request is surfaced as a mismatch the user can accept or skip 
+                // never silently downloaded.
+                (candidate.directDownload || candidate.captchaUrl != null) &&
+                    request.matchesRequestedVersionStrict(candidate)
+            }
+            .minWithOrNull(
+                compareBy(
+                    { request.fileKindPriority(it.value.fileKind) },
+                    { it.index }
+                )
+            )
+            ?.value
         if (exact != null) return FastModeFindResult.Exact(exact)
 
         // The version name exists on this source but with a different build 
@@ -4180,7 +4205,7 @@ private fun HelperScreen(
     onChooseVersion: (FastModePolicy) -> Unit,
     onOpenMorphe: () -> Unit,
     onSolveCaptcha: (DownloadCandidate) -> Unit,
-    onRequestFileTypeChange: (String) -> Unit,
+    onFormatToggle: (String) -> Unit,
     onProceedAfterScan: () -> Unit,
     onCancelAfterScan: () -> Unit,
     onSkipScan: () -> Unit
@@ -4328,7 +4353,7 @@ private fun HelperScreen(
                     MorpheSectionTitle(text = "App info", icon = Icons.Outlined.Smartphone)
                     AppInfoCard(
                         request = request,
-                        onFormatSelected = onRequestFileTypeChange
+                        onFormatToggle = onFormatToggle
                     )
                 }
             }
@@ -7673,7 +7698,7 @@ private fun HelperThemeButton(
 @Composable
 private fun AppInfoCard(
     request: HelperRequest,
-    onFormatSelected: (String) -> Unit
+    onFormatToggle: (String) -> Unit
 ) {
     SurfaceCard(cornerRadius = MorpheDefaults.SectionCornerRadius) {
         Column(
@@ -7682,7 +7707,7 @@ private fun AppInfoCard(
                 .padding(MorpheDefaults.ContentPadding),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            AppInfoHeader(request, onFormatSelected)
+            AppInfoHeader(request, onFormatToggle)
         }
     }
 }
@@ -7690,7 +7715,7 @@ private fun AppInfoCard(
 @Composable
 private fun AppInfoHeader(
     request: HelperRequest,
-    onFormatSelected: (String) -> Unit
+    onFormatToggle: (String) -> Unit
 ) {
     val context = LocalContext.current
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
@@ -7791,8 +7816,9 @@ private fun AppInfoHeader(
                     .fillMaxHeight()
             )
             AppInfoFormatCard(
-                kinds = request.requestedFileKinds.orderedFileKinds(),
-                onSelect = onFormatSelected,
+                kinds = request.availableFileKinds.orderedFileKinds(),
+                selectedKinds = request.requestedFileKinds,
+                onToggle = onFormatToggle,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
@@ -7852,11 +7878,17 @@ private fun AppInfoStatCard(
 @Composable
 private fun AppInfoFormatCard(
     kinds: List<String>,
-    onSelect: (String) -> Unit,
+    selectedKinds: Set<String>,
+    onToggle: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(MorpheDefaults.CompactCornerRadius)
-    val current = kinds.firstOrNull() ?: "apk"
+    val selected = kinds.filter { it in selectedKinds }
+    val summary = when {
+        selected.isEmpty() || selected.size == kinds.size -> "Any"
+        selected.size == 1 -> selected.first().uppercase(Locale.US)
+        else -> selected.joinToString(" + ") { it.uppercase(Locale.US) }
+    }
     var expanded by rememberSaveable(kinds) { mutableStateOf(false) }
 
     Surface(
@@ -7886,7 +7918,7 @@ private fun AppInfoFormatCard(
                         style = MaterialTheme.typography.labelSmall
                     )
                     Text(
-                        text = current.uppercase(Locale.US),
+                        text = summary,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.bodyMedium,
                         maxLines = 1,
@@ -7894,7 +7926,7 @@ private fun AppInfoFormatCard(
                     )
                 }
                 if (kinds.size > 1) {
-                    // Same +N pill + chevron affordance as the Architecture card.
+                    // Same count pill + chevron affordance as the Architecture card.
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -7905,7 +7937,7 @@ private fun AppInfoFormatCard(
                     ) {
                         if (!expanded) {
                             Text(
-                                text = "+${kinds.size - 1}",
+                                text = "${selected.size}/${kinds.size}",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.labelSmall,
                                 modifier = Modifier
@@ -7922,7 +7954,7 @@ private fun AppInfoFormatCard(
                             } else {
                                 Icons.Outlined.ExpandMore
                             },
-                            contentDescription = if (expanded) "Collapse formats" else "Choose format",
+                            contentDescription = if (expanded) "Collapse formats" else "Choose formats",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(18.dp)
                         )
@@ -7937,25 +7969,36 @@ private fun AppInfoFormatCard(
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
                 )
                 kinds.forEach { kind ->
-                    val selected = kind == current
-                    Text(
-                        text = kind.uppercase(Locale.US),
-                        color = if (selected) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        },
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                        style = MaterialTheme.typography.bodyMedium,
+                    val isSelected = kind in selectedKinds
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(MorpheDefaults.CompactCornerRadius))
-                            .clickable {
-                                onSelect(kind)
-                                expanded = false
-                            }
-                            .padding(vertical = 6.dp)
-                    )
+                            .clickable { onToggle(kind) }
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = kind.uppercase(Locale.US),
+                            color = if (isSelected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (isSelected) {
+                            Icon(
+                                imageVector = Icons.Outlined.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -10769,6 +10812,8 @@ internal data class HelperRequest(
     val supportedAbis: List<String>,
     val requestedFileType: String?,
     val allowSplitArchive: Boolean,
+    /** Formats the on-screen picker narrowed the request to, null for all allowed kinds. */
+    val requestedFileKindsOverride: Set<String>? = null,
     val stockInstallRequired: Boolean,
     val fallbackWebUrl: String,
     val sourceHintUrls: List<String>
@@ -10791,6 +10836,11 @@ internal data class HelperRequest(
         get() = availableAbis.joinToString().ifBlank { "Default" }
 
     val requestedFileKinds: Set<String>
+        get() = requestedFileKindsOverride?.takeIf { it.isNotEmpty() }
+            ?: requestedFileKindsFrom(requestedFileType, allowSplitArchive)
+
+    /** Every format the caller allows, before the format picker narrows them. */
+    val availableFileKinds: Set<String>
         get() = requestedFileKindsFrom(requestedFileType, allowSplitArchive)
 
     val requestedFormatLabel: String
@@ -10865,6 +10915,17 @@ internal data class HelperRequest(
         // listed kind counts as a match instead of a false "Format mismatch".
         val kinds = fileKind.lowercase(Locale.US).split('/')
         return kinds.any { it in requestedFileKinds }
+    }
+
+    /** Position of [fileKind] in the selected format order, or Int.MAX_VALUE when unselected. */
+    fun fileKindPriority(fileKind: String): Int {
+        val order = requestedFileKinds.orderedFileKinds()
+        return fileKind.lowercase(Locale.US)
+            .split('/')
+            .map { it to order.indexOf(it) }
+            .filter { it.second >= 0 }
+            .minOfOrNull { it.second }
+            ?: Int.MAX_VALUE
     }
 
     /**
