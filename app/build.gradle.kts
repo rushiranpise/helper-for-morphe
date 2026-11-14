@@ -116,6 +116,7 @@ dependencies {
     implementation("com.auroraoss:gplayapi:3.5.8")
     implementation("com.google.code.gson:gson:2.13.2")
     implementation("com.google.re2j:re2j:1.8")
+    implementation("net.dongliu:apk-parser:2.6.10")
     implementation("com.squareup.okhttp3:okhttp:5.3.2")
     implementation("com.squareup.okhttp3:okhttp-dnsoverhttps:5.3.0")
     implementation("com.squareup.retrofit2:converter-gson:3.0.0")

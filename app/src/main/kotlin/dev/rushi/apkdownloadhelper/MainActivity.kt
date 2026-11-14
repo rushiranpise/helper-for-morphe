@@ -224,18 +224,30 @@ import com.google.gson.annotations.SerializedName
 import dev.rushi.apkdownloadhelper.VirusTotalScanner.isEntirelyClean
 import dev.rushi.apkdownloadhelper.play.NativeDeviceInfoProvider
 import dev.rushi.apkdownloadhelper.play.PlayHttpClient
+import java.io.BufferedInputStream
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.InputStream
 import java.io.SequenceInputStream
 import java.net.URLDecoder
 import java.net.URLEncoder
+import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
+import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
+import net.dongliu.apk.parser.parser.BinaryXmlParser
+import net.dongliu.apk.parser.parser.XmlStreamer
+import net.dongliu.apk.parser.struct.xml.XmlCData
+import net.dongliu.apk.parser.struct.xml.XmlNamespaceEndTag
+import net.dongliu.apk.parser.struct.xml.XmlNamespaceStartTag
+import net.dongliu.apk.parser.struct.xml.XmlNodeEndTag
+import net.dongliu.apk.parser.struct.xml.XmlNodeStartTag
 import kotlin.math.roundToInt
 import kotlin.random.Random
 import kotlinx.coroutines.CompletableDeferred
@@ -246,6 +258,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.Cache
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONObject
 import org.jsoup.nodes.Document
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -1862,7 +1875,13 @@ class MainActivity : ComponentActivity() {
                             "Fast Mode: ${event.candidate.source.label} did not work  trying the next source.",
                             LogLevel.Warning
                         )
-                        lifecycleScope.launch { fastModeNext(activeRequest) }
+                        lifecycleScope.launch {
+                            if (fastModeRunPolicy == FastModePolicy.LATEST) {
+                                fastModeNextLatest(activeRequest)
+                            } else {
+                                fastModeNext(activeRequest)
+                            }
+                        }
                     } else {
                         fastModeActive = false
                         fastModeQueue = null
@@ -9445,7 +9464,8 @@ private fun capturedDownloadFileName(
 internal data class DownloadedApkMetadata(
     val packageName: String,
     val versionName: String?,
-    val versionCode: Long?
+    val versionCode: Long?,
+    val minSdkVersion: Int? = null
 )
 
 internal enum class DownloadSource(
@@ -9835,38 +9855,48 @@ private fun validateApkLikeStream(
     return SequenceInputStream(ByteArrayInputStream(header, 0, headerSize), input)
 }
 
-internal fun Context.readDownloadedApkMetadata(file: File): DownloadedApkMetadata? {
+internal fun Context.readDownloadedApkMetadata(
+    file: File,
+    expectedPackage: String? = null,
+    expectedVersionNames: List<String> = emptyList(),
+    expectedVersionCodes: List<Long> = emptyList()
+): DownloadedApkMetadata? {
     if (file.extension.equals("apk", ignoreCase = true)) {
         // A container can arrive named .apk (a source served the bundle under an APK
         // name, or a candidate's kind was a guess), so fall back to reading it as one.
-        return readApkMetadata(file) ?: readContainerMetadata(file)
+        return readApkMetadata(file)
+            ?: readStandaloneManifest(file)
+            ?: readContainerMetadata(file, expectedPackage, expectedVersionNames, expectedVersionCodes)
     }
 
     // Only the extension says "container" - the bytes decide. A page that serves a
     // single APK from a bundle-looking page would otherwise fail validation outright.
-    return readContainerMetadata(file) ?: readApkMetadata(file)
+    return readContainerMetadata(file, expectedPackage, expectedVersionNames, expectedVersionCodes)
+        ?: readApkMetadata(file)
 }
 
 /** The base APK's metadata from inside a split container, or null when it is not one. */
-private fun Context.readContainerMetadata(file: File): DownloadedApkMetadata? {
+private fun Context.readContainerMetadata(
+    file: File,
+    expectedPackage: String?,
+    expectedVersionNames: List<String>,
+    expectedVersionCodes: List<Long>
+): DownloadedApkMetadata? {
     return runCatching {
         val validationDir = File(cacheDir, "validation").apply { mkdirs() }
         ZipFile(file).use { zip ->
+            val manifest = readXapkManifest(zip)
             // The base APK inside split containers is not always named "base.apk":
-            // some sources (e.g. APKPure XAPKs) name it after the package. Trying
-            // the first alphabetical .apk entry is wrong  config splits like
-            // config.ar.apk carry no manifest and fail to parse. Prefer the real
-            // base: exact base.apk, then a name matching the package (derived from
-            // the output file name), then the largest entry, and take the first
-            // entry that actually reads as an APK.
-            val packageHint = file.nameWithoutExtension
-                .substringBefore('-')
+            // some sources (e.g. APKPure XAPKs) name it after the package or give
+            // every split a random name. Prefer the real base, but take the first
+            // entry whose package/version matches the request.
+            val packageHint = (expectedPackage ?: file.nameWithoutExtension.substringBefore('-'))
                 .lowercase(Locale.US)
             val apkEntries = zip.entries()
                 .asSequence()
                 .filter { !it.isDirectory && it.name.endsWith(".apk", ignoreCase = true) }
                 .sortedWith(
-                    compareBy<java.util.zip.ZipEntry> { entry ->
+                    compareBy<ZipEntry> { entry ->
                         val name = entry.name.substringAfterLast('/').lowercase(Locale.US)
                         when {
                             name == "base.apk" -> 0
@@ -9879,26 +9909,237 @@ private fun Context.readContainerMetadata(file: File): DownloadedApkMetadata? {
                         .thenBy { it.name }
                 )
                 .toList()
-            var metadata: DownloadedApkMetadata? = null
+            if (apkEntries.isEmpty()) return@use null
+
+            var firstParsed: DownloadedApkMetadata? = null
             for (entry in apkEntries) {
-                val extracted = File(
-                    validationDir,
-                    "${file.nameWithoutExtension}-${entry.name.hashCode()}.apk".sanitizeFileName()
-                )
-                zip.getInputStream(entry).use { input ->
-                    extracted.outputStream().use { output -> input.copyTo(output) }
-                }
-                val read = readApkMetadata(extracted)
-                extracted.delete()
-                if (read != null) {
-                    metadata = read
-                    break
+                val metadata = readEntryMetadata(
+                    context = this@readContainerMetadata,
+                    zip = zip,
+                    entry = entry,
+                    validationDir = validationDir,
+                    stem = file.nameWithoutExtension
+                ) ?: continue
+                if (firstParsed == null) firstParsed = metadata
+                if (
+                    matchesExpectedMetadata(
+                        metadata,
+                        expectedPackage,
+                        expectedVersionNames,
+                        expectedVersionCodes
+                    )
+                ) {
+                    return@use metadata.withManifestMinSdk(manifest)
                 }
             }
-            metadata
+
+            // A readable APK always wins over manifest.json. Only fall back to the
+            // manifest when no APK metadata could be parsed at all.
+            firstParsed?.withManifestMinSdk(manifest) ?: manifest
         }
     }.getOrNull()
 }
+
+private fun readEntryMetadata(
+    context: Context,
+    zip: ZipFile,
+    entry: ZipEntry,
+    validationDir: File,
+    stem: String
+): DownloadedApkMetadata? {
+    // Android's package parser refuses split APKs that are not a standalone
+    // base, and some XAPKs name every split randomly. Reading the nested
+    // AndroidManifest.xml directly gives us the package and version anyway,
+    // without writing the APK to the cache. If the direct read is incomplete
+    // (for example versionName is a resource reference), extract the APK and
+    // let PackageManager resolve it before falling back to the direct result.
+    val direct = readNestedManifest(zip, entry)
+    if (
+        direct != null &&
+        direct.versionName != null &&
+        direct.versionCode != null &&
+        direct.minSdkVersion != null
+    ) {
+        return direct
+    }
+
+    val extracted = File(
+        validationDir,
+        "$stem-${entry.name.hashCode()}.apk".sanitizeFileName()
+    )
+    return try {
+        zip.getInputStream(entry).use { input ->
+            extracted.outputStream().use { output -> input.copyTo(output) }
+        }
+        context.readApkMetadata(extracted)
+            ?: direct
+            ?: readStandaloneManifest(extracted)
+    } catch (error: Exception) {
+        null
+    } finally {
+        extracted.delete()
+    }
+}
+
+/** Reads package metadata from a nested APK's AndroidManifest.xml. */
+private fun readNestedManifest(zip: ZipFile, entry: ZipEntry): DownloadedApkMetadata? {
+    return try {
+        zip.getInputStream(entry).use { input ->
+            ZipInputStream(BufferedInputStream(input)).use { nested ->
+                var child = nested.nextEntry
+                while (child != null) {
+                    if (child.name == "AndroidManifest.xml") {
+                        val manifest = nested.readBytesLimited(MAX_APK_MANIFEST_BYTES)
+                            ?: return null
+                        return parseManifestBytes(manifest)
+                    }
+                    nested.closeEntry()
+                    child = nested.nextEntry
+                }
+            }
+        }
+        null
+    } catch (error: Exception) {
+        null
+    }
+}
+
+/** Reads AndroidManifest.xml from a standalone APK whose package could not be parsed. */
+private fun readStandaloneManifest(file: File): DownloadedApkMetadata? {
+    return runCatching {
+        ZipFile(file).use { apk ->
+            val entry = apk.getEntry("AndroidManifest.xml") ?: return@use null
+            val manifest = apk.getInputStream(entry).use {
+                it.readBytesLimited(MAX_APK_MANIFEST_BYTES)
+            } ?: return@use null
+            parseManifestBytes(manifest)
+        }
+    }.getOrNull()
+}
+
+private fun parseManifestBytes(manifest: ByteArray): DownloadedApkMetadata? {
+    return runCatching {
+        val streamer = ApkManifestStreamer()
+        BinaryXmlParser(ByteBuffer.wrap(manifest), null).apply {
+            setXmlStreamer(streamer)
+            parse()
+        }
+        val packageName = streamer.packageName?.takeIf { it.isNotBlank() }
+            ?: return@runCatching null
+        DownloadedApkMetadata(
+            packageName = packageName,
+            versionName = streamer.versionName?.takeIf { it.isNotBlank() },
+            versionCode = streamer.versionCode.takeIf { it > 0L },
+            minSdkVersion = streamer.minSdkVersion.takeIf { it > 0 }
+        )
+    }.getOrNull()
+}
+
+/** Package/version/minSdk attributes from the root manifest and its uses-sdk node. */
+private class ApkManifestStreamer : XmlStreamer {
+    var packageName: String? = null
+    var versionName: String? = null
+    var versionCode: Long = -1L
+    var minSdkVersion: Int = -1
+
+    override fun onStartTag(tag: XmlNodeStartTag) {
+        val attributes = tag.attributes ?: return
+        if (tag.name == "manifest" && packageName == null) {
+            packageName = attributes.getString("package")
+            versionName = attributes.getString("versionName")
+            versionCode = attributes.getString("versionCode")?.toLongOrNull() ?: -1L
+            if (versionName?.startsWith("resourceId:") == true) {
+                versionName = null
+            }
+        } else if (tag.name == "uses-sdk") {
+            minSdkVersion = attributes.getString("minSdkVersion")?.toIntOrNull()
+                ?: minSdkVersion
+        }
+    }
+
+    override fun onEndTag(tag: XmlNodeEndTag) = Unit
+
+    override fun onCData(cData: XmlCData) = Unit
+
+    override fun onNamespaceStart(tag: XmlNamespaceStartTag) = Unit
+
+    override fun onNamespaceEnd(tag: XmlNamespaceEndTag) = Unit
+}
+
+/** Package/version metadata from an XAPK's manifest.json. */
+private fun readXapkManifest(zip: ZipFile): DownloadedApkMetadata? {
+    val entry = zip.getEntry("manifest.json") ?: return null
+    return runCatching {
+        val bytes = zip.getInputStream(entry).use {
+            it.readBytesLimited(MAX_XAPK_MANIFEST_BYTES)
+        } ?: return@runCatching null
+        val text = String(bytes, Charsets.UTF_8).trimStart('\uFEFF')
+        val root = JSONObject(text)
+        val packageName = root.optString("package_name", "").trim()
+        if (packageName.isEmpty()) return@runCatching null
+        DownloadedApkMetadata(
+            packageName = packageName,
+            versionName = root.optString("version_name", "").trim()
+                .takeIf { it.isNotEmpty() },
+            versionCode = parseJsonLong(root.opt("version_code")),
+            minSdkVersion = parseJsonInt(root.opt("min_sdk_version"))
+        )
+    }.getOrNull()
+}
+
+private fun parseJsonLong(value: Any?): Long? = when (value) {
+    is Number -> value.toLong().takeIf { it > 0L }
+    is String -> value.trim().toLongOrNull()?.takeIf { it > 0L }
+    else -> null
+}
+
+private fun parseJsonInt(value: Any?): Int? = when (value) {
+    is Number -> value.toInt().takeIf { it > 0 }
+    is String -> value.trim().toIntOrNull()?.takeIf { it > 0 }
+    else -> null
+}
+
+private fun InputStream.readBytesLimited(maxBytes: Int): ByteArray? {
+    val output = ByteArrayOutputStream()
+    val buffer = ByteArray(16 * 1024)
+    var total = 0
+    while (true) {
+        val read = read(buffer)
+        if (read < 0) break
+        total += read
+        if (total > maxBytes) return null
+        output.write(buffer, 0, read)
+    }
+    return output.toByteArray()
+}
+
+private fun matchesExpectedMetadata(
+    metadata: DownloadedApkMetadata,
+    expectedPackage: String?,
+    expectedVersionNames: List<String>,
+    expectedVersionCodes: List<Long>
+): Boolean {
+    if (expectedPackage != null && metadata.packageName != expectedPackage) return false
+    if (expectedVersionCodes.isNotEmpty()) {
+        val code = metadata.versionCode ?: return false
+        if (code !in expectedVersionCodes) return false
+    }
+    if (expectedVersionNames.isNotEmpty()) {
+        val name = metadata.versionName ?: return false
+        if (expectedVersionNames.none { name.versionNameEquals(it) }) return false
+    }
+    return true
+}
+
+private fun DownloadedApkMetadata.withManifestMinSdk(
+    manifest: DownloadedApkMetadata?
+): DownloadedApkMetadata {
+    val manifestSdk = manifest?.minSdkVersion ?: return this
+    return copy(minSdkVersion = maxOf(minSdkVersion ?: 0, manifestSdk))
+}
+
+private const val MAX_APK_MANIFEST_BYTES = 8 * 1024 * 1024
+private const val MAX_XAPK_MANIFEST_BYTES = 512 * 1024
 
 @Suppress("DEPRECATION")
 private fun Context.readApkMetadata(file: File): DownloadedApkMetadata? {
@@ -9910,10 +10151,14 @@ private fun Context.readApkMetadata(file: File): DownloadedApkMetadata? {
         info.versionCode.toLong()
     }.takeIf { it > 0L }
 
+    val minSdkVersion = info.applicationInfo?.minSdkVersion?.takeIf { it > 0 }
+        ?: readStandaloneManifest(file)?.minSdkVersion
+
     return DownloadedApkMetadata(
         packageName = info.packageName,
         versionName = info.versionName,
-        versionCode = versionCode
+        versionCode = versionCode,
+        minSdkVersion = minSdkVersion
     )
 }
 
@@ -10131,6 +10376,10 @@ internal fun sourceFailureMessage(sourceLabel: String, error: Throwable, action:
         }
         httpCode != null -> {
             "$sourceLabel returned HTTP $httpCode during $actionText. Use Manual mode for this source instead."
+        }
+        details.contains("requires Android SDK", ignoreCase = true) &&
+            details.contains("device is SDK", ignoreCase = true) -> {
+            "$sourceLabel has no build compatible with this device: $details"
         }
         details.contains("cloudflare", ignoreCase = true) -> {
             "$sourceLabel showed a browser verification page, so direct access is blocked. Open the link and download manually."

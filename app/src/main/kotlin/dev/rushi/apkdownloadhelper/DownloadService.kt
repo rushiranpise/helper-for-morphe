@@ -1230,7 +1230,20 @@ internal fun validateDownloadedArtifact(
 ) {
     val shouldValidateMetadata = candidate.fileKind.lowercase(Locale.US) in setOf("apk", "apks", "apkm", "xapk") ||
         file.extension.lowercase(Locale.US) in setOf("apk", "apks", "apkm", "xapk")
-    val metadata = context.readDownloadedApkMetadata(file) ?: run {
+    val metadata = context.readDownloadedApkMetadata(
+        file = file,
+        expectedPackage = request.packageName,
+        expectedVersionNames = if (candidate.option == CandidateOption.REQUESTED) {
+            request.knownVersionNames
+        } else {
+            emptyList()
+        },
+        expectedVersionCodes = if (candidate.option == CandidateOption.REQUESTED) {
+            (request.requestedVersionCodes + request.compatibleVersionCodes.filter { it > 0L }).toList()
+        } else {
+            emptyList()
+        }
+    ) ?: run {
         check(!shouldValidateMetadata) {
             file.delete()
             "Downloaded file could not be read as an APK.".withManualModeHint()
@@ -1269,6 +1282,19 @@ internal fun validateDownloadedArtifact(
         file.delete()
         "Downloaded file does not match Morphe request.\n${hardMismatches.joinToString("\n")}"
             .withManualModeHint()
+    }
+
+    // A bundle whose base APK needs a newer Android than this device cannot be
+    // installed or patched. Delete it and fail so Fast Mode moves to the next
+    // source instead of handing back an unusable build.
+    metadata.minSdkVersion?.let { requiredSdk ->
+        if (requiredSdk > Build.VERSION.SDK_INT) {
+            file.delete()
+            error(
+                "Downloaded build requires Android SDK $requiredSdk, but this device is SDK " +
+                    "${Build.VERSION.SDK_INT}. Try another source for a compatible build."
+            )
+        }
     }
 
     // Version-code-only mismatch: the file is otherwise valid, but its build
