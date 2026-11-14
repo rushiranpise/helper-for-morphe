@@ -187,6 +187,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -200,10 +201,12 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
@@ -531,6 +534,10 @@ class MainActivity : ComponentActivity() {
         if (request != null) offerExistingDownloadIfPresent(request!!)
 
         setContent {
+            val focusManager = LocalFocusManager.current
+            LaunchedEffect(showUpdates) {
+                if (showUpdates) focusManager.clearFocus(force = true)
+            }
             HelperTheme(
                 themeMode = helperSettings.themeMode,
                 themeStyle = helperSettings.themeStyle,
@@ -556,6 +563,22 @@ class MainActivity : ComponentActivity() {
                         onChallengeTimeout = ::onBrowserChallengeTimeout
                     )
                 } else {
+                    // Updates is pushed over this screen instead of replacing it, so
+                    // tab order and screen readers must not reach the covered Settings
+                    // UI. Clearing semantics removes the whole subtree while leaving it
+                    // composed, which keeps its tab, scroll position and dialogs intact.
+                    val backgroundModifier = if (showUpdates) {
+                        Modifier
+                            .focusProperties { canFocus = false }
+                            .clearAndSetSemantics {}
+                    } else {
+                        Modifier
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .then(backgroundModifier)
+                    ) {
                     HelperScreen(
                         request = request,
                         state = uiState,
@@ -607,6 +630,7 @@ class MainActivity : ComponentActivity() {
                         onCancelAfterScan = ::cancelAfterScan,
                         onSkipScan = ::skipScanAndHandoff
                     )
+                    }
                 }
                 val offer = reuseOffer
                 if (offer != null) {
