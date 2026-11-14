@@ -75,6 +75,37 @@ class UptodownResolverPathTest {
     }
 
     @Test
+    fun `a requested captcha page keeps its exact version`() = runBlocking {
+        val request = testRequest(
+            packageName = packageName,
+            versionName = "13.1.0",
+            versionCode = 130010,
+            requestedFileType = "APKS",
+            allowSplitArchive = true
+        )
+        val parser = UptodownParser(
+            testParserContext(
+                pages = mapOf(resolvedUrl to filePage(version = "13.1.0")),
+                resolveViaMorphe = { resolvedUrl }
+            )
+        )
+
+        val candidate = parser.findCandidates(
+            request,
+            CandidateOption.REQUESTED
+        ).single()
+
+        assertEquals("13.1.0", candidate.versionName)
+        assertEquals(VersionStatus.REQUESTED, candidate.versionStatus)
+        assertTrue(request.matchesRequestedVersionStrict(candidate))
+        assertFalse(candidate.directDownload)
+        assertEquals(resolvedUrl, candidate.captchaUrl)
+        // The page offers a plain APK while Morphe asked for APKS. Fast Mode still
+        // accepts it as an exact version; `formatMatches` only flags the difference.
+        assertFalse(candidate.formatMatches)
+    }
+
+    @Test
     fun `a page that reveals its link offers no captcha route`() = runBlocking {
         val direct = "https://dw.uptodown.com/dwn/abc123"
         val parser = UptodownParser(

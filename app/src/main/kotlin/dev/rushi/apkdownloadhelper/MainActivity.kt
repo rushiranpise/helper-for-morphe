@@ -1734,7 +1734,51 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun closeCaptchaBrowser() {
+        val candidate = captchaBrowser
         captchaBrowser = null
+        if (candidate == null || !fastModeActive) return
+        abandonFastModeCaptcha(
+            candidate,
+            "Fast Mode: browser closed before ${candidate.source.label} started a download."
+        )
+    }
+
+    /**
+     * A Fast Mode captcha route that did not produce a file (closed browser, challenge
+     * timeout or build mismatch) must release the source queue instead of leaving the
+     * card waiting forever. The source is marked failed and the next one is tried.
+     */
+    private fun abandonFastModeCaptcha(
+        candidate: DownloadCandidate,
+        message: String
+    ) {
+        val activeRequest = request
+        val hasNextSource = activeRequest != null && !fastModeQueue.isNullOrEmpty()
+        appendLog(
+            if (hasNextSource) "$message Trying the next source." else message,
+            LogLevel.Warning
+        )
+        recordFailedAttempt(candidate.source, candidate.option)
+        if (activeRequest != null && hasNextSource) {
+            lifecycleScope.launch { fastModeNext(activeRequest) }
+            return
+        }
+        fastModeActive = false
+        fastModeQueue = null
+        lastFailureMessage = message
+        uiState = if (activeRequest != null) {
+            UiState.FastMode(
+                FastModeProgress(
+                    sourceLabel = candidate.source.label,
+                    detail = message,
+                    done = true,
+                    succeeded = false,
+                    result = initialCandidateResult(activeRequest)
+                )
+            )
+        } else {
+            UiState.Idle
+        }
     }
 
     /**
@@ -1745,16 +1789,24 @@ class MainActivity : ComponentActivity() {
         val candidate = captchaBrowser ?: return
         captchaBrowser = null
         val message = code.browserBuildMismatchMessage(request?.versionCodeSummary)
-        appendLog(message, LogLevel.Warning)
-        showFailure(message, candidate.source, candidate.option)
+        if (fastModeActive) {
+            abandonFastModeCaptcha(candidate, message)
+        } else {
+            appendLog(message, LogLevel.Warning)
+            showFailure(message, candidate.source, candidate.option)
+        }
     }
 
     private fun onBrowserChallengeTimeout() {
         val candidate = captchaBrowser ?: return
         captchaBrowser = null
         val message = "Verification on ${candidate.source.label} did not finish within five minutes."
-        appendLog(message, LogLevel.Warning)
-        showFailure(message, candidate.source, candidate.option)
+        if (fastModeActive) {
+            abandonFastModeCaptcha(candidate, message)
+        } else {
+            appendLog(message, LogLevel.Warning)
+            showFailure(message, candidate.source, candidate.option)
+        }
     }
 
     private fun onBrowserDownloadCaptured(capture: BrowserDownloadCapture) {
@@ -1960,6 +2012,42 @@ class MainActivity : ComponentActivity() {
             when (result) {
                 is FastModeFindResult.Exact -> {
                     val candidate = result.candidate
+                    if (!candidate.directDownload) {
+                        appendLog(
+                            "Fast Mode: ${source.label} has ${candidate.versionDisplay} behind a captcha. " +
+                                "Waiting for the user to solve it.",
+                            LogLevel.Info
+                        )
+                        val decisionGate = CompletableDeferred<FastModeChoice?>()
+                        fastModeDecision = decisionGate
+                        uiState = UiState.FastMode(
+                            FastModeProgress(
+                                sourceLabel = source.label,
+                                detail = "Exact version found, captcha needed",
+                                awaitingDecision = true,
+                                awaitingCaptcha = true,
+                                mismatchDetail = "${source.label} has ${candidate.versionDisplay}, but the " +
+                                    "download needs a captcha. Solve it in the in-app browser to continue."
+                            )
+                        )
+                        val decision = decisionGate.await()
+                        fastModeDecision = null
+                        if (!fastModeActive || decision == null) return
+                        if (decision == FastModeChoice.USE) {
+                            appendLog(
+                                "Fast Mode: opening ${source.label} to solve the captcha.",
+                                LogLevel.Info
+                            )
+                            openCaptchaBrowser(candidate)
+                            return
+                        }
+                        appendLog(
+                            "Fast Mode: user skipped the ${source.label} captcha  trying the next source.",
+                            LogLevel.Info
+                        )
+                        recordFailedAttempt(source, CandidateOption.REQUESTED)
+                        continue
+                    }
                     appendLog(
                         "Fast Mode: found ${candidate.versionDisplay} on ${source.label} " +
                             "(${candidate.fileKind.uppercase(Locale.US)})  downloading.",
@@ -2132,10 +2220,12 @@ class MainActivity : ComponentActivity() {
         val outcome = resolveSourceSection(request, source, CandidateOption.REQUESTED)
         val exact = outcome.candidates.firstOrNull { candidate ->
             // Format differences are fine, but the exact version name AND
-            // version code are both required. A candidate that reports a code
-            // outside the request is surfaced as a mismatch the user can
-            // accept or skip  never silently downloaded.
-            candidate.directDownload &&
+            // version code are both required. A captcha-gated page is still an
+            // exact match: the in-app browser can reveal its file after the user
+            // solves the challenge. A candidate that reports a code outside the
+            // request is surfaced as a mismatch the user can accept or skip
+            // never silently downloaded.
+            (candidate.directDownload || candidate.captchaUrl != null) &&
                 request.matchesRequestedVersionStrict(candidate)
         }
         if (exact != null) return FastModeFindResult.Exact(exact)
@@ -9782,9 +9872,11 @@ private fun FastModeCard(
                     modifier = Modifier.fillMaxWidth()
                 )
             } else if (progress.awaitingDecision) {
+                val captchaDecision = progress.awaitingCaptcha
+                val decisionTone = if (captchaDecision) SemanticTone.Primary else SemanticTone.Error
                 Surface(
-                    color = SemanticTone.Error.container,
-                    contentColor = SemanticTone.Error.content,
+                    color = decisionTone.container,
+                    contentColor = decisionTone.content,
                     shape = RoundedCornerShape(MorpheDefaults.CompactCornerRadius)
                 ) {
                     IconTextRow(
@@ -9793,15 +9885,15 @@ private fun FastModeCard(
                             .padding(MorpheDefaults.ContentPadding),
                         leadingContent = {
                             ThemedIcon(
-                                icon = Icons.Outlined.Warning,
+                                icon = if (captchaDecision) Icons.Outlined.Shield else Icons.Outlined.Warning,
                                 size = 20.dp,
-                                tint = SemanticTone.Error.accent
+                                tint = decisionTone.accent
                             )
                         },
                         title = progress.mismatchDetail ?: "Version code mismatch.",
                         titleStyle = MaterialTheme.typography.bodyMedium,
                         titleWeight = FontWeight.Normal,
-                        titleColor = SemanticTone.Error.content
+                        titleColor = decisionTone.content
                     )
                 }
                 Row(
@@ -9809,7 +9901,7 @@ private fun FastModeCard(
                     horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
                 ) {
                     HelperButton(
-                        text = "Use this version",
+                        text = if (captchaDecision) "Solve captcha" else "Use this version",
                         onClick = onUseMismatch,
                         modifier = Modifier.weight(1f)
                     )
@@ -11391,8 +11483,10 @@ private data class FastModeProgress(
     val succeeded: Boolean = false,
     // Present once Fast Mode finishes so the regular source list stays reachable.
     val result: CandidateResult? = null,
-    // Set while Fast Mode waits for the user to accept a version-code mismatch.
+    // Set while Fast Mode waits for the user to accept a version-code mismatch
+    // or to solve a captcha for an exact captcha-gated candidate.
     val awaitingDecision: Boolean = false,
+    val awaitingCaptcha: Boolean = false,
     val mismatchDetail: String? = null,
     // True while Fast Mode (ALWAYS_ASK) asks which version to fetch.
     val awaitingVersionChoice: Boolean = false,
