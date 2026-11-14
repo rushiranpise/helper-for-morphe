@@ -33,8 +33,8 @@ internal var adGuardDnsEnabled = false
 /**
  * Sources that start switched off.
  *
- * The five the helper is built around (APKMirror, Uptodown, APKPure, APKCombo, Aurora)
- * are enabled; the rest are theirs to discover in Settings. Like the Fast Mode default,
+ * The four the helper is built around (APKMirror, Uptodown, APKPure, Aurora) are
+ * enabled; the rest are theirs to discover in Settings. Like the Fast Mode default,
  * this only decides what somebody who never touched the source toggles gets - a stored
  * set is used as it is.
  */
@@ -52,8 +52,6 @@ internal val DEFAULT_DISABLED_SOURCES: Set<DownloadSource> = setOf(
     DownloadSource.APK_CUBE,
     DownloadSource.APTOIDE,
     DownloadSource.EVOZI,
-    DownloadSource.MI9,
-    DownloadSource.APK_DOWNLOADER,
     DownloadSource.PLAY
 )
 

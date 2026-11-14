@@ -75,7 +75,6 @@ private fun sourceLabel(url: HttpUrl, fallback: String): String {
         "apkmirror" in host -> "APKMirror"
         "uptodown" in host -> "Uptodown"
         "pureapk" in host || "apkpure" in host -> "APKPure"
-        "apkcombo" in host -> "APKCombo"
         "aptoide" in host -> "Aptoide"
         "auroraoss" in host -> "Aurora"
         "android.clients.google.com" in host -> "Play"

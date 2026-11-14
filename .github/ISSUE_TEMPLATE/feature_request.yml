@@ -37,7 +37,7 @@ body:
       label: Where does this belong?
       multiple: true
       options:
-        - Source resolution (finding versions on APKMirror/Uptodown/APKPure/APKCombo/Aptoide/...)
+        - Source resolution (finding versions on APKMirror/Uptodown/APKPure/APKCube/Aptoide/...)
         - Downloads (direct download, validation, formats)
         - Fast Mode
         - Settings

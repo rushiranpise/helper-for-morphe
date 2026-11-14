@@ -64,11 +64,11 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
 
 ### Sources
 
-- Ten sources: **APKMirror, Uptodown, APKPure, APKCombo, Aptoide, Evozi, Mi9, APK Downloader, Aurora, Play**.
+- Nine sources: **APKMirror, Uptodown, APKPure, APKCube, Aptoide, Evozi, Morphe Link, Aurora, Play**.
 - Every source can be individually **enabled/disabled** from Settings → Sources; disabled sources disappear from the picker, manual links, Fast Mode, and the default-source dropdown. If you disable *everything*, Play Store remains as the fallback.
 
-- **Five start enabled**: APKMirror, Uptodown, APKPure, APKCombo and Aurora. Aptoide,
-  Evozi, Mi9, APK Downloader and Play are available but off until you turn them on.
+- **Five start enabled**: APKMirror, Uptodown, APKPure, Morphe Link and Aurora. APKCube,
+  Aptoide, Evozi and Play are available but off until you turn them on.
 
 - **Morphe's resolver first**: before walking a site, the helper asks Morphe's own resolver
   (`api.morphe.software`) where its download dialog would go, and opens that page
@@ -206,8 +206,8 @@ python tools\audit_helper_sources.py --output reports\source-audit.csv
 Useful targeted checks:
 
 ```powershell
-python tools\audit_helper_sources.py --package club.boxbox.android --sources apkpure,aptoide,apkcombo
-python tools\audit_helper_sources.py --limit 20 --sources apkmirror,uptodown,apkpure,apkcombo,aptoide
+python tools\audit_helper_sources.py --package club.boxbox.android --sources apkpure,aptoide
+python tools\audit_helper_sources.py --limit 20 --sources apkmirror,uptodown,apkpure,aptoide
 ```
 
 The CSV/JSON output reports whether each source matched the requested version, only found latest, found the wrong file format, or failed to resolve the package.
@@ -216,7 +216,7 @@ The CSV/JSON output reports whether each source matched the requested version, o
 
 - [APKUpdater](https://github.com/rumboalla/apkupdater)
 - [Aurora Store](https://gitlab.com/AuroraOSS/AuroraStore)
-- Public web pages and APIs exposed by APKMirror, Uptodown, APKPure, APKCombo, and Aptoide
+- Public web pages and APIs exposed by APKMirror, Uptodown, APKPure, and Aptoide
 
 This helper does not claim ownership of source website data, packages, trademarks, or services.
 
@@ -227,7 +227,6 @@ APK hosting and indexing costs money. If this helper saves you time, consider su
 - [APKMirror](https://www.apkmirror.com/premium/)
 - [Uptodown](https://en.uptodown.com/turbo)
 - [APKPure](https://apkpure.com/premium)
-- [APKCombo](https://apkcombo.com/premium/)
 - [Aptoide](https://en.aptoide.com/premium)
 - [Aurora Store](https://gitlab.com/AuroraOSS/AuroraStore/#donations)
 

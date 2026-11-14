@@ -26,10 +26,6 @@ class MorpheLinkParserTest {
             morpheLinkSourceOf("https://apkpure.com/example/com.example.app/download/2.0.0")
         )
         assertEquals(
-            DownloadSource.APK_COMBO,
-            morpheLinkSourceOf("https://apkcombo.com/example/com.example.app/download/")
-        )
-        assertEquals(
             DownloadSource.APTOIDE,
             morpheLinkSourceOf("https://en.aptoide.com/app/example/com.example.app")
         )

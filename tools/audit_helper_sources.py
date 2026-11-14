@@ -34,7 +34,7 @@ DEFAULT_CONSTANTS = (
     r"C:\Users\rushi\Downloads\morpheai\morphe-patches-wip\patches\src\main"
     r"\kotlin\app\template\patches\shared\Constants.kt"
 )
-DEFAULT_SOURCES = ("apkmirror", "uptodown", "apkpure", "apkcombo", "aptoide", "play")
+DEFAULT_SOURCES = ("apkmirror", "uptodown", "apkpure", "aptoide", "play")
 USER_AGENT = (
     "Mozilla/5.0 (Linux; Android 15; APK Download Helper Audit) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
@@ -399,60 +399,6 @@ def audit_aptoide(client: HttpClient, request: AppRequest) -> SourceResult:
     )
 
 
-def audit_apkcombo(client: HttpClient, request: AppRequest) -> SourceResult:
-    suffixes = wanted_suffixes(request)
-    matched_page: HttpResponse | None = None
-    matched_version: str | None = None
-    matched_code: int | None = None
-    found_format: str | None = None
-    note_parts: list[str] = []
-
-    if request.target.version:
-        for suffix in suffixes:
-            version = urllib.parse.quote(request.target.version, safe="")
-            url = f"https://apkcombo.com/search/{request.package_name}/download/phone-{version}-{suffix}"
-            response = client.get(url)
-            if response.status >= 400:
-                note_parts.append(f"{suffix}: HTTP {response.status}")
-                continue
-            if not page_mentions_package(response.text, response.url, request.package_name):
-                note_parts.append(f"{suffix}: package mismatch")
-                continue
-            version_name = apkcombo_version(response.text, response.url) or request.target.version
-            version_code = apkcombo_version_code(response.text)
-            if request_matches(request, version_name, version_code):
-                matched_page = response
-                matched_version = version_name
-                matched_code = version_code
-                found_format = suffix
-                break
-
-    latest_url = f"https://apkcombo.com/search/{request.package_name}/download/apk"
-    latest_response = matched_page or client.get(latest_url)
-    if latest_response.status >= 400:
-        status = "not_found" if latest_response.status == 404 else "error"
-        return make_result(request, "apkcombo", status, url=latest_response.url, note=f"HTTP {latest_response.status}")
-
-    package_found = page_mentions_package(latest_response.text, latest_response.url, request.package_name)
-    latest_version = apkcombo_version(latest_response.text, latest_response.url)
-    direct = "class=\"variant\"" in latest_response.text or "class='variant'" in latest_response.text
-    status = classify(package_found, matched_page is not None, latest_version, request)
-    return make_result(
-        request,
-        "apkcombo",
-        status,
-        package_found=package_found,
-        requested_match=matched_page is not None,
-        latest_version=latest_version,
-        found_version=matched_version,
-        found_version_code=matched_code,
-        found_format=found_format or infer_format(latest_response.text),
-        direct_download_hint=direct,
-        url=matched_page.url if matched_page else latest_response.url,
-        note="; ".join(note_parts[:3]),
-    )
-
-
 def audit_uptodown(client: HttpClient, request: AppRequest, max_candidates: int, version_pages: int) -> SourceResult:
     search_url = f"https://en.uptodown.com/android/search?query={urllib.parse.quote(request.package_name)}"
     search_response = client.get(search_url)
@@ -791,26 +737,6 @@ def page_mentions_package(text: str, url: str, package_name: str) -> bool:
     return package_name in text or package_name in urllib.parse.unquote(url)
 
 
-def apkcombo_version(page: str, url: str) -> str | None:
-    url_match = re.search(r"phone-(.+?)-(?:apk|xapk|apks|apkm)(?:[/?#]|$)", urllib.parse.unquote(url), re.I)
-    if url_match:
-        return url_match.group(1)
-    for pattern in (
-        r'"softwareVersion"\s*:\s*"([^"]+)"',
-        r"Version:\s*([^<\n-]+)",
-        r"Version</[^>]+>\s*<[^>]+>([^<]+)",
-    ):
-        match = re.search(pattern, page, re.I)
-        if match:
-            return strip_tags(match.group(1)).strip()
-    return source_version_from_text(strip_tags(page))
-
-
-def apkcombo_version_code(page: str) -> int | None:
-    match = re.search(r"/(\d{1,12})[._-][A-Fa-f0-9]{8,}", urllib.parse.unquote(page))
-    return int(match.group(1)) if match else None
-
-
 def uptodown_package_name(page: str) -> str | None:
     play_url_match = re.search(r'id=["\']gplay-url["\'][^>]+data-url=["\']([^"\']+)["\']', page, re.I)
     if play_url_match:
@@ -914,7 +840,6 @@ def run_audit(args: argparse.Namespace) -> list[SourceResult]:
     checkers: dict[str, Callable[[AppRequest], SourceResult]] = {
         "apkpure": lambda item: audit_apkpure(client, item),
         "aptoide": lambda item: audit_aptoide(client, item),
-        "apkcombo": lambda item: audit_apkcombo(client, item),
         "uptodown": lambda item: audit_uptodown(client, item, args.max_candidates, args.uptodown_pages),
         "apkmirror": lambda item: audit_apkmirror(client, item, args.max_candidates, args.apkmirror_upload_pages),
         "play": lambda item: audit_play(client, item),

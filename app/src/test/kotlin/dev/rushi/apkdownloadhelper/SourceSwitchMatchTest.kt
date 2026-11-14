@@ -146,7 +146,7 @@ class SourceSwitchMatchTest {
         val target = candidate(variantLabel = "arm64-v8a")
         val candidates = listOf(
             candidate(source = DownloadSource.APK_PURE, variantLabel = "ARM64"),
-            candidate(source = DownloadSource.APK_COMBO, variantLabel = "arm64")
+            candidate(source = DownloadSource.APK_CUBE, variantLabel = "arm64")
         )
 
         val matches = matchingSourceSwitchCandidates(candidates, target, request)

@@ -269,48 +269,4 @@ class EvoziParserTest {
         assertTrue("expected SourceAppNotFoundException, got $error", error is SourceAppNotFoundException)
     }
 
-    // ---- blocked downloader services ----
-
-    @Test
-    fun mi9_fallbacksAreOpenLinkWithBlockedNote() {
-        val parser = Mi9Parser()
-        val request = testRequest(packageName = packageName, versionName = "2.5.0.6")
-        val requested = parser.requestedFallbackCandidate(request)
-        assertEquals(CandidateOption.REQUESTED, requested.option)
-        assertFalse(requested.directDownload)
-        assertEquals("https://mi9.com/package/$packageName/versions/", requested.url)
-        assertEquals(requested.url, requested.captchaUrl)
-        assertTrue(requested.note.orEmpty().contains("Cloudflare", ignoreCase = true))
-        val latest = parser.latestFallbackCandidate(request)
-        assertEquals(CandidateOption.LATEST, latest.option)
-        assertFalse(latest.directDownload)
-        assertEquals(latest.url, latest.captchaUrl)
-        assertEquals("https://mi9.com/package/$packageName/versions/", latest.url)
-        assertTrue(latest.note.orEmpty().contains("Cloudflare", ignoreCase = true))
-    }
-
-    @Test
-    fun mi9_history_offersVersionHistoryBrowseRow() {
-        val parser = Mi9Parser()
-        val request = testRequest(packageName = packageName, versionName = "2.5.0.6")
-        val result = runBlocking { parser.resolveHistory(request) }
-        assertEquals(1, result.size)
-        val row = result.first()
-        assertEquals("Version history", row.versionName)
-        assertFalse(row.directDownload)
-        assertEquals("https://mi9.com/package/$packageName/versions/", row.url)
-        assertEquals(row.url, row.captchaUrl)
-        assertTrue(row.note.orEmpty().contains("Cloudflare", ignoreCase = true))
-    }
-
-    @Test
-    fun pagesDev_fallbacksAreOpenLinkWithBlockedNote() {
-        val parser = ApkDownloaderPagesParser()
-        val request = testRequest(packageName = packageName, versionName = "2.5.0.6")
-        val requested = parser.requestedFallbackCandidate(request)
-        assertFalse(requested.directDownload)
-        assertEquals("https://apkdownloader.pages.dev/?package=$packageName", requested.url)
-        assertEquals(requested.url, requested.captchaUrl)
-        assertTrue(requested.note.orEmpty().contains("Cloudflare", ignoreCase = true))
-    }
 }

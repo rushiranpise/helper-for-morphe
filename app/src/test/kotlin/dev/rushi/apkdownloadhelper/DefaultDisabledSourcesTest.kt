@@ -16,7 +16,6 @@ class DefaultDisabledSourcesTest {
                 DownloadSource.APK_MIRROR,
                 DownloadSource.UPTODOWN,
                 DownloadSource.APK_PURE,
-                DownloadSource.APK_COMBO,
                 DownloadSource.MORPHE_LINK,
                 DownloadSource.AURORA
             ),
@@ -30,8 +29,6 @@ class DefaultDisabledSourcesTest {
             DownloadSource.APK_CUBE,
             DownloadSource.APTOIDE,
             DownloadSource.EVOZI,
-            DownloadSource.MI9,
-            DownloadSource.APK_DOWNLOADER,
             DownloadSource.PLAY
         ).forEach { source ->
             assertTrue("$source should start disabled", source in DEFAULT_DISABLED_SOURCES)

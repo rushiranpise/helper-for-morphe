@@ -211,7 +211,6 @@ internal fun morpheLinkSourceOf(url: String): DownloadSource? {
             host.endsWith(".uptodown.com") ||
             host.endsWith(".uptodown.net") -> DownloadSource.UPTODOWN
         host == "apkpure.com" || host.endsWith(".apkpure.com") -> DownloadSource.APK_PURE
-        host == "apkcombo.com" || host.endsWith(".apkcombo.com") -> DownloadSource.APK_COMBO
         host == "aptoide.com" || host.endsWith(".aptoide.com") -> DownloadSource.APTOIDE
         host == "apkcube.com" || host.endsWith(".apkcube.com") -> DownloadSource.APK_CUBE
         host == "evozi.com" || host.endsWith(".evozi.com") -> DownloadSource.EVOZI

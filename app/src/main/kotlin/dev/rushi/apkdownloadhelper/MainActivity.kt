@@ -279,7 +279,6 @@ import retrofit2.http.Query
 internal const val AURORA_AUTH_URL = "https://auroraoss.com/api/auth"
 internal const val TAG = "ApkDownloadHelper"
 internal val DOWNLOAD_FILE_KIND_ORDER = listOf("apk", "apkm", "apks", "xapk")
-internal val APK_COMBO_FILE_KIND_ORDER = listOf("apk", "xapk", "apks")
 internal val DOWNLOAD_FILE_KIND_SET = DOWNLOAD_FILE_KIND_ORDER.toSet()
 internal val SPLIT_ARCHIVE_FILE_KINDS = setOf("apkm", "apks", "xapk")
 internal val DOWNLOAD_FILE_KIND_REGEX = Regex("""apkm|apks|xapk|apk""", RegexOption.IGNORE_CASE)
@@ -417,7 +416,6 @@ class MainActivity : ComponentActivity() {
         val apkMirrorParser = ApkMirrorParser(parserContext)
         val uptodownParser = UptodownParser(parserContext)
         val apkPureParser = ApkPureParser(parserContext)
-        val apkComboParser = ApkComboParser(parserContext)
         val apkCubeParser = ApkCubeParser(parserContext)
         val aptoideParser = AptoideParser(parserContext)
         val evoziParser = EvoziParser(parserContext)
@@ -425,19 +423,15 @@ class MainActivity : ComponentActivity() {
             apkMirrorParser,
             uptodownParser,
             apkPureParser,
-            apkComboParser,
             apkCubeParser,
             aptoideParser,
             evoziParser,
-            Mi9Parser(),
-            ApkDownloaderPagesParser(),
             MorpheLinkParser(
                 ctx = parserContext,
                 delegates = listOf(
                     apkMirrorParser,
                     uptodownParser,
                     apkPureParser,
-                    apkComboParser,
                     apkCubeParser,
                     aptoideParser,
                     evoziParser
@@ -8813,14 +8807,11 @@ private fun DownloadSource.brand(): SourceBrand = when (this) {
     DownloadSource.PLAY -> SourceBrand(resId = R.drawable.ic_src_play)
     DownloadSource.APK_MIRROR -> SourceBrand(resId = R.drawable.ic_src_apkmirror)
     DownloadSource.APK_PURE -> SourceBrand(resId = R.drawable.ic_src_apkpure)
-    DownloadSource.APK_COMBO -> SourceBrand(resId = R.drawable.ic_src_apkcombo)
     DownloadSource.APK_CUBE -> SourceBrand(resId = R.drawable.ic_src_apkcube)
     DownloadSource.UPTODOWN -> SourceBrand(resId = R.drawable.ic_src_uptodown)
     DownloadSource.AURORA -> SourceBrand(resId = R.drawable.ic_src_aurora)
     DownloadSource.APTOIDE -> SourceBrand(resId = R.drawable.ic_src_aptoide)
     DownloadSource.EVOZI -> SourceBrand(resId = R.drawable.ic_src_evozi)
-    DownloadSource.MI9 -> SourceBrand(resId = R.drawable.ic_src_mi9)
-    DownloadSource.APK_DOWNLOADER -> SourceBrand(resId = R.drawable.ic_src_apkdownloader)
     DownloadSource.MORPHE_LINK -> SourceBrand(resId = R.drawable.ic_src_morphe)
 }
 
@@ -8990,10 +8981,6 @@ private enum class SourceSubTab(
 /** Sources that can resolve the exact requested version from their own data. */
 private val DownloadSource.supportsRecommended: Boolean
     get() = when (this) {
-        // Mi9 exposes a real version-history page that the in-app captcha
-        // browser opens; its recommended candidate routes there. APK
-        // Downloader stays manual-only (Cloudflare-gated with no version list).
-        DownloadSource.APK_DOWNLOADER,
         DownloadSource.AURORA,
         DownloadSource.PLAY -> false
         else -> true
@@ -9002,13 +8989,10 @@ private val DownloadSource.supportsRecommended: Boolean
 /** Sources that expose a version history list. */
 private val DownloadSource.supportsHistory: Boolean
     get() = when (this) {
-        // Evozi has an old-versions page but no history list; APK Downloader
-        // is Cloudflare-gated with no version list. Mi9's history tab offers a
-        // "browse the version history in the in-app browser" row. Aurora/Play
-        // never offer originals.
+        // Evozi has an old-versions page but no history list. Aurora/Play never
+        // offer originals.
         DownloadSource.APK_CUBE,
         DownloadSource.EVOZI,
-        DownloadSource.APK_DOWNLOADER,
         DownloadSource.AURORA,
         DownloadSource.PLAY -> false
         else -> true
@@ -9280,8 +9264,8 @@ private fun VersionHistoryRow(
                 )
                 Text(
                     text = when {
-                        // Captcha-gated rows (e.g. Mi9's version history) are
-                        // browsed in the in-app captcha browser, not downloaded.
+                        // Captcha-gated rows are browsed in the in-app captcha
+                        // browser, not downloaded.
                         candidate.captchaUrl != null && !candidate.directDownload ->
                             "Browsable in the in-app browser (version history)"
                         showOpenLink -> "No direct download  open the version page"
@@ -11072,14 +11056,11 @@ internal data class HelperRequest(
             DownloadSource.AURORA,
             DownloadSource.PLAY -> listOf("play.google.com")
             DownloadSource.APK_MIRROR -> listOf("apkmirror.com", "google.com/search")
-            DownloadSource.APK_COMBO -> listOf("apkcombo.com")
             DownloadSource.APTOIDE -> listOf("aptoide.com")
             DownloadSource.APK_PURE -> listOf("apkpure.com")
             DownloadSource.UPTODOWN -> listOf("uptodown.com")
             DownloadSource.APK_CUBE -> listOf("apkcube.com")
             DownloadSource.EVOZI -> listOf("apkcube.com", "evozi.com")
-            DownloadSource.MI9 -> listOf("mi9.com")
-            DownloadSource.APK_DOWNLOADER -> listOf("apkdownloader.pages.dev")
             DownloadSource.MORPHE_LINK -> listOf("morphe.software")
         }
 
@@ -11500,27 +11481,21 @@ internal enum class DownloadSource(
     APK_MIRROR("APKMirror", 0),
     UPTODOWN("Uptodown", 1),
     APK_PURE("APKPure", 2),
-    APK_COMBO("APKCombo", 3),
-    APK_CUBE("APKCube", 4),
-    APTOIDE("Aptoide", 5),
-    EVOZI("Evozi", 6),
-    MI9("Mi9", 7),
-    APK_DOWNLOADER("APK Downloader", 8),
-    MORPHE_LINK("Morphe Link", 9, supportsManualArtifactPicker = false),
-    AURORA("Aurora", 10, supportsManualArtifactPicker = false),
-    PLAY("Play", 11, supportsManualArtifactPicker = false)
+    APK_CUBE("APKCube", 3),
+    APTOIDE("Aptoide", 4),
+    EVOZI("Evozi", 5),
+    MORPHE_LINK("Morphe Link", 6, supportsManualArtifactPicker = false),
+    AURORA("Aurora", 7, supportsManualArtifactPicker = false),
+    PLAY("Play", 8, supportsManualArtifactPicker = false)
 }
 
 internal fun DownloadSource.searchDomain(): String? = when (this) {
     DownloadSource.APK_MIRROR -> "apkmirror.com"
     DownloadSource.UPTODOWN -> "uptodown.com"
     DownloadSource.APK_PURE -> "apkpure.com"
-    DownloadSource.APK_COMBO -> "apkcombo.com"
     DownloadSource.APK_CUBE -> "apkcube.com"
     DownloadSource.APTOIDE -> "aptoide.com"
     DownloadSource.EVOZI -> "apkcube.com"
-    DownloadSource.MI9 -> "mi9.com"
-    DownloadSource.APK_DOWNLOADER -> "apkdownloader.pages.dev"
     DownloadSource.MORPHE_LINK -> null
     DownloadSource.PLAY -> "play.google.com"
     DownloadSource.AURORA -> null
