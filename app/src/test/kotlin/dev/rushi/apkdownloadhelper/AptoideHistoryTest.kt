@@ -19,7 +19,8 @@ class AptoideHistoryTest {
         file = AptoideFile(
             vername = "2.0.0",
             vercode = "200",
-            path = "https://cdn.aptoide.com/app/2.apk"
+            path = "https://cdn.aptoide.com/app/2.apk",
+            malware = AptoideMalware("TRUSTED")
         ),
         urls = AptoideUrls(
             w = "https://com.example.app.aptoide.com/app",
