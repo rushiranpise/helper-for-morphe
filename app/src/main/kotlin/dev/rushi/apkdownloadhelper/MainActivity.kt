@@ -516,14 +516,7 @@ class MainActivity : ComponentActivity() {
                 // each site's rate-limit pool, spent before the user has asked for
                 // anything, and it competes with the download that prompted the app to
                 // open. The Settings card keeps a Re-check button for when it is wanted.
-                if (showUpdates) {
-                    UpdateScreen(
-                        settings = helperSettings,
-                        onSettingsChange = ::updateHelperSettings,
-                        refreshToken = updateRefreshToken,
-                        onBack = { showUpdates = false }
-                    )
-                } else {
+                Box(modifier = Modifier.fillMaxSize()) {
                 val captcha = captchaBrowser
                 if (captcha != null) {
                     CaptchaBrowserScreen(
@@ -600,6 +593,23 @@ class MainActivity : ComponentActivity() {
                             request?.let(::startFastModeIfEnabled)
                         }
                     )
+                }
+                // Keep the screen beneath Updates composed so Back returns to
+                // the exact Settings tab, scroll position and dialogs the user
+                // left, instead of rebuilding the main screen.
+                AnimatedVisibility(
+                    visible = showUpdates,
+                    enter = MorpheAnimations.pushEnter,
+                    exit = MorpheAnimations.pushExit
+                ) {
+                    MorphePushedScreen {
+                        UpdateScreen(
+                            settings = helperSettings,
+                            onSettingsChange = ::updateHelperSettings,
+                            refreshToken = updateRefreshToken,
+                            onBack = { showUpdates = false }
+                        )
+                    }
                 }
                 }
                 val prompt = updatePrompt
