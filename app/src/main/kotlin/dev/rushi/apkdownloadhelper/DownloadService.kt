@@ -53,7 +53,7 @@ private const val CHANNEL_PROGRESS = "download_progress"
 private const val CHANNEL_DONE = "download_done"
 private const val NOTIFICATION_ID_PROGRESS = 1001
 internal const val NOTIFICATION_ID_DONE = 1002
-internal const val TEMP_CLEANUP_DELAY_MS = 5 * 60 * 1000L
+internal const val TEMP_CLEANUP_DELAY_MS = 10 * 60 * 1000L
 private const val PREFS_PENDING = "pending_download_result"
 
 
@@ -583,12 +583,23 @@ internal class DownloadService : Service() {
         val candidate = job.candidate
         val settings = job.settings
 
-        emitPostDownloadStatus(candidate, "Copying to Downloads…")
-        val uri = when (settings.downloadLocation) {
-            DownloadLocation.TEMPORARY -> FileProvider.getUriForFile(this, "${BuildConfig.APPLICATION_ID}.files", file)
-            DownloadLocation.DOWNLOADS -> copyToDownloads(file)
+        emitPostDownloadStatus(candidate, "Saving download…")
+        var handoff = prepareDownloadHandoff(file, settings)
+        val canGrant = runCatching {
+            grantUriPermission(
+                request.callerPackage,
+                handoff.uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }.isSuccess
+        if (!canGrant) {
+            AppLog.record(
+                LogLevel.Warning,
+                "Morphe could not be granted access to the saved copy; handing off the cache file."
+            )
+            handoff = cacheHandoff(file)
         }
-        grantUriPermission(request.callerPackage, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        val uri = handoff.uri
 
         emitPostDownloadStatus(candidate, "Handing off to Morphe…")
         val result = PendingDownloadResult(
@@ -604,12 +615,7 @@ internal class DownloadService : Service() {
         recordHandOff(request, candidate, file, uri, lastScanVerdict)
         lastScanVerdict = null
 
-        if (
-            settings.downloadLocation == DownloadLocation.DOWNLOADS ||
-            settings.deleteTemporaryAfterHandoff
-        ) {
-            scheduleTemporaryDelete(file)
-        }
+        scheduleHandoffCleanup(file, handoff, settings)
 
         DownloadJobManager.emit(DownloadJobManager.Event.Completed(result, job.epoch))
         notifyCompletion(job, result)
@@ -1174,7 +1180,7 @@ internal fun Context.copyToDownloads(file: File): Uri {
         val values = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, file.name)
             put(MediaStore.Downloads.MIME_TYPE, file.mimeType())
-            put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/Morphe Helper")
+            put(MediaStore.Downloads.RELATIVE_PATH, downloadsCopyRelativePath())
             put(MediaStore.Downloads.IS_PENDING, 1)
         }
         val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)

@@ -170,6 +170,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -213,6 +214,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.lifecycleScope
 import com.aurora.gplayapi.data.models.App
 import com.aurora.gplayapi.data.models.AuthData
@@ -466,12 +468,12 @@ class MainActivity : ComponentActivity() {
         }
         startRequestLog(request)
         lifecycleScope.launch(Dispatchers.IO) {
-            val freed = cleanupTemporaryDownloads(helperSettings)
+            val freed = cleanupDownloads(helperSettings)
             if (freed > 0L) {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(
                         this@MainActivity,
-                        "Cleared ${freed.formatBytes()} of old cache",
+                        "Cleared ${freed.formatBytes()} of old downloads",
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -879,9 +881,6 @@ class MainActivity : ComponentActivity() {
         // Rebuild the picker so enabled/disabled sources take effect immediately.
         if (sourcesChanged && request != null && uiState is UiState.Ready) {
             uiState = UiState.Ready(initialCandidateResult(request!!))
-        }
-        lifecycleScope.launch(Dispatchers.IO) {
-            cleanupTemporaryDownloads(settings)
         }
     }
 
@@ -2153,18 +2152,33 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun returnPreparedFile(
+    private suspend fun returnPreparedFile(
         request: HelperRequest,
         candidate: DownloadCandidate,
         file: File,
         settings: HelperSettings
     ) {
-        val uri = when (settings.downloadLocation) {
-            DownloadLocation.TEMPORARY -> FileProvider.getUriForFile(this, "${BuildConfig.APPLICATION_ID}.files", file)
-            DownloadLocation.DOWNLOADS -> copyToDownloads(file)
+        val handoff = withContext(Dispatchers.IO) {
+            var prepared = prepareDownloadHandoff(file, settings)
+            val canGrant = runCatching {
+                grantUriPermission(
+                    request.callerPackage,
+                    prepared.uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }.isSuccess
+            if (!canGrant) {
+                AppLog.record(
+                    LogLevel.Warning,
+                    "Morphe could not be granted access to the saved copy; handing off the cache file."
+                )
+                prepared = cacheHandoff(file)
+            }
+            recordHandOff(request, candidate, file, prepared.uri)
+            prepared
         }
         val pending = PendingDownloadResult(
-            uri = uri.toString(),
+            uri = handoff.uri.toString(),
             fileName = file.name,
             packageName = candidate.packageName,
             versionName = candidate.versionName,
@@ -2173,13 +2187,7 @@ class MainActivity : ComponentActivity() {
             callerPackage = request.callerPackage
         )
         DownloadJobManager.persistPendingResult(pending, applicationContext)
-        recordHandOff(request, candidate, file, uri)
-        if (
-            settings.downloadLocation == DownloadLocation.DOWNLOADS ||
-            settings.deleteTemporaryAfterHandoff
-        ) {
-            scheduleTemporaryDelete(file)
-        }
+        scheduleHandoffCleanup(file, handoff, settings)
         if (!deliverResult(pending)) {
             appendLog(
                 "File is ready; ${request.callerPackage} can request it again to receive it.",
@@ -3424,27 +3432,129 @@ private fun SystemTabContent(
     onOpenUpdates: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var cacheBytes by remember(context) { mutableStateOf(context.temporaryDownloadsSize()) }
     var downloadsBytes by remember(context) { mutableStateOf(context.downloadsCopySize()) }
+    var externalBytes by remember(context) { mutableStateOf(context.externalDownloadsSize()) }
+    var customBytes by remember(context) { mutableStateOf(context.customDownloadsSize()) }
     var locationDialog by remember { mutableStateOf(false) }
+    var retentionDialog by remember { mutableStateOf(false) }
     var policyDialog by remember { mutableStateOf(false) }
     var fastModePolicyDialog by remember { mutableStateOf(false) }
     var sourceDialog by remember { mutableStateOf(false) }
+    var pendingLocation by remember { mutableStateOf<DownloadLocation?>(null) }
+    val latestSettings by rememberUpdatedState(settings)
 
     val locations = DownloadLocation.entries
+    val retentions = DownloadRetention.entries
     val policies = NetworkPolicy.entries
     val fastPolicies = FastModePolicy.entries
+
+    val folderPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        val data = result.data ?: return@rememberLauncherForActivityResult
+        val uri = data.data ?: return@rememberLauncherForActivityResult
+        val requestedFlags = data.flags and (
+            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        )
+        val flags = requestedFlags.takeIf { it != 0 }
+            ?: (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        val persisted = runCatching {
+            context.contentResolver.takePersistableUriPermission(uri, flags)
+        }.isSuccess
+        val writable = runCatching {
+            DocumentFile.fromTreeUri(context, uri)?.canWrite() == true
+        }.getOrDefault(false)
+        if (!persisted || !writable) {
+            Toast.makeText(
+                context,
+                "Helper could not keep write access to that folder.",
+                Toast.LENGTH_LONG
+            ).show()
+            return@rememberLauncherForActivityResult
+        }
+        onSettingsChange(
+            latestSettings.copy(
+                downloadLocation = DownloadLocation.CUSTOM,
+                downloadCustomTreeUri = uri.toString()
+            )
+        )
+    }
+
+    val storagePermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val target = pendingLocation
+        pendingLocation = null
+        if (granted && target != null) {
+            onSettingsChange(latestSettings.copy(downloadLocation = target))
+        } else if (!granted) {
+            Toast.makeText(
+                context,
+                "Storage permission is needed to save in Downloads on this Android version.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    val folderPickerIntent = remember {
+        Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+            addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+            )
+        }
+    }
+
+    fun chooseLocation(location: DownloadLocation) {
+        when {
+            location == DownloadLocation.CUSTOM -> {
+                runCatching { folderPicker.launch(folderPickerIntent) }
+                    .onFailure {
+                        Toast.makeText(
+                            context,
+                            "No system folder picker is available.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+            }
+            location == DownloadLocation.DOWNLOADS &&
+                Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
+                context.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
+                PackageManager.PERMISSION_GRANTED -> {
+                pendingLocation = location
+                storagePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+            else -> onSettingsChange(latestSettings.copy(downloadLocation = location))
+        }
+    }
 
     if (locationDialog) {
         SettingsChoiceDialog(
             title = stringResource(R.string.save_downloads),
             choices = locations.map { SettingsChoice(it.icon(), it.title, it.description) },
-            selectedIndex = locations.indexOf(settings.downloadLocation),
+            selectedIndex = locations.indexOf(latestSettings.downloadLocation),
             onSelect = { index ->
-                onSettingsChange(settings.copy(downloadLocation = locations[index]))
                 locationDialog = false
+                chooseLocation(locations[index])
             },
             onDismiss = { locationDialog = false }
+        )
+    }
+
+    if (retentionDialog) {
+        SettingsChoiceDialog(
+            title = "Keep downloads",
+            choices = retentions.map { SettingsChoice(it.icon(), it.title, it.description) },
+            selectedIndex = retentions.indexOf(latestSettings.downloadRetention),
+            onSelect = { index ->
+                onSettingsChange(latestSettings.copy(downloadRetention = retentions[index]))
+                retentionDialog = false
+            },
+            onDismiss = { retentionDialog = false }
         )
     }
 
@@ -3526,31 +3636,39 @@ private fun SystemTabContent(
                 icon = settings.downloadLocation.icon(),
                 title = stringResource(R.string.save_downloads),
                 subtitle = settings.downloadLocation.description,
-                value = settings.downloadLocation.title,
+                value = downloadLocationLabel(context, settings),
                 onClick = { locationDialog = true }
             )
             MorpheDivider()
             SettingsRow(
                 icon = Icons.Outlined.CleaningServices,
                 title = stringResource(R.string.storage_used),
-                subtitle = "Helper cache ${cacheBytes.formatBytes()}  ·  Downloads copy ${downloadsBytes.formatBytes()}",
+                subtitle = "Cache ${cacheBytes.formatBytes()}  ·  External ${externalBytes.formatBytes()}  " +
+                    "·  Downloads ${downloadsBytes.formatBytes()}  ·  Custom ${customBytes.formatBytes()}",
                 value = "Clear",
                 onClick = {
-                    context.clearTemporaryDownloads()
-                    context.clearDownloadsCopies()
-                    cacheBytes = 0L
-                    downloadsBytes = 0L
+                    scope.launch(Dispatchers.IO) {
+                        context.clearAllDownloads()
+                        val cache = context.temporaryDownloadsSize()
+                        val external = context.externalDownloadsSize()
+                        val downloads = context.downloadsCopySize()
+                        val custom = context.customDownloadsSize()
+                        withContext(Dispatchers.Main) {
+                            cacheBytes = cache
+                            externalBytes = external
+                            downloadsBytes = downloads
+                            customBytes = custom
+                        }
+                    }
                 }
             )
             MorpheDivider()
-            SettingsSwitchItem(
-                icon = Icons.Outlined.DeleteOutline,
-                title = stringResource(R.string.auto_clear_after_hand_off),
-                subtitle = "Remove temporary APKs after handing off to Morphe, and clear old cache files on launch.",
-                checked = settings.deleteTemporaryAfterHandoff,
-                onToggle = {
-                    onSettingsChange(settings.copy(deleteTemporaryAfterHandoff = !settings.deleteTemporaryAfterHandoff))
-                }
+            SettingsRow(
+                icon = settings.downloadRetention.icon(),
+                title = "Keep downloads",
+                subtitle = "${settings.downloadRetention.description} Cleanup runs when Helper opens.",
+                value = settings.downloadRetention.title,
+                onClick = { retentionDialog = true }
             )
         }
 
@@ -4127,7 +4245,17 @@ private fun SettingsChoiceDialog(
 
 private fun DownloadLocation.icon(): ImageVector = when (this) {
     DownloadLocation.TEMPORARY -> Icons.Outlined.SdStorage
+    DownloadLocation.EXTERNAL -> Icons.Outlined.PhoneAndroid
     DownloadLocation.DOWNLOADS -> Icons.Outlined.SaveAlt
+    DownloadLocation.CUSTOM -> Icons.Outlined.FolderOpen
+}
+
+private fun DownloadRetention.icon(): ImageVector = when (this) {
+    DownloadRetention.KEEP -> Icons.Outlined.SaveAlt
+    DownloadRetention.AFTER_HANDOFF -> Icons.Outlined.DeleteOutline
+    DownloadRetention.HOUR_1,
+    DownloadRetention.HOUR_24,
+    DownloadRetention.DAY_7 -> Icons.Outlined.CleaningServices
 }
 
 private fun NetworkPolicy.icon(): ImageVector = when (this) {

@@ -56,8 +56,9 @@ internal val DEFAULT_DISABLED_SOURCES: Set<DownloadSource> = setOf(
 
 internal data class HelperSettings(
     val downloadLocation: DownloadLocation = DownloadLocation.TEMPORARY,
+    val downloadRetention: DownloadRetention = DownloadRetention.KEEP,
+    val downloadCustomTreeUri: String = "",
     val networkPolicy: NetworkPolicy = NetworkPolicy.WIFI_AND_MOBILE,
-    val deleteTemporaryAfterHandoff: Boolean = true,
     val logcatLogging: Boolean = true,
     // On by default: the helper exists to hand a file back to Morphe, and Fast Mode is
     // the path that does that in one step. An explicit off is stored and respected, so
@@ -191,12 +192,50 @@ internal enum class DownloadLocation(
     val description: String
 ) {
     TEMPORARY(
-        title = "Store in cache",
-        description = "Keep the file in Helper's cache and hand it off to Morphe  no visible copy is left behind."
+        title = "Internal app cache",
+        description = "Keep the hand-off file in Helper's internal cache."
+    ),
+    EXTERNAL(
+        title = "App external storage",
+        description = "Save a copy in the app's external files folder."
     ),
     DOWNLOADS(
-        title = "Store in downloads",
-        description = "Save a visible copy in Downloads/Morphe Helper after the file checks out."
+        title = "Downloads/Morphe Helper",
+        description = "Save a visible copy in Downloads/Morphe Helper."
+    ),
+    CUSTOM(
+        title = "Custom folder",
+        description = "Save a copy in a folder you choose with the system picker."
+    )
+}
+
+internal enum class DownloadRetention(
+    val title: String,
+    val description: String,
+    val durationMillis: Long = 0L
+) {
+    KEEP(
+        title = "Keep forever",
+        description = "Keep downloads until you clear storage."
+    ),
+    AFTER_HANDOFF(
+        title = "After hand-off",
+        description = "Skip the saved copy and remove the temporary file after a short delay."
+    ),
+    HOUR_1(
+        title = "1 hour",
+        description = "Delete cache and saved copies after one hour.",
+        durationMillis = 60L * 60L * 1000L
+    ),
+    HOUR_24(
+        title = "24 hours",
+        description = "Delete cache and saved copies after 24 hours.",
+        durationMillis = 24L * 60L * 60L * 1000L
+    ),
+    DAY_7(
+        title = "7 days",
+        description = "Delete cache and saved copies after 7 days.",
+        durationMillis = 7L * 24L * 60L * 60L * 1000L
     )
 }
 
@@ -251,11 +290,15 @@ internal fun Context.loadHelperSettings(): HelperSettings {
             prefs.getString("download_location", null),
             DownloadLocation.TEMPORARY
         ),
+        downloadRetention = enumValueOrDefault(
+            prefs.getString("download_retention", null),
+            DownloadRetention.KEEP
+        ),
+        downloadCustomTreeUri = prefs.getString("download_custom_tree_uri", "") ?: "",
         networkPolicy = enumValueOrDefault(
             prefs.getString("network_policy", null),
             NetworkPolicy.WIFI_AND_MOBILE
         ),
-        deleteTemporaryAfterHandoff = prefs.getBoolean("delete_temporary_after_handoff", true),
         logcatLogging = prefs.getBoolean("logcat_logging", true),
         fastMode = prefs.getBoolean("fast_mode", true),
         useMorpheResolver = prefs.getBoolean("use_morphe_resolver", true),
@@ -317,8 +360,10 @@ internal fun Context.saveHelperSettings(settings: HelperSettings) {
     getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .edit()
         .putString("download_location", settings.downloadLocation.name)
+        .putString("download_retention", settings.downloadRetention.name)
+        .putString("download_custom_tree_uri", settings.downloadCustomTreeUri)
+        .remove("delete_temporary_after_handoff")
         .putString("network_policy", settings.networkPolicy.name)
-        .putBoolean("delete_temporary_after_handoff", settings.deleteTemporaryAfterHandoff)
         .putBoolean("logcat_logging", settings.logcatLogging)
         .putInt(SETTINGS_VERSION_KEY, SETTINGS_VERSION)
         .putBoolean("fast_mode", settings.fastMode)
@@ -451,75 +496,12 @@ internal fun Context.clearDownloadsCopies(): Long {
         }
         return freed
     }
-    val dir = File(
+        val dir = File(
         Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
         "Morphe Helper"
     )
     val files = dir.listFiles()?.filter { it.isFile }.orEmpty()
     val freed = files.sumOf { it.length() }
     files.forEach { file -> runCatching { file.delete() } }
-    return freed
-}
-
-/**
- * Cleans up handed-off and stale temporary files when auto-clear is enabled,
- * returning the freed bytes (0 if nothing was removed).
- *
- * Two sources of leftovers are handled:
- *  1. Handed-off files whose in-process deleter died with the process (they were
- *     recorded in `pending_temp_deletes` at hand-off time).
- *  2. Older handed-off files that predate that record: once past the same grace
- *     period, anything in the temp dir is dropped unless it is the file the
- *     pending hand-off result still points at (Morphe can re-request it) or an
- *     in-progress download's `.part` staging file.
- */
-internal fun Context.cleanupTemporaryDownloads(settings: HelperSettings): Long {
-    if (!settings.deleteTemporaryAfterHandoff) return 0L
-    var freed = 0L
-    val now = System.currentTimeMillis()
-    val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    val deleteCutoff = now - TEMP_CLEANUP_DELAY_MS
-
-    // The file the pending hand-off result still points at must survive.
-    val pendingFile = DownloadJobManager.readPendingResult(this)
-        ?.fileName
-        ?.let { name -> File(temporaryDownloadsDir(), name).canonicalPath }
-
-    // 1) Recorded handed-off deletions the in-process deleter never ran.
-    val pending = prefs.getStringSet("pending_temp_deletes", emptySet()).orEmpty()
-    if (pending.isNotEmpty()) {
-        val remaining = pending.toMutableSet()
-        pending.forEach { entry ->
-            val path = entry.substringBeforeLast('|')
-            val recordedAt = entry.substringAfterLast('|').toLongOrNull() ?: 0L
-            val file = File(path)
-            when {
-                !file.exists() -> remaining.remove(entry)
-                now - recordedAt >= TEMP_CLEANUP_DELAY_MS -> {
-                    freed += file.length()
-                    runCatching { file.delete() }
-                    remaining.remove(entry)
-                }
-            }
-        }
-        prefs.edit().putStringSet("pending_temp_deletes", remaining).apply()
-    }
-
-    // 2) Handed-off leftovers with no record: past the grace period, drop every
-    //    temp file that is not the pending re-request target or an in-flight
-    //    download's staging file.
-    temporaryDownloadsDir()
-        .listFiles()
-        ?.filter {
-            it.isFile &&
-                it.lastModified() < deleteCutoff &&
-                it.name.endsWith(".part").not() &&
-                it.canonicalPath != pendingFile
-        }
-        ?.forEach { file ->
-            freed += file.length()
-            runCatching { file.delete() }
-        }
-
     return freed
 }
