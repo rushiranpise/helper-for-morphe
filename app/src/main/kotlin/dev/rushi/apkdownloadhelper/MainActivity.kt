@@ -392,6 +392,9 @@ class MainActivity : ComponentActivity() {
     private var uiState by mutableStateOf<UiState>(UiState.Idle)
     private var helperSettings by mutableStateOf(HelperSettings())
     private var installedPackageRefreshToken by mutableIntStateOf(0)
+    private var showUpdates by mutableStateOf(false)
+    private var updatePrompt by mutableStateOf<UpdateInfo?>(null)
+    private var updateRefreshToken by mutableIntStateOf(0)
     private val historyTimeFormat = SimpleDateFormat("MMM d, HH:mm", Locale.US)
     private var pendingDownload: PendingDownload? = null
     // Source picked from the download screen; the next Cancelled event starts it.
@@ -435,6 +438,19 @@ class MainActivity : ComponentActivity() {
         restoreAndPersistRateLimiter()
         helperSettings = loadHelperSettings()
         request = HelperRequest.from(intent)
+        if (intent?.getBooleanExtra(UpdateManager.EXTRA_OPEN_UPDATES, false) == true) {
+            showUpdates = true
+        }
+        lifecycleScope.launch {
+            val prompt = UpdateManager.checkOnLaunch(applicationContext)
+            if (prompt != null &&
+                helperSettings.updatePopup &&
+                helperSettings.updateMode == UpdateMode.NOTIFY &&
+                !showUpdates
+            ) {
+                updatePrompt = prompt
+            }
+        }
         startRequestLog(request)
         lifecycleScope.launch(Dispatchers.IO) {
             val freed = cleanupTemporaryDownloads(helperSettings)
@@ -466,6 +482,14 @@ class MainActivity : ComponentActivity() {
                 // each site's rate-limit pool, spent before the user has asked for
                 // anything, and it competes with the download that prompted the app to
                 // open. The Settings card keeps a Re-check button for when it is wanted.
+                if (showUpdates) {
+                    UpdateScreen(
+                        settings = helperSettings,
+                        onSettingsChange = ::updateHelperSettings,
+                        refreshToken = updateRefreshToken,
+                        onBack = { showUpdates = false }
+                    )
+                } else {
                 val captcha = captchaBrowser
                 if (captcha != null) {
                     CaptchaBrowserScreen(
@@ -490,6 +514,7 @@ class MainActivity : ComponentActivity() {
                         selectedPagerPage = selectedPagerPage,
                         onPagerPageChanged = { selectedPagerPage = it },
                         onSettingsChange = ::updateHelperSettings,
+                        onOpenUpdates = { showUpdates = true },
                         onRefresh = ::loadCandidates,
                         onResolve = ::resolveCandidates,
                         onDownload = ::downloadAndReturn,
@@ -537,6 +562,30 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 }
+                }
+                val prompt = updatePrompt
+                if (prompt != null) {
+                    UpdatePromptDialog(
+                        info = prompt,
+                        currentVersion = BuildConfig.VERSION_NAME,
+                        onView = {
+                            updatePrompt = null
+                            showUpdates = true
+                        },
+                        onLater = {
+                            UpdateManager.snooze(applicationContext)
+                            updatePrompt = null
+                        },
+                        onSkip = {
+                            UpdateManager.skipVersion(applicationContext, prompt.version)
+                            updatePrompt = null
+                        },
+                        onDismiss = {
+                            UpdateManager.snooze(applicationContext)
+                            updatePrompt = null
+                        }
+                    )
+                }
             }
         }
 
@@ -550,11 +599,18 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         installedPackageRefreshToken++
+        updateRefreshToken++
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (intent.getBooleanExtra(UpdateManager.EXTRA_OPEN_UPDATES, false)) {
+            showUpdates = true
+            updatePrompt = null
+            installedPackageRefreshToken++
+            return
+        }
         // singleTask routes a launcher-icon tap (bare MAIN intent) to this
         // existing instance instead of creating a second task. Ignore it and
         // keep the in-flight request on screen: only a fresh Morphe request
@@ -2710,6 +2766,7 @@ private fun HelperScreen(
     selectedPagerPage: Int,
     onPagerPageChanged: (Int) -> Unit,
     onSettingsChange: (HelperSettings) -> Unit,
+    onOpenUpdates: () -> Unit,
     onRefresh: () -> Unit,
     // VirusTotal API key, threaded into the scan-flow cards (ask, progress,
     // result) so quota is shown where scanning actually happens instead of
@@ -3021,6 +3078,7 @@ private fun HelperScreen(
                 HelperSettingsScreen(
                     settings = settings,
                     onSettingsChange = onSettingsChange,
+                    onOpenUpdates = onOpenUpdates,
                     logs = logs,
                     onClearLogs = onClearLogs,
                     historyEntries = historyEntries,
@@ -3231,6 +3289,7 @@ private fun HistoryEntryCard(
 private fun HelperSettingsScreen(
     settings: HelperSettings,
     onSettingsChange: (HelperSettings) -> Unit,
+    onOpenUpdates: () -> Unit,
     logs: List<RequestLogEntry>,
     onClearLogs: () -> Unit,
     historyEntries: List<DownloadHistoryEntry>,
@@ -3311,7 +3370,8 @@ private fun HelperSettingsScreen(
             SettingsTab.SYSTEM -> item {
                 SystemTabContent(
                     settings = settings,
-                    onSettingsChange = onSettingsChange
+                    onSettingsChange = onSettingsChange,
+                    onOpenUpdates = onOpenUpdates
                 )
             }
 
@@ -3341,7 +3401,8 @@ private fun HelperSettingsScreen(
 @Composable
 private fun SystemTabContent(
     settings: HelperSettings,
-    onSettingsChange: (HelperSettings) -> Unit
+    onSettingsChange: (HelperSettings) -> Unit,
+    onOpenUpdates: () -> Unit
 ) {
     val context = LocalContext.current
     var cacheBytes by remember(context) { mutableStateOf(context.temporaryDownloadsSize()) }
@@ -3557,6 +3618,16 @@ private fun SystemTabContent(
                 onToggle = {
                     onSettingsChange(settings.copy(useMorpheResolver = !settings.useMorpheResolver))
                 }
+            )
+        }
+
+        SettingsGroup(title = "Updates", icon = Icons.Outlined.Refresh) {
+            SettingsRow(
+                icon = Icons.Outlined.Refresh,
+                title = "Updates",
+                subtitle = "Check for a new release, read the changelog, or install through Shizuku.",
+                value = "v${BuildConfig.VERSION_NAME}",
+                onClick = onOpenUpdates
             )
         }
     }
@@ -10150,3 +10221,463 @@ internal fun String?.variantFileSuffix(): String =
 
 internal fun String.sanitizeFileName(): String =
     replace(Regex("[^A-Za-z0-9._-]"), "_")
+
+private val PACKAGE_PATTERN = Regex("""^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$""")
+
+@Composable
+private fun UpdateScreen(
+    settings: HelperSettings,
+    onSettingsChange: (HelperSettings) -> Unit,
+    refreshToken: Int,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var latest by remember { mutableStateOf(UpdateManager.cachedLatest(context)) }
+    var checking by remember { mutableStateOf(false) }
+    var checkMessage by remember { mutableStateOf<String?>(null) }
+    var installing by remember { mutableStateOf(false) }
+    var installMessage by remember { mutableStateOf<String?>(null) }
+    var modeDialog by remember { mutableStateOf(false) }
+    var packageDialog by remember { mutableStateOf(false) }
+
+    val shizukuStatus = remember(refreshToken, settings.shizukuPackage) {
+        ShizukuHelper.status(context)
+    }
+    val batteryUnrestricted = remember(refreshToken) {
+        UpdateManager.isBatteryUnrestricted(context)
+    }
+    val updateAvailable = latest?.isNewerThan(BuildConfig.VERSION_NAME) == true
+
+    fun checkNow() {
+        if (checking) return
+        scope.launch {
+            checking = true
+            checkMessage = "Checking for updates…"
+            val result = UpdateManager.checkForUpdates(
+                context = context,
+                manual = true,
+                settings = settings
+            )
+            latest = result.info ?: latest
+            checkMessage = result.message
+            checking = false
+        }
+    }
+
+    fun install(useShizuku: Boolean) {
+        val info = latest ?: return
+        if (installing) return
+        if (info.assetUrl.isBlank()) {
+            installMessage = "This release has no APK asset."
+            return
+        }
+        scope.launch {
+            installing = true
+            installMessage = "Downloading v${info.version}…"
+            try {
+                val file = UpdateManager.download(context, info)
+                val verification = UpdateManager.verifyDownloadedApk(context, file, info)
+                if (verification != null) {
+                    file.delete()
+                    installMessage = verification
+                } else if (
+                    useShizuku &&
+                    ShizukuHelper.status(context) == ShizukuHelper.READY
+                ) {
+                    installMessage = "Installing with Shizuku…"
+                    val (ok, detail) = UpdateManager.installWithShizuku(context, file)
+                    if (ok) {
+                        installMessage = "Update installed. Reopen the helper."
+                    } else {
+                        installMessage = "Shizuku failed: $detail. Opening the Android installer…"
+                        UpdateManager.openInstaller(context, file)
+                    }
+                } else {
+                    val opened = UpdateManager.openInstaller(context, file)
+                    installMessage = if (opened) {
+                        "Android installer opened. Follow the prompt."
+                    } else {
+                        "Allow installs from this app, then tap Install again."
+                    }
+                }
+            } catch (error: Throwable) {
+                installMessage = "Update failed: ${error.message ?: "unknown error"}"
+            } finally {
+                installing = false
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        latest = UpdateManager.cachedLatest(context)
+        if (latest != null) return@LaunchedEffect
+        if (!settings.checkUpdates) {
+            checkMessage = "Update checks are disabled."
+            return@LaunchedEffect
+        }
+        checking = true
+        val result = UpdateManager.checkForUpdates(
+            context = context,
+            manual = true,
+            settings = settings
+        )
+        latest = result.info ?: latest
+        checkMessage = result.message
+        checking = false
+    }
+
+    BackHandler(onBack = onBack)
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(
+                    horizontal = MorpheDefaults.ContentPadding,
+                    vertical = MorpheDefaults.ContentPadding
+                ),
+            verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
+        ) {
+            item {
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.align(Alignment.Center),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = "Updates",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Version ${BuildConfig.VERSION_NAME}",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    HelperHeaderIconButton(
+                        icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                        contentDescription = "Back",
+                        onClick = onBack,
+                        modifier = Modifier.align(Alignment.CenterStart)
+                    )
+                }
+            }
+
+            item {
+                SettingsGroup(title = "Release", icon = Icons.Outlined.Refresh) {
+                    SettingsRow(
+                        icon = Icons.Outlined.PhoneAndroid,
+                        title = "Current version",
+                        value = "v${BuildConfig.VERSION_NAME}"
+                    )
+                    MorpheDivider()
+                    SettingsRow(
+                        icon = Icons.Outlined.Refresh,
+                        title = if (checking) "Checking for updates…" else "Check for updates",
+                        subtitle = checkMessage ?: "Look for a newer release on GitHub.",
+                        value = if (checking) null else "Check",
+                        onClick = { checkNow() }
+                    )
+                    latest?.let { info ->
+                        MorpheDivider()
+                        SettingsRow(
+                            icon = Icons.Outlined.Verified,
+                            title = "Latest version",
+                            value = "v${info.version}",
+                            subtitle = if (updateAvailable) {
+                                "Update available"
+                            } else {
+                                "You are up to date"
+                            }
+                        )
+                    }
+                }
+            }
+
+            latest?.let { info ->
+                item {
+                    SettingsGroup(title = "Changelog", icon = Icons.Outlined.History) {
+                        SelectionContainer {
+                            Text(
+                                text = cleanReleaseNotes(info.notes)
+                                    .ifBlank { "No release notes for this version." },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(MorpheDefaults.ContentPadding),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (info.releaseUrl.isNotBlank()) {
+                            MorpheDivider()
+                            SettingsRow(
+                                icon = Icons.Outlined.OpenInNew,
+                                title = "Open release page",
+                                onClick = { openExternal(context, info.releaseUrl) }
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (updateAvailable && latest != null) {
+                item {
+                    val info = latest!!
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
+                    ) {
+                        HelperButton(
+                            text = if (installing) "Working…" else "Download and install",
+                            onClick = { install(false) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (shizukuStatus == ShizukuHelper.READY) {
+                            HelperOutlinedButton(
+                                text = "Install via Shizuku",
+                                onClick = { install(true) },
+                                icon = Icons.Outlined.Shield,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        if (info.assetUrl.isBlank()) {
+                            Text(
+                                text = "This release has no APK attached.",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        installMessage?.let { message ->
+                            Text(
+                                text = message,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                SettingsGroup(title = "Update settings", icon = Icons.Outlined.Settings) {
+                    SettingsSwitchItem(
+                        icon = Icons.Outlined.Refresh,
+                        title = "Check for updates",
+                        subtitle = "Look for a newer release when the helper starts.",
+                        checked = settings.checkUpdates,
+                        onToggle = {
+                            onSettingsChange(settings.copy(checkUpdates = !settings.checkUpdates))
+                        }
+                    )
+                    MorpheDivider()
+                    SettingsSwitchItem(
+                        icon = Icons.Outlined.HelpOutline,
+                        title = "In-app update popup",
+                        subtitle = "Show a dialog on launch when a newer release is available.",
+                        checked = settings.updatePopup,
+                        onToggle = {
+                            onSettingsChange(settings.copy(updatePopup = !settings.updatePopup))
+                        }
+                    )
+                    MorpheDivider()
+                    SettingsRow(
+                        icon = Icons.Outlined.Download,
+                        title = "Update mode",
+                        subtitle = settings.updateMode.description,
+                        value = settings.updateMode.title,
+                        onClick = { modeDialog = true }
+                    )
+                    MorpheDivider()
+                    SettingsRow(
+                        icon = Icons.Outlined.Shield,
+                        title = "Shizuku",
+                        subtitle = "Silent installs need Shizuku running and this app approved.",
+                        value = ShizukuHelper.statusLabel(context, shizukuStatus),
+                        onClick = { handleShizukuAction(context, shizukuStatus) }
+                    )
+                    MorpheDivider()
+                    SettingsRow(
+                        icon = Icons.Outlined.PhoneAndroid,
+                        title = "Shizuku app package",
+                        subtitle = "Only needed for a Shizuku fork with a different package name.",
+                        value = settings.shizukuPackage.ifBlank { "Default" },
+                        onClick = { packageDialog = true }
+                    )
+                    MorpheDivider()
+                    SettingsRow(
+                        icon = Icons.Outlined.Settings,
+                        title = "Battery optimization",
+                        subtitle = "Keep update checks reliable when Android restricts background work.",
+                        value = if (batteryUnrestricted) "Unrestricted" else "Optimized",
+                        onClick = { UpdateManager.requestBatteryExemption(context) }
+                    )
+                }
+            }
+
+            item { Spacer(modifier = Modifier.height(16.dp)) }
+        }
+    }
+
+    if (modeDialog) {
+        val modes = UpdateMode.entries
+        SettingsChoiceDialog(
+            title = "Update mode",
+            choices = modes.map { mode ->
+                SettingsChoice(
+                    icon = when (mode) {
+                        UpdateMode.NOTIFY -> Icons.Outlined.HelpOutline
+                        UpdateMode.SHIZUKU -> Icons.Outlined.Shield
+                    },
+                    title = mode.title,
+                    description = mode.description
+                )
+            },
+            selectedIndex = modes.indexOf(settings.updateMode),
+            onSelect = { index ->
+                onSettingsChange(settings.copy(updateMode = modes[index]))
+                modeDialog = false
+            },
+            onDismiss = { modeDialog = false }
+        )
+    }
+
+    if (packageDialog) {
+        ShizukuPackageDialog(
+            initial = settings.shizukuPackage,
+            onSave = { value ->
+                onSettingsChange(settings.copy(shizukuPackage = value))
+                packageDialog = false
+            },
+            onDismiss = { packageDialog = false }
+        )
+    }
+}
+
+@Composable
+private fun ShizukuPackageDialog(
+    initial: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var value by remember { mutableStateOf(initial) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.background,
+        title = { Text("Shizuku app package", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)) {
+                Text(
+                    text = "Leave blank for the default package. Only change this for a Shizuku fork with a different package name.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = {
+                        value = it
+                        error = null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = error != null,
+                    placeholder = { Text(ShizukuHelper.DEFAULT_PACKAGE) }
+                )
+                error?.let { message ->
+                    Text(
+                        text = message,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val trimmed = value.trim()
+                if (trimmed.isNotEmpty() && !PACKAGE_PATTERN.matches(trimmed)) {
+                    error = "Enter a valid package name, for example ${ShizukuHelper.DEFAULT_PACKAGE}."
+                } else {
+                    onSave(trimmed)
+                }
+            }) { Text("Save") }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = { onSave("") }) { Text("Use default") }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        }
+    )
+}
+
+@Composable
+private fun UpdatePromptDialog(
+    info: UpdateInfo,
+    currentVersion: String,
+    onView: () -> Unit,
+    onLater: () -> Unit,
+    onSkip: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.background,
+        title = { Text("Update available", fontWeight = FontWeight.Bold) },
+        text = {
+            Text(
+                "Helper v${info.version} is available. You have v$currentVersion."
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onView) { Text("View update") }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onSkip) { Text("Skip") }
+                TextButton(onClick = onLater) { Text("Later") }
+            }
+        }
+    )
+}
+
+private fun handleShizukuAction(context: Context, status: Int) {
+    when (status) {
+        ShizukuHelper.READY -> {
+            Toast.makeText(context, "Shizuku is ready.", Toast.LENGTH_SHORT).show()
+        }
+        ShizukuHelper.PERMISSION_REQUIRED -> ShizukuHelper.requestPermission()
+        ShizukuHelper.NOT_RUNNING,
+        ShizukuHelper.NOT_INSTALLED -> ShizukuHelper.openManager(context)
+        else -> {
+            Toast.makeText(context, "This Shizuku version is not supported.", Toast.LENGTH_SHORT).show()
+        }
+    }
+}
+
+private fun openExternal(context: Context, url: String) {
+    runCatching {
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+    }
+}
+
+private fun cleanReleaseNotes(value: String): String =
+    value.replace("\r\n", "\n")
+        .replace(Regex("""(?m)^#{1,6}\s*"""), "")
+        .replace(Regex("""\[([^\]]+)\]\([^)]+\)"""), "\$1")
+        .replace("**", "")
+        .replace("__", "")
+        .replace("`", "")
+        .replace(Regex("""(?m)^- """), "• ")
+        .replace(Regex("""\n{3,}"""), "\n\n")
+        .trim()

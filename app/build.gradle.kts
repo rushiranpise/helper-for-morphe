@@ -84,6 +84,7 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        aidl = true
     }
 
     testOptions {
@@ -119,6 +120,8 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp-dnsoverhttps:5.3.0")
     implementation("com.squareup.retrofit2:converter-gson:3.0.0")
     implementation("com.squareup.retrofit2:retrofit:3.0.0")
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
     implementation("org.jsoup:jsoup:1.22.1")
 
     testImplementation("junit:junit:4.13.2")

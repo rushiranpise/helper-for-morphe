@@ -86,7 +86,12 @@ internal data class HelperSettings(
     /** Hand the file to Morphe without showing the result when a scan comes back clean. */
     val virusTotalAutoProceed: Boolean = false,
     // Source opened by default when Helper launches (null = first enabled source).
-    val preferredSource: DownloadSource? = null
+    val preferredSource: DownloadSource? = null,
+    val checkUpdates: Boolean = true,
+    val updateMode: UpdateMode = UpdateMode.NOTIFY,
+    val updatePopup: Boolean = true,
+    /** Empty keeps Shizuku's default package; set for forks with another name. */
+    val shizukuPackage: String = ""
 )
 
 internal enum class VirusTotalScanMode(
@@ -104,6 +109,20 @@ internal enum class VirusTotalScanMode(
     ALWAYS(
         title = "Always scan",
         description = "Automatically scan every download before handing off."
+    )
+}
+
+internal enum class UpdateMode(
+    val title: String,
+    val description: String
+) {
+    NOTIFY(
+        title = "Notify me",
+        description = "Show a notification when a newer release is available."
+    ),
+    SHIZUKU(
+        title = "Automatic via Shizuku",
+        description = "Download and install updates silently when Shizuku is running and approved. Falls back to a notification."
     )
 }
 
@@ -264,7 +283,14 @@ internal fun Context.loadHelperSettings(): HelperSettings {
             VirusTotalScanMode.ASK
         ),
         preferredSource = prefs.getString("preferred_source", null)
-            ?.let { name -> DownloadSource.entries.firstOrNull { it.name == name } }
+            ?.let { name -> DownloadSource.entries.firstOrNull { it.name == name } },
+        checkUpdates = prefs.getBoolean("check_updates", true),
+        updateMode = enumValueOrDefault(
+            prefs.getString("update_mode", null),
+            UpdateMode.NOTIFY
+        ),
+        updatePopup = prefs.getBoolean("update_popup", true),
+        shizukuPackage = prefs.getString("shizuku_package", "") ?: ""
     )
 
     // Version 2 turned Fast Mode on and narrowed the enabled sources to the five the
@@ -309,6 +335,10 @@ internal fun Context.saveHelperSettings(settings: HelperSettings) {
         .putString("virus_total_scan_mode", settings.virusTotalScanMode.name)
         .putBoolean("virus_total_auto_proceed", settings.virusTotalAutoProceed)
         .putString("preferred_source", settings.preferredSource?.name)
+        .putBoolean("check_updates", settings.checkUpdates)
+        .putString("update_mode", settings.updateMode.name)
+        .putBoolean("update_popup", settings.updatePopup)
+        .putString("shizuku_package", settings.shizukuPackage)
         .apply()
 }
 
