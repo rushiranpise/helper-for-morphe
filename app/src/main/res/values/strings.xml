@@ -76,6 +76,9 @@
     <string name="sha_256_verified">SHA-256 verified</string>
     <string name="shade">Shade</string>
     <string name="solve_the_captcha">Solve the captcha</string>
+    <string name="download_verification_title">Verification needed</string>
+    <string name="download_verification_body">Finish the check in the browser below to continue the download.</string>
+    <string name="download_verify_now">Verify now</string>
     <string name="sources">Sources</string>
     <string name="storage_used">Storage used</string>
     <string name="the_app_downloads_the_file_once">The app downloads the file once the page offers it.</string>

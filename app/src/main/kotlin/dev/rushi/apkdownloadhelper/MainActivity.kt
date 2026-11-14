@@ -2644,6 +2644,7 @@ private fun CaptchaBrowserScreen(
 ) {
     val context = LocalContext.current
     var progress by remember { mutableIntStateOf(0) }
+    var verificationHintVisible by remember { mutableStateOf(false) }
     // The page that produced the link is the referer APKMirror and APKPure
     // expect. It changes as their scripts walk search -> release -> download.
     val browserPageUrl = remember { mutableStateOf(candidate.captchaUrl ?: candidate.url) }
@@ -2757,6 +2758,25 @@ private fun CaptchaBrowserScreen(
         browserPageUrl.value = startUrl
         webView.loadUrl(startUrl)
     }
+    LaunchedEffect(candidate.captchaUrl ?: candidate.url) {
+        delay(8_000)
+        verificationHintVisible = true
+    }
+
+    fun verifyNow() {
+        webView.requestFocus()
+        webView.evaluateJavascript(
+            """
+            (function () {
+              var el = document.querySelector(
+                'iframe[src*=turnstile], .cf-turnstile, #cf-turnstile, ' +
+                'iframe[src*=captcha], [class*=captcha], input[name*=captcha]');
+              if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            })();
+            """.trimIndent(),
+            null
+        )
+    }
     BackHandler {
         if (webView.canGoBack()) {
             webView.goBack()
@@ -2866,6 +2886,28 @@ private fun CaptchaBrowserScreen(
                     progress = { progress / 100f },
                     modifier = Modifier.fillMaxWidth()
                 )
+            }
+            if (verificationHintVisible) {
+                InfoBox(
+                    title = stringResource(R.string.download_verification_title),
+                    modifier = Modifier.clickable { verifyNow() },
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    titleColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    icon = Icons.Outlined.Warning,
+                    iconTint = MaterialTheme.colorScheme.onSecondaryContainer
+                ) {
+                    Text(
+                        text = stringResource(R.string.download_verification_body),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                    HelperOutlinedButton(
+                        text = stringResource(R.string.download_verify_now),
+                        onClick = { verifyNow() },
+                        icon = Icons.Outlined.Shield,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
             SectionCard(
                 modifier = Modifier
