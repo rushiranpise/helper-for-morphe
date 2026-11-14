@@ -25,6 +25,14 @@ internal class FakeApkPureApi(
     ): ApkPureUpdateResponse = response
 }
 
+internal class FakeApkMirrorApi(
+    var response: ApkMirrorAppExistsResponse = ApkMirrorAppExistsResponse()
+) : ApkMirrorApi {
+    override suspend fun appExists(
+        request: ApkMirrorAppExistsRequest
+    ): ApkMirrorAppExistsResponse = response
+}
+
 internal class FakeAptoideApi(
     var appByPackage: AptoideApp = AptoideApp(),
     var searchResults: List<AptoideApp> = emptyList(),
@@ -53,6 +61,7 @@ internal fun testParserContext(
     rateLimitedUrls: Set<String> = emptySet(),
     apkPureApi: ApkPureApi = FakeApkPureApi(),
     aptoideApi: AptoideApi = FakeAptoideApi(),
+    apkMirrorApi: ApkMirrorApi? = null,
     resolveViaMorphe: ((HelperRequest) -> String?)? = null,
     isSourceEnabled: (DownloadSource) -> Boolean = { true },
     /** Answers the direct endpoint's one hop; null means "no shortcut", as in production. */
@@ -61,6 +70,7 @@ internal fun testParserContext(
     fetcher = FakeSourceTextFetcher(pages, rateLimitedUrls),
     apkPureApi = apkPureApi,
     aptoideApi = aptoideApi,
+    apkMirrorApi = apkMirrorApi,
     resolveViaMorphe = resolveViaMorphe,
     isSourceEnabled = isSourceEnabled,
     resolveRedirect = redirects?.let { table -> { url: String -> table[url] } }

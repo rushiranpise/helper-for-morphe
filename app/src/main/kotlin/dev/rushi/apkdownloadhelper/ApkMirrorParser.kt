@@ -138,10 +138,11 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
             resolveApkMirrorLatestInfo(request, apkMirrorPackageSearchUrl(request.packageName))
         }.getOrNull())
 
-    private fun findApkMirrorLatest(request: HelperRequest): List<DownloadCandidate> {
+    private suspend fun findApkMirrorLatest(request: HelperRequest): List<DownloadCandidate> {
         // The resolver often hands back the exact variant page, which is two fetches
         // instead of the search -> app -> uploads -> release walk below.
         apkMirrorFastPath(request, CandidateOption.LATEST)?.let { return it }
+        apkMirrorApiLatestCandidates(request)?.let { return it }
 
         val latestInfo = resolveApkMirrorLatestInfo(
             request = request,
@@ -161,6 +162,114 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
 
         return directCandidates.orEmpty()
             .ifEmpty { listOf(apkMirrorLatestWebCandidate(request, latestInfo)) }
+    }
+
+    /**
+     * APKMirror's own app-exists API, used before the search -> app -> uploads -> release walk.
+     *
+     * The endpoint names the latest stable release and its variant pages in one request, so
+     * this skips the search, app, uploads and release pages. It is private and can
+     * disappear, and it has no per-version
+     * history, so it is only consulted for "latest" and any failure falls through to scraping.
+     * Secondary builds are skipped here for the same reason [apkMirrorLatestReleaseUrl] ignores
+     * them: a "-SECONDARY" release is not the build the latest tab is meant to offer.
+     */
+    private suspend fun apkMirrorApiLatestCandidates(
+        request: HelperRequest
+    ): List<DownloadCandidate>? {
+        val api = ctx.apkMirrorApi ?: return null
+        val data = runCatching {
+            api.appExists(ApkMirrorAppExistsRequest(pnames = listOf(request.packageName)))
+                .data
+                .firstOrNull { it.pname == request.packageName && it.exists }
+        }
+            .onFailure { Log.w(TAG, "APKMirror API latest lookup failed", it) }
+            .getOrNull()
+            ?: return null
+
+        val version = data.release.version.trim()
+        if (version.isEmpty()) return null
+        if (listOf("alpha", "beta", "secondary").any { version.contains(it, ignoreCase = true) }) {
+            return null
+        }
+        val releaseUrl = apkMirrorAbsoluteUrl(data.release.link)
+            ?.takeIf(::apkMirrorLooksLikeReleaseUrl)
+            ?: return null
+        val variants = data.apks
+            .flatMap { it.toApkMirrorVariants() }
+            .mapIndexed { index, variant -> variant.copy(number = index + 1) }
+        if (variants.isEmpty()) return null
+
+        val selected = apkMirrorSelectableVariants(request, variants, CandidateOption.LATEST)
+        if (selected.isEmpty()) return null
+        val multiVariant = selected.size > 1
+        return selected.mapNotNull { variant ->
+            runCatching {
+                apkMirrorDirectCandidateFromReleaseUrl(
+                    request = request,
+                    releaseUrl = releaseUrl,
+                    versionName = version,
+                    option = CandidateOption.LATEST,
+                    variant = variant,
+                    variantNumber = variant.number.takeIf { multiVariant }
+                )
+            }
+                .onFailure { Log.w(TAG, "APKMirror API variant failed: ${variant.url}", it) }
+                .getOrNull()
+        }
+            .distinctBy(DownloadCandidate::identityKey)
+            .takeIf(List<DownloadCandidate>::isNotEmpty)
+    }
+
+    private fun ApkMirrorAppExistsApk.toApkMirrorVariants(): List<ApkMirrorVariant> {
+        val url = apkMirrorAbsoluteUrl(link) ?: return emptyList()
+        val kinds = downloadTypes.mapNotNull { type ->
+            when (type.trim().lowercase(Locale.US)) {
+                "apk" -> "apk"
+                "bundle", "apkm" -> "apkm"
+                "apks" -> "apks"
+                else -> null
+            }
+        }.distinct().ifEmpty { listOf("apk") }
+        val arch = apkMirrorApiArchLabel(arches)
+        val dpi = apkMirrorApiDpiLabel(dpis)
+        val code = versionCode.toLongOrNull()?.takeIf { it > 0L }
+        return kinds.map { kind ->
+            ApkMirrorVariant(
+                url = url,
+                type = if (kind == "apk") "APK" else "BUNDLE",
+                fileKind = kind,
+                arch = arch,
+                dpi = dpi,
+                isBundle = kind != "apk",
+                versionCode = code
+            )
+        }
+    }
+
+    private fun apkMirrorApiArchLabel(arches: List<String>): String? {
+        val labels = arches.map { it.trim() }.filter(String::isNotBlank).distinct()
+        if (labels.isEmpty()) return null
+        val allAbis = setOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+        if (labels.map { it.lowercase(Locale.US) }.containsAll(allAbis)) return "Universal"
+        return labels.joinToString(", ")
+    }
+
+    private fun apkMirrorApiDpiLabel(dpis: List<String>?): String? {
+        val labels = dpis.orEmpty()
+            .map { it.trim().lowercase(Locale.US) }
+            .filter(String::isNotBlank)
+        if (labels.isEmpty()) return null
+        if (labels.any { it == "nodpi" || it == "anydpi" }) return "nodpi"
+        val numbers = labels.mapNotNull { label ->
+            Regex("""\d+""").find(label)?.value?.toIntOrNull()
+        }.sorted()
+        if (numbers.isEmpty()) return labels.joinToString("-")
+        return if (numbers.size == 1) {
+            "${numbers.first()}dpi"
+        } else {
+            "${numbers.first()}-${numbers.last()}dpi"
+        }
     }
 
     /**

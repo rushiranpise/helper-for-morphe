@@ -311,15 +311,25 @@ class MainActivity : ComponentActivity() {
     private val browserUserAgent =
         "Mozilla/5.0 (Linux; Android ${Build.VERSION.RELEASE}; ${Build.MODEL}) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
+
+    /** APKMirror challenges browser user agents but serves this one normally. */
+    private val apkMirrorUserAgent = "HelperForMorphe/1.0"
+
     private val client = OkHttpClient.Builder()
         .followRedirects(true)
         .followSslRedirects(true)
         .dns(AdGuardDns)
         .cookieJar(SessionCookies)
         .addInterceptor { chain ->
+            val host = chain.request().url.host.lowercase(Locale.US)
+            val userAgent = if (host == "apkmirror.com" || host.endsWith(".apkmirror.com")) {
+                apkMirrorUserAgent
+            } else {
+                browserUserAgent
+            }
             chain.proceed(
                 chain.request().newBuilder()
-                    .header("User-Agent", browserUserAgent)
+                    .header("User-Agent", userAgent)
                     .build()
             )
         }
@@ -370,6 +380,13 @@ class MainActivity : ComponentActivity() {
         .build()
         .create(AptoideApi::class.java)
 
+    private val apkMirrorApi = Retrofit.Builder()
+        .client(client)
+        .baseUrl("https://www.apkmirror.com/")
+        .addConverterFactory(GsonConverterFactory.create(gson))
+        .build()
+        .create(ApkMirrorApi::class.java)
+
     private val parsers: Map<DownloadSource, ApkSourceParser> by lazy {
         val playHttpClient = PlayHttpClient(Cache(File(cacheDir, "play-cache"), 64L * 1024L * 1024L))
         val parserContext = SourceParserContext(
@@ -381,6 +398,7 @@ class MainActivity : ComponentActivity() {
             ),
             apkPureApi = apkPureApi,
             aptoideApi = aptoideApi,
+            apkMirrorApi = apkMirrorApi,
             playHttpClient = playHttpClient,
             appContext = this,
             // Read through the settings each time, so flipping the switch takes effect on
@@ -11630,6 +11648,52 @@ internal object DownloadHelperContract {
     const val EXTRA_RESULT_SOURCE_NAME = "app.morphe.manager.extra.RESULT_SOURCE_NAME"
     const val EXTRA_RESULT_FILE_NAME = "app.morphe.manager.extra.RESULT_FILE_NAME"
 }
+
+/**
+ * APKMirror's own app-exists endpoint. It returns the latest stable release and its
+ * variant pages as JSON, so the latest flow does not have to walk the search, app and
+ * uploads pages. The endpoint is private and authenticated with APKUpdater's public
+ * client credential; every caller treats a failure as "scrape as before".
+ */
+internal interface ApkMirrorApi {
+    @Headers(
+        "Authorization: Basic YXBpLWFwa3VwZGF0ZXI6cm01cmNmcnVVakt5MDRzTXB5TVBKWFc4",
+        "Content-Type: application/json"
+    )
+    @POST("wp-json/apkm/v1/app_exists/")
+    suspend fun appExists(@Body request: ApkMirrorAppExistsRequest): ApkMirrorAppExistsResponse
+}
+
+internal data class ApkMirrorAppExistsRequest(
+    val pnames: List<String>,
+    val exclude: List<String> = listOf("alpha", "beta")
+)
+
+internal data class ApkMirrorAppExistsResponse(
+    val data: List<ApkMirrorAppExistsData> = emptyList()
+)
+
+internal data class ApkMirrorAppExistsData(
+    val pname: String = "",
+    val exists: Boolean = false,
+    val release: ApkMirrorAppExistsRelease = ApkMirrorAppExistsRelease(),
+    val apks: List<ApkMirrorAppExistsApk> = emptyList()
+)
+
+internal data class ApkMirrorAppExistsRelease(
+    val version: String = "",
+    val link: String = ""
+)
+
+internal data class ApkMirrorAppExistsApk(
+    @SerializedName("version_code")
+    val versionCode: String = "",
+    val link: String = "",
+    val arches: List<String> = emptyList(),
+    val dpis: List<String>? = null,
+    @SerializedName("download_types")
+    val downloadTypes: List<String> = emptyList()
+)
 
 internal interface ApkPureApi {
     @Headers(

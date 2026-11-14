@@ -93,6 +93,8 @@ internal class SourceParserContext(
     val fetcher: SourceTextFetcher,
     val apkPureApi: ApkPureApi,
     val aptoideApi: AptoideApi,
+    /** APKMirror's latest-release JSON endpoint; null keeps tests on the scrape path. */
+    val apkMirrorApi: ApkMirrorApi? = null,
     val playHttpClient: PlayHttpClient? = null,
     val appContext: Context? = null,
     /**
