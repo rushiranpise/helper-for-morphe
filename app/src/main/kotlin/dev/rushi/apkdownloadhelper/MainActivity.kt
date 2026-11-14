@@ -494,7 +494,7 @@ class MainActivity : ComponentActivity() {
         restoreAndPersistRateLimiter()
         helperSettings = loadHelperSettings()
         ensureLauncherIconState()
-        request = HelperRequest.from(intent)
+        request = HelperRequest.from(intent)?.withDeviceDpi(resources.displayMetrics.densityDpi)
         if (intent?.getBooleanExtra(UpdateManager.EXTRA_OPEN_UPDATES, false) == true) {
             showUpdates = true
         }
@@ -728,7 +728,7 @@ class MainActivity : ComponentActivity() {
             installedPackageRefreshToken++
             return
         }
-        request = HelperRequest.from(intent)
+        request = HelperRequest.from(intent)?.withDeviceDpi(resources.displayMetrics.densityDpi)
         startRequestLog(request)
         val activeRequest = request
         if (activeRequest != null) {
@@ -10816,8 +10816,12 @@ internal data class HelperRequest(
     val requestedFileKindsOverride: Set<String>? = null,
     val stockInstallRequired: Boolean,
     val fallbackWebUrl: String,
-    val sourceHintUrls: List<String>
+    val sourceHintUrls: List<String>,
+    /** Screen density in dpi, used to rank density-specific source variants. */
+    val deviceDpi: Int? = null
 ) {
+    fun withDeviceDpi(dpi: Int): HelperRequest = copy(deviceDpi = dpi.takeIf { it > 0 })
+
     val availableAbis: List<String>
         get() = supportedAbis
             .ifEmpty { Build.SUPPORTED_ABIS.toList() }
