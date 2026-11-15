@@ -6,6 +6,57 @@ matches the tag (see `tools/release-notes.sh`), so a new version needs a section
 before it is tagged. Commit subjects are only used as a fallback when a section is
 missing.
 
+## 5.3.0 - 2026-11-15
+
+Faster APKMirror lookups, more download control, and updates from inside the app.
+
+### New
+
+- **APKMirror latest is API-backed.** The helper gets the newest stable release and its
+  variants in one request, then fetches only the variant and download pages. If the API
+  is unavailable or only offers a beta or secondary build, it scrapes as before.
+  APKMirror also receives the helper's own user agent, so its browser challenge no longer
+  blocks the helper's requests.
+- **Density-specific APKMirror variants are opt-in.** Keep `nodpi` as the safe default,
+  or prefer the variant for your screen in Settings -> Downloads and storage. Density
+  rows can be split APKs, so the option warns about that.
+- **APKCube is a source.** It resolves apps and versions from APKCube's catalogue and
+  opens the exact download page in the in-app browser when a captcha is required.
+- **Morphe Link fallback.** The resolver-backed source can hand a request to any enabled
+  site in one step and keep the resolved page when a source cannot continue.
+- **Multiple formats in Fast Mode.** Select more than one format and Fast Mode tries
+  them in your chosen order instead of stopping at the first format.
+- **Segmented downloads.** Choose 2 to 32 connections, pause and resume, or switch source
+  without losing the version you picked.
+- **Custom download folders and retention.** Save to a folder you choose and clean files
+  up after 1 hour, 24 hours, 7 days, or keep them until you clear storage.
+- **In-app updates.** Stable and beta channels, a notification when a release is
+  available, and optional silent install through Shizuku.
+- **Source controls.** Enable, disable, reorder and set a default source from the
+  dedicated Sources screen.
+- **Hide the launcher icon** while keeping the helper available to Morphe.
+- **Browser challenge handling.** Challenge pages are tracked and timed out, with a
+  clear warning when a site is waiting for verification.
+
+### Fixed
+
+- APKMirror exact build matching, variant numbering and architecture selection.
+- APKPure split requests use XAPK instead of returning a plain APK.
+- Aptoide builds need a trusted malware verdict before they are offered.
+- APKMirror and APKPure browser fallbacks open the right page when direct downloads fail.
+- Bundle downloads keep `.apkm`, `.apks` and `.xapk` extensions instead of arriving as
+  `.zip` files.
+- Temporary downloads are handed off from private storage, avoiding the cache hand-off
+  failure on newer Android versions.
+- APKCube fallback builds and prelander pages are handled correctly.
+- Fast Mode retries download automatically, keeps the selected target when switching
+  sources, and offers the captcha flow for exact source matches.
+- Update checks handle channel switches and newly covered settings correctly.
+
+### Removed
+
+- APKCombo, Mi9 and APK Downloader. Their domains or APIs are no longer available.
+
 ## 5.2.0 - 2026-11-01
 
 Downloads get faster, and Uptodown finally works.
