@@ -4875,16 +4875,12 @@ private fun SystemTabContent(
     var customBytes by remember(context) { mutableStateOf(context.customDownloadsSize()) }
     var locationDialog by remember { mutableStateOf(false) }
     var retentionDialog by remember { mutableStateOf(false) }
-    var policyDialog by remember { mutableStateOf(false) }
-    var connectionCountDialog by remember { mutableStateOf(false) }
     var fastModePolicyDialog by remember { mutableStateOf(false) }
     var pendingLocation by remember { mutableStateOf<DownloadLocation?>(null) }
     val latestSettings by rememberUpdatedState(settings)
 
     val locations = DownloadLocation.entries
     val retentions = DownloadRetention.entries
-    val policies = NetworkPolicy.entries
-    val connectionCounts = DownloadConnectionCount.entries
     val fastPolicies = FastModePolicy.entries
 
     val folderPicker = rememberLauncherForActivityResult(
@@ -4995,38 +4991,6 @@ private fun SystemTabContent(
         )
     }
 
-    if (policyDialog) {
-        SettingsChoiceDialog(
-            title = stringResource(R.string.connection),
-            choices = policies.map { SettingsChoice(it.icon(), it.title, it.description) },
-            selectedIndex = policies.indexOf(settings.networkPolicy),
-            onSelect = { index ->
-                onSettingsChange(settings.copy(networkPolicy = policies[index]))
-                policyDialog = false
-            },
-            onDismiss = { policyDialog = false }
-        )
-    }
-
-    if (connectionCountDialog) {
-        SettingsChoiceDialog(
-            title = "Download connections",
-            choices = connectionCounts.map {
-                SettingsChoice(
-                    icon = Icons.Outlined.Bolt,
-                    title = it.title,
-                    description = it.description
-                )
-            },
-            selectedIndex = connectionCounts.indexOf(settings.downloadConnections),
-            onSelect = { index ->
-                onSettingsChange(settings.copy(downloadConnections = connectionCounts[index]))
-                connectionCountDialog = false
-            },
-            onDismiss = { connectionCountDialog = false }
-        )
-    }
-
     if (fastModePolicyDialog) {
         SettingsChoiceDialog(
             title = stringResource(R.string.which_version_to_fetch),
@@ -5122,36 +5086,6 @@ private fun SystemTabContent(
             )
         }
 
-        SettingsGroup(title = stringResource(R.string.connection), icon = Icons.Outlined.NetworkCheck) {
-            SettingsRow(
-                icon = settings.networkPolicy.icon(),
-                title = stringResource(R.string.network_policy),
-                subtitle = settings.networkPolicy.description,
-                value = settings.networkPolicy.title,
-                onClick = { policyDialog = true }
-            )
-            MorpheDivider()
-            SettingsRow(
-                icon = Icons.Outlined.Bolt,
-                title = "Download connections",
-                subtitle = "Maximum parallel connections. Large files are split into 4 MiB chunks, " +
-                    "and file size can reduce the count.",
-                value = settings.downloadConnections.title,
-                onClick = { connectionCountDialog = true }
-            )
-            MorpheDivider()
-            SettingsSwitchItem(
-                icon = Icons.Outlined.Dns,
-                title = stringResource(R.string.adguard_dns),
-                subtitle = "Blocks ads and trackers on download pages and in the captcha browser. " +
-                    "Falls back to the system resolver whenever it fails.",
-                checked = settings.adGuardDns,
-                onToggle = {
-                    onSettingsChange(settings.copy(adGuardDns = !settings.adGuardDns))
-                }
-            )
-        }
-
         SettingsGroup(title = stringResource(R.string.fast_mode), icon = Icons.Outlined.Bolt) {
             SettingsSwitchItem(
                 icon = Icons.Outlined.Bolt,
@@ -5172,18 +5106,6 @@ private fun SystemTabContent(
                     onClick = { fastModePolicyDialog = true }
                 )
             }
-            MorpheDivider()
-            SettingsSwitchItem(
-                icon = Icons.Outlined.Explore,
-                title = "Use Morphe's resolver",
-                subtitle = "Ask Morphe where its own download dialog would go and open that " +
-                    "page directly, instead of searching the site. Faster; turn it off to " +
-                    "always fetch through this app's own source pages.",
-                checked = settings.useMorpheResolver,
-                onToggle = {
-                    onSettingsChange(settings.copy(useMorpheResolver = !settings.useMorpheResolver))
-                }
-            )
         }
 
         SettingsGroup(title = "Updates", icon = Icons.Outlined.Refresh) {
@@ -5553,18 +5475,97 @@ private fun ThemeStyle.icon(): ImageVector = when (this) {
 }
 
 /**
- * Advanced tab: the scanning and reachability settings  VirusTotal and source health.
- * What has been handed off, and what the app logged doing it, live on the Logs tab.
+ * Advanced tab: connection, resolver and VirusTotal scanning. What has been
+ * handed off, and what the app logged doing it, live on the Logs tab.
  */
 @Composable
 private fun AdvancedTabContent(
     settings: HelperSettings,
     onSettingsChange: (HelperSettings) -> Unit
 ) {
+    var policyDialog by remember { mutableStateOf(false) }
+    var connectionCountDialog by remember { mutableStateOf(false) }
+    val policies = NetworkPolicy.entries
+    val connectionCounts = DownloadConnectionCount.entries
+
+    if (policyDialog) {
+        SettingsChoiceDialog(
+            title = stringResource(R.string.connection),
+            choices = policies.map { SettingsChoice(it.icon(), it.title, it.description) },
+            selectedIndex = policies.indexOf(settings.networkPolicy),
+            onSelect = { index ->
+                onSettingsChange(settings.copy(networkPolicy = policies[index]))
+                policyDialog = false
+            },
+            onDismiss = { policyDialog = false }
+        )
+    }
+
+    if (connectionCountDialog) {
+        SettingsChoiceDialog(
+            title = "Download connections",
+            choices = connectionCounts.map {
+                SettingsChoice(
+                    icon = Icons.Outlined.Bolt,
+                    title = it.title,
+                    description = it.description
+                )
+            },
+            selectedIndex = connectionCounts.indexOf(settings.downloadConnections),
+            onSelect = { index ->
+                onSettingsChange(settings.copy(downloadConnections = connectionCounts[index]))
+                connectionCountDialog = false
+            },
+            onDismiss = { connectionCountDialog = false }
+        )
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingMedium)
     ) {
+        SettingsGroup(title = stringResource(R.string.connection), icon = Icons.Outlined.NetworkCheck) {
+            SettingsRow(
+                icon = settings.networkPolicy.icon(),
+                title = stringResource(R.string.network_policy),
+                subtitle = settings.networkPolicy.description,
+                value = settings.networkPolicy.title,
+                onClick = { policyDialog = true }
+            )
+            MorpheDivider()
+            SettingsRow(
+                icon = Icons.Outlined.Bolt,
+                title = "Download connections",
+                subtitle = "Maximum parallel connections. Large files are split into 4 MiB chunks, " +
+                    "and file size can reduce the count.",
+                value = settings.downloadConnections.title,
+                onClick = { connectionCountDialog = true }
+            )
+            MorpheDivider()
+            SettingsSwitchItem(
+                icon = Icons.Outlined.Dns,
+                title = stringResource(R.string.adguard_dns),
+                subtitle = "Blocks ads and trackers on download pages and in the captcha browser. " +
+                    "Falls back to the system resolver whenever it fails.",
+                checked = settings.adGuardDns,
+                onToggle = {
+                    onSettingsChange(settings.copy(adGuardDns = !settings.adGuardDns))
+                }
+            )
+            MorpheDivider()
+            SettingsSwitchItem(
+                icon = Icons.Outlined.Explore,
+                title = "Use Morphe's resolver",
+                subtitle = "Ask Morphe where its own download dialog would go and open that " +
+                    "page directly, instead of searching the site. Faster; turn it off to " +
+                    "always fetch through this app's own source pages.",
+                checked = settings.useMorpheResolver,
+                onToggle = {
+                    onSettingsChange(settings.copy(useMorpheResolver = !settings.useMorpheResolver))
+                }
+            )
+        }
+
         SettingsGroup(title = stringResource(R.string.virustotal), icon = Icons.Outlined.Shield) {
             SettingsSwitchItem(
                 icon = Icons.Outlined.Shield,
