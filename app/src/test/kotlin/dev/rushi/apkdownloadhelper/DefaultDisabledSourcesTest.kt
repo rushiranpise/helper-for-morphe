@@ -16,6 +16,7 @@ class DefaultDisabledSourcesTest {
                 DownloadSource.APK_MIRROR,
                 DownloadSource.UPTODOWN,
                 DownloadSource.APK_PURE,
+                DownloadSource.APK_CUBE,
                 DownloadSource.MORPHE_LINK,
                 DownloadSource.AURORA
             ),
@@ -26,7 +27,6 @@ class DefaultDisabledSourcesTest {
     @Test
     fun `the remaining sources start disabled`() {
         listOf(
-            DownloadSource.APK_CUBE,
             DownloadSource.APTOIDE,
             DownloadSource.EVOZI,
             DownloadSource.PLAY

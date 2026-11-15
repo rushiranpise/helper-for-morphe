@@ -33,10 +33,10 @@ internal var adGuardDnsEnabled = false
 /**
  * Sources that start switched off.
  *
- * The four the helper is built around (APKMirror, Uptodown, APKPure, Aurora) are
- * enabled; the rest are theirs to discover in Settings. Like the Fast Mode default,
- * this only decides what somebody who never touched the source toggles gets - a stored
- * set is used as it is.
+ * The six the helper is built around (APKMirror, Uptodown, APKPure, APKCube,
+ * Morphe Link and Aurora) are enabled; the rest are theirs to discover in Settings.
+ * Like the Fast Mode default, this only decides what somebody who never touched the
+ * source toggles gets - a stored set is used as it is.
  */
 /**
  * Bumped when a default changes in a way existing installs should feel.
@@ -46,10 +46,9 @@ internal var adGuardDnsEnabled = false
  * by version rather than inferred from what is on disk.
  */
 private const val SETTINGS_VERSION_KEY = "settings_version"
-private const val SETTINGS_VERSION = 4
+private const val SETTINGS_VERSION = 5
 
 internal val DEFAULT_DISABLED_SOURCES: Set<DownloadSource> = setOf(
-    DownloadSource.APK_CUBE,
     DownloadSource.APTOIDE,
     DownloadSource.EVOZI,
     DownloadSource.PLAY
@@ -401,25 +400,25 @@ internal fun Context.loadHelperSettings(): HelperSettings {
         shizukuPackage = prefs.getString("shizuku_package", "") ?: ""
     )
 
-    // Version 2 turned Fast Mode on and narrowed the enabled sources to the five the
-    // helper is built around. Version 3 adds APKCube without re-enabling anything a
-    // user switched on or off. Version 4 moves Morphe Link to the front of the default
-    // order, but only when the saved order is still the old unmodified default. Each
+    // Version 2 turned Fast Mode on and narrowed the enabled sources to the ones the
+    // helper is built around. Version 4 moved Morphe Link to the front of the default
+    // order, but only when the saved order was still the old unmodified default.
+    // Version 5 enables APKCube by default, removing the old default-off entry. Each
     // step is applied once and saved, so from the next launch on the stored values win.
     val storedVersion = prefs.getInt(SETTINGS_VERSION_KEY, 1)
     var migrated = settings
     if (storedVersion < 2) {
         migrated = migrated.copy(fastMode = true, disabledSources = DEFAULT_DISABLED_SOURCES)
     }
-    if (storedVersion < 3) {
-        migrated = migrated.copy(
-            disabledSources = migrated.disabledSources + DownloadSource.APK_CUBE
-        )
-    }
     if (storedVersion < 4 &&
         migrated.sourceOrder == DownloadSource.entries.toList()
     ) {
         migrated = migrated.copy(sourceOrder = DEFAULT_SOURCE_ORDER)
+    }
+    if (storedVersion < 5) {
+        migrated = migrated.copy(
+            disabledSources = migrated.disabledSources - DownloadSource.APK_CUBE
+        )
     }
     if (migrated !== settings) {
         saveHelperSettings(migrated)
