@@ -28,7 +28,7 @@ internal var logcatLoggingEnabled = true
  * settings load) can route lookups per request without holding a Context.
  */
 @Volatile
-internal var adGuardDnsEnabled = false
+internal var adGuardDnsEnabled = true
 
 /**
  * Sources that start switched off.
@@ -46,7 +46,7 @@ internal var adGuardDnsEnabled = false
  * by version rather than inferred from what is on disk.
  */
 private const val SETTINGS_VERSION_KEY = "settings_version"
-private const val SETTINGS_VERSION = 5
+private const val SETTINGS_VERSION = 6
 
 internal val DEFAULT_DISABLED_SOURCES: Set<DownloadSource> = setOf(
     DownloadSource.APTOIDE,
@@ -95,7 +95,7 @@ internal data class HelperSettings(
     val pureBlackTheme: Boolean = false,
     /** Custom accent as `#RRGGBB`; empty keeps the style's own accent. */
     val customAccentColor: String = "",
-    val adGuardDns: Boolean = false,
+    val adGuardDns: Boolean = true,
     val virusTotalEnabled: Boolean = false,
     val virusTotalApiKey: String = "",
     val virusTotalScanMode: VirusTotalScanMode = VirusTotalScanMode.ASK,
@@ -373,7 +373,7 @@ internal fun Context.loadHelperSettings(): HelperSettings {
         themeStyle = themeStyle(prefs),
         pureBlackTheme = prefs.getBoolean("pure_black_theme", false),
         customAccentColor = prefs.getString("custom_accent_color", "") ?: "",
-        adGuardDns = prefs.getBoolean("adguard_dns", false),
+        adGuardDns = prefs.getBoolean("adguard_dns", true),
         virusTotalEnabled = prefs.getBoolean("virus_total_enabled", false),
         virusTotalApiKey = prefs.getString("virus_total_api_key", "") ?: "",
         virusTotalAutoProceed = prefs.getBoolean("virus_total_auto_proceed", false),
@@ -403,8 +403,9 @@ internal fun Context.loadHelperSettings(): HelperSettings {
     // Version 2 turned Fast Mode on and narrowed the enabled sources to the ones the
     // helper is built around. Version 4 moved Morphe Link to the front of the default
     // order, but only when the saved order was still the old unmodified default.
-    // Version 5 enables APKCube by default, removing the old default-off entry. Each
-    // step is applied once and saved, so from the next launch on the stored values win.
+    // Version 5 enables APKCube by default, removing the old default-off entry. Version
+    // 6 enables AdGuard DNS by default. Each step is applied once and saved, so from the
+    // next launch on the stored values win.
     val storedVersion = prefs.getInt(SETTINGS_VERSION_KEY, 1)
     var migrated = settings
     if (storedVersion < 2) {
@@ -419,6 +420,9 @@ internal fun Context.loadHelperSettings(): HelperSettings {
         migrated = migrated.copy(
             disabledSources = migrated.disabledSources - DownloadSource.APK_CUBE
         )
+    }
+    if (storedVersion < 6) {
+        migrated = migrated.copy(adGuardDns = true)
     }
     if (migrated !== settings) {
         saveHelperSettings(migrated)

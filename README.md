@@ -129,7 +129,7 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
 ### Appearance, DNS & logs
 
 - **Themes**: dark, light, or follow-the-system, plus optional **Material You** wallpaper-tinted accents and surfaces (Android 12+). A quick theme toggle lives in the home header.
-- **AdGuard DNS**: resolve app traffic through AdGuard DNS to block ads/trackers on download pages and in the captcha browser, with automatic fallback to the system resolver on failure.
+- **AdGuard DNS**: resolve app traffic through AdGuard DNS to block ads/trackers on download pages and in the captcha browser, with automatic fallback to the system resolver on failure. On by default.
 - **Tabs in Settings** (Settings / History / Logs): every past hand-off (with scan verdicts), and the full in-app request + HTTP log - every URL, status code, redirect, and timing - with a **Share** button exporting it for bug reports (app version and device info included). Logcat mirroring is optional.
 
 ## Helper Settings
@@ -142,7 +142,7 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
 - **Launcher icon**: hide it while keeping the helper available to Morphe.
 - **Downloads and storage**: choose the folder, retention, and APKMirror density preference.
 - **Security**: VirusTotal scanning with API key and scan mode.
-- **AdGuard DNS**: on/off.
+- **AdGuard DNS**: on by default; can be turned off.
 - **Appearance**: System / Dark / Light and Material You colors.
 - **Logging**: mirror request/HTTP details to Logcat.
 
