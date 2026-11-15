@@ -77,6 +77,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.ViewList
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.AutoAwesome
@@ -5622,9 +5623,18 @@ private fun AdvancedTabContent(
 }
 
 /**
- * Logs tab: what the app handed off, the Logcat switch and the in-app request log,
- * given their own space so they no longer trail the scanning settings in Advanced.
+ * Logs tab: history, Logcat logging and the in-app request log each get a sub-tab
+ * so the page no longer stacks all three into one long scroll.
  */
+private enum class LogsSubTab(
+    val label: String,
+    val icon: ImageVector
+) {
+    HISTORY("History", Icons.Outlined.History),
+    LOGGING("Logging", Icons.Outlined.BugReport),
+    REQUEST_LOGS("Request logs", Icons.AutoMirrored.Outlined.ViewList)
+}
+
 @Composable
 private fun LogsTabContent(
     settings: HelperSettings,
@@ -5636,33 +5646,48 @@ private fun LogsTabContent(
     onShareHistoryEntry: (DownloadHistoryEntry) -> Unit,
     onClearHistory: () -> Unit
 ) {
+    var subTab by rememberSaveable { mutableStateOf(LogsSubTab.HISTORY) }
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingMedium)
     ) {
-        DownloadHistorySection(
-            entries = historyEntries,
-            onClear = onClearHistory,
-            onOpen = onOpenHistoryEntry,
-            onShare = onShareHistoryEntry
+        MorpheSelectorRow(
+            options = LogsSubTab.entries.map {
+                MorpheSelectorOption(label = it.label, icon = it.icon)
+            },
+            selectedIndex = LogsSubTab.entries.indexOf(subTab),
+            onSelect = { subTab = LogsSubTab.entries[it] },
+            labelStyle = MaterialTheme.typography.labelLarge
         )
 
-        SettingsGroup(title = stringResource(R.string.logging), icon = Icons.Outlined.BugReport) {
-            SettingsSwitchItem(
-                icon = Icons.Outlined.BugReport,
-                title = stringResource(R.string.log_to_logcat),
-                subtitle = "Write request, result, and source HTTP details to the system log (adb logcat) for debugging.",
-                checked = settings.logcatLogging,
-                onToggle = {
-                    onSettingsChange(settings.copy(logcatLogging = !settings.logcatLogging))
-                }
+        when (subTab) {
+            LogsSubTab.HISTORY -> DownloadHistorySection(
+                entries = historyEntries,
+                onClear = onClearHistory,
+                onOpen = onOpenHistoryEntry,
+                onShare = onShareHistoryEntry
+            )
+
+            LogsSubTab.LOGGING -> SettingsGroup(
+                title = stringResource(R.string.logging),
+                icon = Icons.Outlined.BugReport
+            ) {
+                SettingsSwitchItem(
+                    icon = Icons.Outlined.BugReport,
+                    title = stringResource(R.string.log_to_logcat),
+                    subtitle = "Write request, result, and source HTTP details to the system log (adb logcat) for debugging.",
+                    checked = settings.logcatLogging,
+                    onToggle = {
+                        onSettingsChange(settings.copy(logcatLogging = !settings.logcatLogging))
+                    }
+                )
+            }
+
+            LogsSubTab.REQUEST_LOGS -> RequestLogsCard(
+                logs = logs,
+                onClearLogs = onClearLogs
             )
         }
-
-        RequestLogsCard(
-            logs = logs,
-            onClearLogs = onClearLogs
-        )
     }
 }
 

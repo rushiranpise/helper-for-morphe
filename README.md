@@ -130,7 +130,7 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
 
 - **Themes**: dark, light, or follow-the-system, plus optional **Material You** wallpaper-tinted accents and surfaces (Android 12+). A quick theme toggle lives in the home header.
 - **AdGuard DNS**: resolve app traffic through AdGuard DNS to block ads/trackers on download pages and in the captcha browser, with automatic fallback to the system resolver on failure. On by default.
-- **Tabs in Settings** (Settings / History / Logs): every past hand-off (with scan verdicts), and the full in-app request + HTTP log - every URL, status code, redirect, and timing - with a **Share** button exporting it for bug reports (app version and device info included). Logcat mirroring is optional.
+- **Tabs in Settings** (Appearance / System / Advanced / Logs), with the Logs tab split into **History**, **Logging** and **Request logs** sub-tabs. History records every past hand-off (with scan verdicts), and Request logs show the full in-app request + HTTP log - every URL, status code, redirect, and timing - with a **Share** button exporting it for bug reports (app version and device info included). Logcat mirroring is optional.
 
 ## Helper Settings
 
