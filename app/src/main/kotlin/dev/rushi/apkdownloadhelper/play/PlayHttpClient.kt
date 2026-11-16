@@ -1,4 +1,12 @@
-package dev.rushi.apkdownloadhelper.play
+﻿package dev.rushi.apkdownloadhelper.play
+
+import dev.rushi.apkdownloadhelper.*
+import dev.rushi.apkdownloadhelper.ui.*
+import dev.rushi.apkdownloadhelper.sources.*
+import dev.rushi.apkdownloadhelper.play.*
+import dev.rushi.apkdownloadhelper.download.*
+import dev.rushi.apkdownloadhelper.storage.*
+import dev.rushi.apkdownloadhelper.updater.*
 
 import com.aurora.gplayapi.data.models.PlayResponse
 import com.aurora.gplayapi.network.IHttpClient
@@ -29,9 +37,9 @@ class PlayHttpClient(cache: Cache) : IHttpClient {
         .retryOnConnectionFailure(true)
         .followRedirects(true)
         .followSslRedirects(true)
-        .dns(dev.rushi.apkdownloadhelper.AdGuardDns)
+        .dns(AdGuardDns)
         .cache(cache)
-        .addInterceptor(dev.rushi.apkdownloadhelper.httpLoggingInterceptor("Play"))
+        .addInterceptor(httpLoggingInterceptor("Play"))
         .build()
 
     override fun post(
@@ -136,3 +144,5 @@ class PlayHttpClient(cache: Cache) : IHttpClient {
             }
         }
 }
+
+
