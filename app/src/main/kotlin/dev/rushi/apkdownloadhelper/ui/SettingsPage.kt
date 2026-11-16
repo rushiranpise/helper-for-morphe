@@ -12,7 +12,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.rememberScrollState
 internal enum class SettingsCategory(
     val title: String,
     val subtitle: String,
@@ -72,6 +73,7 @@ internal fun SettingsPage(
 internal fun SettingsPageDetail(
     title: String,
     onBack: () -> Unit,
+    scrollState: ScrollState = rememberScrollState(),
     content: @Composable ColumnScope.() -> Unit
 ) {
     BackHandler { onBack() }

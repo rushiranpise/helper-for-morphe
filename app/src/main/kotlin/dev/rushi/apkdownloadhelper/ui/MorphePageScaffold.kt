@@ -88,6 +88,7 @@ fun MorpheSubpageScaffold(
     title: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    scrollState: ScrollState = rememberScrollState(),
     content: @Composable ColumnScope.() -> Unit
 ) {
     val scrollState = rememberScrollState()

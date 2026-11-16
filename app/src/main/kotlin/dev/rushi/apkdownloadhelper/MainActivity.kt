@@ -621,15 +621,17 @@ class MainActivity : ComponentActivity() {
                         // Use lastActiveCategory so the UI doesn't vanish before sliding down
                         val cat = lastActiveCategory
                         if (cat != null) {
+                            val detailScrollState = rememberScrollState()
                             SettingsPageDetail(
                                 title = cat.title,
-                                onBack = { activeSettingsCategory = null }
+                                onBack = { activeSettingsCategory = null },
+                                scrollState = detailScrollState
                             ) {
-                                // Inside MainActivity.kt
                                 when (cat) {
                                     SettingsCategory.SOURCES -> SourcesSettingsScreen(
                                         settings = helperSettings,
-                                        onSettingsChange = ::updateHelperSettings
+                                        onSettingsChange = ::updateHelperSettings,
+                                        parentScrollState = detailScrollState
                                     )
                                     SettingsCategory.DOWNLOADS -> SystemTabContent(
                                         settings = helperSettings,
