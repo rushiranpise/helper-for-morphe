@@ -1,12 +1,5 @@
 ﻿package dev.rushi.apkdownloadhelper.updater
 
-import dev.rushi.apkdownloadhelper.*
-import dev.rushi.apkdownloadhelper.ui.*
-import dev.rushi.apkdownloadhelper.sources.*
-import dev.rushi.apkdownloadhelper.play.*
-import dev.rushi.apkdownloadhelper.download.*
-import dev.rushi.apkdownloadhelper.storage.*
-import dev.rushi.apkdownloadhelper.updater.*
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -26,12 +19,13 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.FileProvider
-import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
-import java.security.MessageDigest
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicLong
+import dev.rushi.apkdownloadhelper.BuildConfig
+import dev.rushi.apkdownloadhelper.MainActivity
+import dev.rushi.apkdownloadhelper.storage.HelperSettings
+import dev.rushi.apkdownloadhelper.storage.UpdateChannel
+import dev.rushi.apkdownloadhelper.storage.UpdateMode
+import dev.rushi.apkdownloadhelper.storage.loadHelperSettings
+import dev.rushi.apkdownloadhelper.updater.UpdateManager.checkForUpdates
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -41,6 +35,12 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
+import java.security.MessageDigest
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.resume
 
 internal data class UpdateCheckResult(

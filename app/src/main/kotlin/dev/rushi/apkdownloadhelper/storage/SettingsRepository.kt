@@ -1,12 +1,5 @@
 ﻿package dev.rushi.apkdownloadhelper.storage
 
-import dev.rushi.apkdownloadhelper.*
-import dev.rushi.apkdownloadhelper.ui.*
-import dev.rushi.apkdownloadhelper.sources.*
-import dev.rushi.apkdownloadhelper.play.*
-import dev.rushi.apkdownloadhelper.download.*
-import dev.rushi.apkdownloadhelper.storage.*
-import dev.rushi.apkdownloadhelper.updater.*
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
@@ -15,6 +8,10 @@ import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import dev.rushi.apkdownloadhelper.BuildConfig
+import dev.rushi.apkdownloadhelper.download.VirusTotalScanner
+import dev.rushi.apkdownloadhelper.ui.DownloadSource
+import dev.rushi.apkdownloadhelper.updater.UpdateInfo
 import java.io.File
 
 internal const val PREFS_NAME = "helper_settings"

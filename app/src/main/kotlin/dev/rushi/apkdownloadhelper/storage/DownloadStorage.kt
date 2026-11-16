@@ -1,12 +1,5 @@
 ﻿package dev.rushi.apkdownloadhelper.storage
 
-import dev.rushi.apkdownloadhelper.*
-import dev.rushi.apkdownloadhelper.ui.*
-import dev.rushi.apkdownloadhelper.sources.*
-import dev.rushi.apkdownloadhelper.play.*
-import dev.rushi.apkdownloadhelper.download.*
-import dev.rushi.apkdownloadhelper.storage.*
-import dev.rushi.apkdownloadhelper.updater.*
 import android.content.Context
 import android.net.Uri
 import android.os.Build
@@ -14,8 +7,14 @@ import android.os.Environment
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import androidx.documentfile.provider.DocumentFile
-import java.io.File
+import dev.rushi.apkdownloadhelper.BuildConfig
+import dev.rushi.apkdownloadhelper.TEMP_CLEANUP_DELAY_MS
+import dev.rushi.apkdownloadhelper.copyToDownloads
+import dev.rushi.apkdownloadhelper.mimeType
+import dev.rushi.apkdownloadhelper.scheduleTemporaryDelete
+import dev.rushi.apkdownloadhelper.uniqueChild
 import kotlinx.coroutines.CancellationException
+import java.io.File
 
 /** Where a completed download was handed off and whether a saved copy exists. */
 internal data class DownloadHandoff(

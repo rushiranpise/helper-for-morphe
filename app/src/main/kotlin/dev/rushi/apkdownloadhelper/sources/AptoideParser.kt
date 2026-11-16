@@ -1,12 +1,15 @@
 ﻿package dev.rushi.apkdownloadhelper.sources
 
-import dev.rushi.apkdownloadhelper.*
-import dev.rushi.apkdownloadhelper.ui.*
-import dev.rushi.apkdownloadhelper.sources.*
-import dev.rushi.apkdownloadhelper.play.*
-import dev.rushi.apkdownloadhelper.download.*
-import dev.rushi.apkdownloadhelper.storage.*
-import dev.rushi.apkdownloadhelper.updater.*
+import dev.rushi.apkdownloadhelper.download.compareVersionNames
+import dev.rushi.apkdownloadhelper.download.normalizedHttpUrlOrNull
+import dev.rushi.apkdownloadhelper.download.sanitizeFileName
+import dev.rushi.apkdownloadhelper.download.slugForUrl
+import dev.rushi.apkdownloadhelper.gson
+import dev.rushi.apkdownloadhelper.ui.CandidateDownloadFile
+import dev.rushi.apkdownloadhelper.ui.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.HelperRequest
 import java.net.URLEncoder
 
 internal class AptoideParser(private val ctx: SourceParserContext) : ApkSourceParser {

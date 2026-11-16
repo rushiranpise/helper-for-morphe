@@ -1,16 +1,12 @@
 ﻿package dev.rushi.apkdownloadhelper.storage
 
-import dev.rushi.apkdownloadhelper.*
-import dev.rushi.apkdownloadhelper.ui.*
-import dev.rushi.apkdownloadhelper.sources.*
-import dev.rushi.apkdownloadhelper.play.*
-import dev.rushi.apkdownloadhelper.download.*
-import dev.rushi.apkdownloadhelper.storage.*
-import dev.rushi.apkdownloadhelper.updater.*
 import android.content.Context
 import android.net.Uri
 import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
+import dev.rushi.apkdownloadhelper.download.VirusTotalScanner
+import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.HelperRequest
 import java.io.File
 import java.lang.reflect.Type
 

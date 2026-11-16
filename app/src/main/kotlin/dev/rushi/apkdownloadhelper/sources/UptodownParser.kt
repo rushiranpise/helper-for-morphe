@@ -1,19 +1,32 @@
 ﻿package dev.rushi.apkdownloadhelper.sources
 
-import dev.rushi.apkdownloadhelper.*
-import dev.rushi.apkdownloadhelper.ui.*
-import dev.rushi.apkdownloadhelper.sources.*
-import dev.rushi.apkdownloadhelper.play.*
-import dev.rushi.apkdownloadhelper.download.*
-import dev.rushi.apkdownloadhelper.storage.*
-import dev.rushi.apkdownloadhelper.updater.*
 import android.net.Uri
 import android.util.Log
-import java.net.URLEncoder
-import java.util.Locale
+import dev.rushi.apkdownloadhelper.DOWNLOAD_FILE_KIND_SET
+import dev.rushi.apkdownloadhelper.TAG
+import dev.rushi.apkdownloadhelper.download.compareVersionNames
+import dev.rushi.apkdownloadhelper.download.normalizedHttpUrlOrNull
+import dev.rushi.apkdownloadhelper.download.normalizedVersionName
+import dev.rushi.apkdownloadhelper.download.parseInfoTableValue
+import dev.rushi.apkdownloadhelper.download.sanitizeFileName
+import dev.rushi.apkdownloadhelper.download.slugForUrl
+import dev.rushi.apkdownloadhelper.download.variantFileSuffix
+import dev.rushi.apkdownloadhelper.gson
+import dev.rushi.apkdownloadhelper.ui.CandidateDownloadFile
+import dev.rushi.apkdownloadhelper.ui.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.HelperRequest
+import dev.rushi.apkdownloadhelper.ui.UptodownVariantFile
+import dev.rushi.apkdownloadhelper.ui.UptodownVariantResponse
+import dev.rushi.apkdownloadhelper.ui.UptodownVersionEntry
+import dev.rushi.apkdownloadhelper.ui.UptodownVersionResponse
+import dev.rushi.apkdownloadhelper.ui.identityKey
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import java.net.URLEncoder
+import java.util.Locale
 
 /** Shown when Uptodown reveals its file only after a captcha the app can solve for you. */
 private const val UPTODOWN_CAPTCHA_NOTE =

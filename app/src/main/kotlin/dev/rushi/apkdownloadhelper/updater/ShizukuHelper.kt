@@ -1,12 +1,5 @@
 ﻿package dev.rushi.apkdownloadhelper.updater
 
-import dev.rushi.apkdownloadhelper.*
-import dev.rushi.apkdownloadhelper.ui.*
-import dev.rushi.apkdownloadhelper.sources.*
-import dev.rushi.apkdownloadhelper.play.*
-import dev.rushi.apkdownloadhelper.download.*
-import dev.rushi.apkdownloadhelper.storage.*
-import dev.rushi.apkdownloadhelper.updater.*
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -17,9 +10,11 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
+import dev.rushi.apkdownloadhelper.IUpdateService
+import dev.rushi.apkdownloadhelper.storage.loadHelperSettings
+import rikka.shizuku.Shizuku
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
-import rikka.shizuku.Shizuku
 
 /**
  * Thin wrapper around the Shizuku API. The package is configurable because

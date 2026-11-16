@@ -1,20 +1,15 @@
 ﻿package dev.rushi.apkdownloadhelper.updater
 
-import dev.rushi.apkdownloadhelper.*
-import dev.rushi.apkdownloadhelper.ui.*
-import dev.rushi.apkdownloadhelper.sources.*
-import dev.rushi.apkdownloadhelper.play.*
-import dev.rushi.apkdownloadhelper.download.*
-import dev.rushi.apkdownloadhelper.storage.*
-import dev.rushi.apkdownloadhelper.updater.*
 import android.content.Context
 import android.util.Log
-import java.io.IOException
-import java.util.concurrent.TimeUnit
+import dev.rushi.apkdownloadhelper.BuildConfig
+import dev.rushi.apkdownloadhelper.TAG
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
 import org.json.JSONObject
+import java.io.IOException
+import java.util.concurrent.TimeUnit
 
 /**
  * One release the helper can offer. [version] never carries the leading `v`;

@@ -1,12 +1,12 @@
 ﻿package dev.rushi.apkdownloadhelper.sources
 
-import dev.rushi.apkdownloadhelper.*
-import dev.rushi.apkdownloadhelper.ui.*
-import dev.rushi.apkdownloadhelper.sources.*
-import dev.rushi.apkdownloadhelper.play.*
-import dev.rushi.apkdownloadhelper.download.*
-import dev.rushi.apkdownloadhelper.storage.*
-import dev.rushi.apkdownloadhelper.updater.*
+import dev.rushi.apkdownloadhelper.download.normalizedHttpUrlOrNull
+import dev.rushi.apkdownloadhelper.download.versionNameEquals
+import dev.rushi.apkdownloadhelper.ui.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.HelperRequest
+import dev.rushi.apkdownloadhelper.ui.VersionStatus
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 

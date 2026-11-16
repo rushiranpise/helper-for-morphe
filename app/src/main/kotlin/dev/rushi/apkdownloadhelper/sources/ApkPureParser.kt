@@ -1,17 +1,28 @@
 ﻿package dev.rushi.apkdownloadhelper.sources
 
-import dev.rushi.apkdownloadhelper.*
-import dev.rushi.apkdownloadhelper.ui.*
-import dev.rushi.apkdownloadhelper.sources.*
-import dev.rushi.apkdownloadhelper.play.*
-import dev.rushi.apkdownloadhelper.download.*
-import dev.rushi.apkdownloadhelper.storage.*
-import dev.rushi.apkdownloadhelper.updater.*
 import android.net.Uri
 import android.util.Log
+import dev.rushi.apkdownloadhelper.DOWNLOAD_FILE_KIND_SET
+import dev.rushi.apkdownloadhelper.TAG
+import dev.rushi.apkdownloadhelper.download.compareVersionNames
+import dev.rushi.apkdownloadhelper.download.fileKindFromTags
+import dev.rushi.apkdownloadhelper.download.fileKindFromUrl
+import dev.rushi.apkdownloadhelper.download.normalizedHttpUrlOrNull
+import dev.rushi.apkdownloadhelper.download.normalizedVersionName
+import dev.rushi.apkdownloadhelper.download.sanitizeFileName
+import dev.rushi.apkdownloadhelper.download.sourceVersionFromText
+import dev.rushi.apkdownloadhelper.download.trailingVersionCode
+import dev.rushi.apkdownloadhelper.download.withoutTrailingVersionCode
+import dev.rushi.apkdownloadhelper.gson
+import dev.rushi.apkdownloadhelper.ui.CandidateDownloadFile
+import dev.rushi.apkdownloadhelper.ui.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.HelperRequest
+import dev.rushi.apkdownloadhelper.ui.VersionStatus
+import org.jsoup.nodes.Document
 import java.net.URLEncoder
 import java.util.Locale
-import org.jsoup.nodes.Document
 
 private const val APKPURE_BROWSER_NOTE =
     "APKPure did not return a direct file. Use the in-app browser to download it."

@@ -1,20 +1,7 @@
 ﻿package dev.rushi.apkdownloadhelper.download
 
-import dev.rushi.apkdownloadhelper.*
-import dev.rushi.apkdownloadhelper.ui.*
-import dev.rushi.apkdownloadhelper.sources.*
-import dev.rushi.apkdownloadhelper.play.*
 import dev.rushi.apkdownloadhelper.download.*
-import dev.rushi.apkdownloadhelper.storage.*
-import dev.rushi.apkdownloadhelper.updater.*
-import java.io.ByteArrayInputStream
-import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
-import java.io.RandomAccessFile
-import java.io.SequenceInputStream
-import java.util.concurrent.atomic.AtomicLong
-import kotlin.coroutines.cancellation.CancellationException
+import dev.rushi.apkdownloadhelper.ui.CandidateDownloadFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -23,6 +10,12 @@ import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
+import java.io.RandomAccessFile
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.coroutines.cancellation.CancellationException
 
 private const val MAX_DOWNLOAD_ATTEMPTS = 3
 private const val DOWNLOAD_RETRY_BASE_MS = 2_000L

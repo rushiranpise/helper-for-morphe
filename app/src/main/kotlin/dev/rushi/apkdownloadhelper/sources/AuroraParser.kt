@@ -1,12 +1,5 @@
 ﻿package dev.rushi.apkdownloadhelper.sources
 
-import dev.rushi.apkdownloadhelper.*
-import dev.rushi.apkdownloadhelper.ui.*
-import dev.rushi.apkdownloadhelper.sources.*
-import dev.rushi.apkdownloadhelper.play.*
-import dev.rushi.apkdownloadhelper.download.*
-import dev.rushi.apkdownloadhelper.storage.*
-import dev.rushi.apkdownloadhelper.updater.*
 import android.content.Context
 import android.util.Log
 import com.aurora.gplayapi.data.models.App
@@ -14,8 +7,19 @@ import com.aurora.gplayapi.data.models.AuthData
 import com.aurora.gplayapi.data.models.PlayFile
 import com.aurora.gplayapi.helpers.AppDetailsHelper
 import com.aurora.gplayapi.helpers.PurchaseHelper
+import dev.rushi.apkdownloadhelper.AURORA_AUTH_URL
+import dev.rushi.apkdownloadhelper.TAG
+import dev.rushi.apkdownloadhelper.download.normalizedHttpUrlOrNull
+import dev.rushi.apkdownloadhelper.download.playStoreUrl
+import dev.rushi.apkdownloadhelper.gson
 import dev.rushi.apkdownloadhelper.play.NativeDeviceInfoProvider
 import dev.rushi.apkdownloadhelper.play.PlayHttpClient
+import dev.rushi.apkdownloadhelper.ui.CandidateDownloadFile
+import dev.rushi.apkdownloadhelper.ui.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.HelperRequest
+import dev.rushi.apkdownloadhelper.ui.VersionStatus
 
 internal class AuroraParser(private val ctx: SourceParserContext) : ApkSourceParser {
     override val source: DownloadSource = DownloadSource.AURORA

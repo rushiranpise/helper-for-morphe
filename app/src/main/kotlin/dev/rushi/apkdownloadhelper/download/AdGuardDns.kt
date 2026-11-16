@@ -1,13 +1,10 @@
 ﻿package dev.rushi.apkdownloadhelper.download
 
-import dev.rushi.apkdownloadhelper.*
-import dev.rushi.apkdownloadhelper.ui.*
-import dev.rushi.apkdownloadhelper.sources.*
-import dev.rushi.apkdownloadhelper.play.*
-import dev.rushi.apkdownloadhelper.download.*
-import dev.rushi.apkdownloadhelper.storage.*
-import dev.rushi.apkdownloadhelper.updater.*
 import android.util.Log
+import dev.rushi.apkdownloadhelper.TAG
+import dev.rushi.apkdownloadhelper.download.AdGuardDns.isBlocked
+import dev.rushi.apkdownloadhelper.download.AdGuardDns.lookup
+import dev.rushi.apkdownloadhelper.storage.adGuardDnsEnabled
 import okhttp3.Dns
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient

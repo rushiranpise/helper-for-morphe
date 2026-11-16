@@ -1,17 +1,12 @@
 ﻿package dev.rushi.apkdownloadhelper.download
 
-import dev.rushi.apkdownloadhelper.*
-import dev.rushi.apkdownloadhelper.ui.*
-import dev.rushi.apkdownloadhelper.sources.*
-import dev.rushi.apkdownloadhelper.play.*
-import dev.rushi.apkdownloadhelper.download.*
-import dev.rushi.apkdownloadhelper.storage.*
-import dev.rushi.apkdownloadhelper.updater.*
-import java.util.Locale
+import dev.rushi.apkdownloadhelper.storage.AppLog
+import dev.rushi.apkdownloadhelper.storage.LogLevel
 import okhttp3.HttpUrl
 import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response
+import java.util.Locale
 
 /**
  * OkHttp interceptor that records each HTTP exchange into the in-app [AppLog]

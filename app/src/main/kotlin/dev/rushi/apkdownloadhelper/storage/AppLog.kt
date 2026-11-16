@@ -1,15 +1,12 @@
 ﻿package dev.rushi.apkdownloadhelper.storage
 
-import dev.rushi.apkdownloadhelper.*
-import dev.rushi.apkdownloadhelper.ui.*
-import dev.rushi.apkdownloadhelper.sources.*
-import dev.rushi.apkdownloadhelper.play.*
-import dev.rushi.apkdownloadhelper.download.*
-import dev.rushi.apkdownloadhelper.storage.*
-import dev.rushi.apkdownloadhelper.updater.*
 import android.os.Build
 import android.util.Log
 import androidx.compose.runtime.mutableStateListOf
+import dev.rushi.apkdownloadhelper.BuildConfig
+import dev.rushi.apkdownloadhelper.TAG
+import dev.rushi.apkdownloadhelper.storage.AppLog.entries
+import dev.rushi.apkdownloadhelper.storage.AppLog.exportText
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale

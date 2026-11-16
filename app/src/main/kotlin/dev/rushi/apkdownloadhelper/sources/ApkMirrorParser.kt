@@ -1,18 +1,33 @@
 ﻿package dev.rushi.apkdownloadhelper.sources
 
-import dev.rushi.apkdownloadhelper.*
-import dev.rushi.apkdownloadhelper.ui.*
-import dev.rushi.apkdownloadhelper.sources.*
-import dev.rushi.apkdownloadhelper.play.*
-import dev.rushi.apkdownloadhelper.download.*
-import dev.rushi.apkdownloadhelper.storage.*
-import dev.rushi.apkdownloadhelper.updater.*
 import android.net.Uri
 import android.util.Log
-import java.net.URLEncoder
-import java.util.Locale
+import dev.rushi.apkdownloadhelper.DOWNLOAD_FILE_KIND_ORDER
+import dev.rushi.apkdownloadhelper.TAG
+import dev.rushi.apkdownloadhelper.download.apkMirrorVersionSlug
+import dev.rushi.apkdownloadhelper.download.compareVersionNames
+import dev.rushi.apkdownloadhelper.download.fileKindFromUrl
+import dev.rushi.apkdownloadhelper.download.hasVariantBuildMarker
+import dev.rushi.apkdownloadhelper.download.normalizedHttpUrlOrNull
+import dev.rushi.apkdownloadhelper.download.parseInfoTableValue
+import dev.rushi.apkdownloadhelper.download.sanitizeFileName
+import dev.rushi.apkdownloadhelper.download.slugForUrl
+import dev.rushi.apkdownloadhelper.download.sourceFailureMessage
+import dev.rushi.apkdownloadhelper.download.variantFileSuffix
+import dev.rushi.apkdownloadhelper.download.versionNameEquals
+import dev.rushi.apkdownloadhelper.ui.ApkMirrorLatestInfo
+import dev.rushi.apkdownloadhelper.ui.ApkMirrorVariant
+import dev.rushi.apkdownloadhelper.ui.CandidateDownloadFile
+import dev.rushi.apkdownloadhelper.ui.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.HelperRequest
+import dev.rushi.apkdownloadhelper.ui.VersionStatus
+import dev.rushi.apkdownloadhelper.ui.identityKey
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import java.net.URLEncoder
+import java.util.Locale
 
 /** App-listing slugs that carry a different version stream than the canonical app. */
 private val APKMIRROR_EDITION_SLUG_REGEX = Regex(

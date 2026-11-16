@@ -1,19 +1,18 @@
 ﻿package dev.rushi.apkdownloadhelper.sources
 
-import dev.rushi.apkdownloadhelper.*
-import dev.rushi.apkdownloadhelper.ui.*
-import dev.rushi.apkdownloadhelper.sources.*
-import dev.rushi.apkdownloadhelper.play.*
-import dev.rushi.apkdownloadhelper.download.*
-import dev.rushi.apkdownloadhelper.storage.*
-import dev.rushi.apkdownloadhelper.updater.*
 import android.content.Context
+import dev.rushi.apkdownloadhelper.download.sourceFailureMessage
 import dev.rushi.apkdownloadhelper.play.PlayHttpClient
-import java.util.Locale
+import dev.rushi.apkdownloadhelper.sources.*
+import dev.rushi.apkdownloadhelper.ui.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.HelperRequest
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
+import java.util.Locale
 
 /** Abstraction over network text fetching so parsers can be unit-tested with fixtures. */
 internal fun interface SourceTextFetcher {

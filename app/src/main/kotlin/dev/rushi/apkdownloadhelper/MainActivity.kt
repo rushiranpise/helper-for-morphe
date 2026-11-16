@@ -19,8 +19,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -31,6 +34,8 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
@@ -45,14 +50,123 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.gson.Gson
-import dev.rushi.apkdownloadhelper.*
-import dev.rushi.apkdownloadhelper.download.*
+import dev.rushi.apkdownloadhelper.download.AdGuardDns
+import dev.rushi.apkdownloadhelper.download.SessionCookies
+import dev.rushi.apkdownloadhelper.download.VirusTotalScanner
 import dev.rushi.apkdownloadhelper.download.VirusTotalScanner.isEntirelyClean
-import dev.rushi.apkdownloadhelper.play.*
-import dev.rushi.apkdownloadhelper.sources.*
-import dev.rushi.apkdownloadhelper.storage.*
-import dev.rushi.apkdownloadhelper.ui.*
-import dev.rushi.apkdownloadhelper.updater.*
+import dev.rushi.apkdownloadhelper.download.belongsTo
+import dev.rushi.apkdownloadhelper.download.belongsToCurrentSession
+import dev.rushi.apkdownloadhelper.download.compareVersionNames
+import dev.rushi.apkdownloadhelper.download.downloadFailureMessage
+import dev.rushi.apkdownloadhelper.download.fileKindFromUrlOrNull
+import dev.rushi.apkdownloadhelper.download.httpLoggingInterceptor
+import dev.rushi.apkdownloadhelper.download.isPackageInstalled
+import dev.rushi.apkdownloadhelper.download.orderedFileKinds
+import dev.rushi.apkdownloadhelper.download.playStoreUrl
+import dev.rushi.apkdownloadhelper.download.sanitizeFileName
+import dev.rushi.apkdownloadhelper.download.sourceFailureMessage
+import dev.rushi.apkdownloadhelper.download.versionNameEquals
+import dev.rushi.apkdownloadhelper.download.withManualModeHint
+import dev.rushi.apkdownloadhelper.play.PlayHttpClient
+import dev.rushi.apkdownloadhelper.sources.ARCH_RANK_MISMATCH
+import dev.rushi.apkdownloadhelper.sources.ApkCubeParser
+import dev.rushi.apkdownloadhelper.sources.ApkMirrorApi
+import dev.rushi.apkdownloadhelper.sources.ApkMirrorParser
+import dev.rushi.apkdownloadhelper.sources.ApkPureApi
+import dev.rushi.apkdownloadhelper.sources.ApkPureParser
+import dev.rushi.apkdownloadhelper.sources.ApkSourceParser
+import dev.rushi.apkdownloadhelper.sources.AptoideApi
+import dev.rushi.apkdownloadhelper.sources.AptoideParser
+import dev.rushi.apkdownloadhelper.sources.AuroraParser
+import dev.rushi.apkdownloadhelper.sources.EvoziParser
+import dev.rushi.apkdownloadhelper.sources.MorpheLinkParser
+import dev.rushi.apkdownloadhelper.sources.MorpheResolver
+import dev.rushi.apkdownloadhelper.sources.OkHttpSourceTextFetcher
+import dev.rushi.apkdownloadhelper.sources.SourceAppNotFoundException
+import dev.rushi.apkdownloadhelper.sources.SourceParserContext
+import dev.rushi.apkdownloadhelper.sources.UptodownParser
+import dev.rushi.apkdownloadhelper.sources.archMatchRank
+import dev.rushi.apkdownloadhelper.storage.AppLog
+import dev.rushi.apkdownloadhelper.storage.DownloadHistoryEntry
+import dev.rushi.apkdownloadhelper.storage.DownloadHistoryStore
+import dev.rushi.apkdownloadhelper.storage.FastModePolicy
+import dev.rushi.apkdownloadhelper.storage.HelperSettings
+import dev.rushi.apkdownloadhelper.storage.LogLevel
+import dev.rushi.apkdownloadhelper.storage.ThemeMode
+import dev.rushi.apkdownloadhelper.storage.ThemeStyle
+import dev.rushi.apkdownloadhelper.storage.UpdateMode
+import dev.rushi.apkdownloadhelper.storage.cacheHandoff
+import dev.rushi.apkdownloadhelper.storage.cleanupDownloads
+import dev.rushi.apkdownloadhelper.storage.ensureLauncherIconState
+import dev.rushi.apkdownloadhelper.storage.loadHelperSettings
+import dev.rushi.apkdownloadhelper.storage.logcatLoggingEnabled
+import dev.rushi.apkdownloadhelper.storage.orderedSources
+import dev.rushi.apkdownloadhelper.storage.prepareDownloadHandoff
+import dev.rushi.apkdownloadhelper.storage.recordHandOff
+import dev.rushi.apkdownloadhelper.storage.restoreAndPersistRateLimiter
+import dev.rushi.apkdownloadhelper.storage.saveHelperSettings
+import dev.rushi.apkdownloadhelper.storage.scheduleHandoffCleanup
+import dev.rushi.apkdownloadhelper.storage.setLauncherIconVisible
+import dev.rushi.apkdownloadhelper.storage.temporaryDownloadsDir
+import dev.rushi.apkdownloadhelper.ui.AdvancedTabContent
+import dev.rushi.apkdownloadhelper.ui.AppBrowserScreen
+import dev.rushi.apkdownloadhelper.ui.AppearanceTabContent
+import dev.rushi.apkdownloadhelper.ui.BrowserDownloadCapture
+import dev.rushi.apkdownloadhelper.ui.CandidateDownloadFile
+import dev.rushi.apkdownloadhelper.ui.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.CandidateResult
+import dev.rushi.apkdownloadhelper.ui.CaptchaBrowserScreen
+import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.DownloadHelperContract
+import dev.rushi.apkdownloadhelper.ui.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.FailedAttempt
+import dev.rushi.apkdownloadhelper.ui.FastModeChoice
+import dev.rushi.apkdownloadhelper.ui.FastModeFindResult
+import dev.rushi.apkdownloadhelper.ui.FastModeProgress
+import dev.rushi.apkdownloadhelper.ui.HelperRequest
+import dev.rushi.apkdownloadhelper.ui.HelperScreen
+import dev.rushi.apkdownloadhelper.ui.HomePagerScreen
+import dev.rushi.apkdownloadhelper.ui.LocalMonochromeTheme
+import dev.rushi.apkdownloadhelper.ui.LogsTabContent
+import dev.rushi.apkdownloadhelper.ui.MorpheAnimations
+import dev.rushi.apkdownloadhelper.ui.MorpheDefaults
+import dev.rushi.apkdownloadhelper.ui.MorpheDialogButton
+import dev.rushi.apkdownloadhelper.ui.MorphePushedScreen
+import dev.rushi.apkdownloadhelper.ui.MorpheTypography
+import dev.rushi.apkdownloadhelper.ui.ResolveOutcome
+import dev.rushi.apkdownloadhelper.ui.ResolveState
+import dev.rushi.apkdownloadhelper.ui.ReuseOfferDialog
+import dev.rushi.apkdownloadhelper.ui.ReuseOption
+import dev.rushi.apkdownloadhelper.ui.SettingsCategory
+import dev.rushi.apkdownloadhelper.ui.SettingsPage
+import dev.rushi.apkdownloadhelper.ui.SettingsPageDetail
+import dev.rushi.apkdownloadhelper.ui.SourceCandidateGroup
+import dev.rushi.apkdownloadhelper.ui.SourcesSettingsScreen
+import dev.rushi.apkdownloadhelper.ui.SwitchCandidateDialog
+import dev.rushi.apkdownloadhelper.ui.SwitchCandidatePrompt
+import dev.rushi.apkdownloadhelper.ui.SystemTabContent
+import dev.rushi.apkdownloadhelper.ui.UiState
+import dev.rushi.apkdownloadhelper.ui.UpdatePromptDialog
+import dev.rushi.apkdownloadhelper.ui.UpdateScreen
+import dev.rushi.apkdownloadhelper.ui.VersionHistoryState
+import dev.rushi.apkdownloadhelper.ui.VersionStatus
+import dev.rushi.apkdownloadhelper.ui.browserBuildMismatchMessage
+import dev.rushi.apkdownloadhelper.ui.capturedDownloadFileName
+import dev.rushi.apkdownloadhelper.ui.formatBytes
+import dev.rushi.apkdownloadhelper.ui.identityKey
+import dev.rushi.apkdownloadhelper.ui.labelForLogs
+import dev.rushi.apkdownloadhelper.ui.matchingSourceSwitchCandidates
+import dev.rushi.apkdownloadhelper.ui.monochromeDarkColorScheme
+import dev.rushi.apkdownloadhelper.ui.monochromeLightColorScheme
+import dev.rushi.apkdownloadhelper.ui.morpheDarkColorScheme
+import dev.rushi.apkdownloadhelper.ui.morpheLightColorScheme
+import dev.rushi.apkdownloadhelper.ui.scanResultDetail
+import dev.rushi.apkdownloadhelper.ui.searchDomain
+import dev.rushi.apkdownloadhelper.ui.toAccentColorOrNull
+import dev.rushi.apkdownloadhelper.ui.withCustomAccent
+import dev.rushi.apkdownloadhelper.ui.withPureBlack
+import dev.rushi.apkdownloadhelper.updater.UpdateInfo
+import dev.rushi.apkdownloadhelper.updater.UpdateManager
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -388,56 +502,132 @@ class MainActivity : ComponentActivity() {
                             .fillMaxSize()
                             .then(backgroundModifier)
                     ) {
-                    HelperScreen(
-                        request = request,
-                        state = uiState,
-                        settings = helperSettings,
-                        virusTotalApiKey = if (helperSettings.virusTotalEnabled) {
-                            helperSettings.virusTotalApiKey
-                        } else {
-                            ""
+                                        var bottomBarCovered by remember { mutableStateOf(false) }
+
+                    HomePagerScreen(
+                        findAppsContent = { bottomBarHeight ->
+                            AppBrowserScreen(
+                                onBack = null,
+                                modifier = Modifier.padding(bottom = bottomBarHeight)
+                            )
                         },
-                        logs = AppLog.entries,
-                        installedPackageRefreshToken = installedPackageRefreshToken,
-                        selectedPagerPage = selectedPagerPage,
-                        onPagerPageChanged = { selectedPagerPage = it },
-                        onSettingsChange = ::updateHelperSettings,
-                        onOpenUpdates = { showUpdates = true },
-                        onRefresh = ::loadCandidates,
-                        canRetryFailedSources = failedAttempts.isNotEmpty(),
-                        onRetryAll = ::retryAllSources,
-                        onRetryFailedSources = ::retryFailedSources,
-                        onCopyFailureDetails = ::copyFailureDetails,
-                        onResolve = ::resolveCandidates,
-                        onDownload = ::downloadAndReturn,
-                        onPickDownloadedFile = ::returnPickedFile,
-                        onUseInstalledApp = ::returnInstalledApp,
-                        onVersionHistory = ::loadVersionHistory,
-                        onDownloadVersion = ::downloadVersion,
-                        onOpenHistoryEntry = ::openHistoryEntry,
-                        onShareHistoryEntry = ::shareHistoryEntry,
-                        onClearHistory = { DownloadHistoryStore.clear(applicationContext) },
-                        onClearLogs = { AppLog.clear() },
-                        onCancel = {
-                            appendLog("Query canceled by user.", LogLevel.Warning)
-                            setResult(Activity.RESULT_CANCELED)
-                            finish()
+                        homeContent = { bottomBarHeight ->
+                            HelperScreen(
+                                request = request,
+                                state = uiState,
+                                settings = helperSettings,
+                                virusTotalApiKey = if (helperSettings.virusTotalEnabled) {
+                                    helperSettings.virusTotalApiKey
+                                } else {
+                                    ""
+                                },
+                                logs = AppLog.entries,
+                                installedPackageRefreshToken = installedPackageRefreshToken,
+                                selectedPagerPage = selectedPagerPage,
+                                onPagerPageChanged = { selectedPagerPage = it },
+                                onSettingsChange = ::updateHelperSettings,
+                                onOpenUpdates = { showUpdates = true },
+                                onRefresh = ::loadCandidates,
+                                canRetryFailedSources = failedAttempts.isNotEmpty(),
+                                onRetryAll = ::retryAllSources,
+                                onRetryFailedSources = ::retryFailedSources,
+                                onCopyFailureDetails = ::copyFailureDetails,
+                                onResolve = ::resolveCandidates,
+                                onDownload = ::downloadAndReturn,
+                                onPickDownloadedFile = ::returnPickedFile,
+                                onUseInstalledApp = ::returnInstalledApp,
+                                onVersionHistory = ::loadVersionHistory,
+                                onDownloadVersion = ::downloadVersion,
+                                onOpenHistoryEntry = ::openHistoryEntry,
+                                onShareHistoryEntry = ::shareHistoryEntry,
+                                onClearHistory = { DownloadHistoryStore.clear(applicationContext) },
+                                onClearLogs = { AppLog.clear() },
+                                onCancel = {
+                                    appendLog("Query canceled by user.", LogLevel.Warning)
+                                    setResult(Activity.RESULT_CANCELED)
+                                    finish()
+                                },
+                                onCancelDownload = ::cancelDownload,
+                                onPauseDownload = ::pauseDownload,
+                                onResumeDownload = ::resumeDownload,
+                                onSwitchDownloadSource = ::switchDownloadSource,
+                                onSkipScanWait = { VirusTotalScanner.rateLimiter.requestSkip() },
+                                onCancelFastMode = ::cancelFastMode,
+                                onUseFastModeMismatch = { fastModeChoose(FastModeChoice.USE) },
+                                onSkipFastModeMismatch = { fastModeChoose(FastModeChoice.NEXT) },
+                                onChooseVersion = ::fastModeChooseVersion,
+                                onOpenMorphe = ::openMorpheManager,
+                                onSolveCaptcha = ::openCaptchaBrowser,
+                                onFormatToggle = ::toggleRequestedFileKind,
+                                onProceedAfterScan = ::proceedAfterScan,
+                                onCancelAfterScan = ::cancelAfterScan,
+                                onSkipScan = ::skipScanAndHandoff
+                            )
                         },
-                        onCancelDownload = ::cancelDownload,
-                        onPauseDownload = ::pauseDownload,
-                        onResumeDownload = ::resumeDownload,
-                        onSwitchDownloadSource = ::switchDownloadSource,
-                        onSkipScanWait = { VirusTotalScanner.rateLimiter.requestSkip() },
-                        onCancelFastMode = ::cancelFastMode,
-                        onUseFastModeMismatch = { fastModeChoose(FastModeChoice.USE) },
-                        onSkipFastModeMismatch = { fastModeChoose(FastModeChoice.NEXT) },
-                        onChooseVersion = ::fastModeChooseVersion,
-                        onOpenMorphe = ::openMorpheManager,
-                        onSolveCaptcha = ::openCaptchaBrowser,
-                        onFormatToggle = ::toggleRequestedFileKind,
-                        onProceedAfterScan = ::proceedAfterScan,
-                        onCancelAfterScan = ::cancelAfterScan,
-                        onSkipScan = ::skipScanAndHandoff
+                        settingsContent = { bottomBarHeight ->
+                            var showSources by rememberSaveable { mutableStateOf(false) }
+                            if (showSources) {
+                                SourcesSettingsScreen(
+                                    settings = helperSettings,
+                                    onSettingsChange = ::updateHelperSettings,
+                                    onBack = { showSources = false }
+                                )
+                            } else {
+                                SettingsPage(
+                                    bottomBarHeight = bottomBarHeight,
+                                    versionName = BuildConfig.VERSION_NAME,
+                                    onOpenUpdates = { showUpdates = true },
+                                    categoryContent = { category, innerBar, onBack ->
+                                        SettingsPageDetail(
+                                            title = category.title,
+                                            bottomBarHeight = innerBar,
+                                            onBack = onBack
+                                        ) {
+                                            LazyColumn(
+                                                modifier = Modifier.fillMaxSize(),
+                                                verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
+                                            ) {
+                                                item {
+                                                    when (category) {
+                                                        SettingsCategory.DOWNLOADS -> SystemTabContent(
+                                                            settings = helperSettings,
+                                                            onSettingsChange = ::updateHelperSettings,
+                                                            onOpenUpdates = { showUpdates = true },
+                                                            onOpenSources = { showSources = true }
+                                                        )
+                                                        SettingsCategory.APPEARANCE -> AppearanceTabContent(
+                                                            settings = helperSettings,
+                                                            onSettingsChange = ::updateHelperSettings
+                                                        )
+                                                        SettingsCategory.ADVANCED -> AdvancedTabContent(
+                                                            settings = helperSettings,
+                                                            onSettingsChange = ::updateHelperSettings
+                                                        )
+                                                        SettingsCategory.LOGS -> LogsTabContent(
+                                                            settings = helperSettings,
+                                                            onSettingsChange = ::updateHelperSettings,
+                                                            logs = AppLog.entries,
+                                                            onClearLogs = { AppLog.clear() },
+                                                            historyEntries = DownloadHistoryStore.entries(applicationContext),
+                                                            onOpenHistoryEntry = ::openHistoryEntry,
+                                                            onShareHistoryEntry = ::shareHistoryEntry,
+                                                            onClearHistory = { DownloadHistoryStore.clear(applicationContext) }
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+                        },
+                        navigationCovered = {
+                            uiState is UiState.Downloading ||
+                                uiState is UiState.FastMode ||
+                                uiState is UiState.ScanAsk ||
+                                uiState is UiState.ScanResult ||
+                                (uiState is UiState.Ready && request != null)
+                        }
                     )
                     }
                 }
@@ -2958,6 +3148,7 @@ internal fun HelperOutlinedButton(
 // challenges, captures the download URL the page produces, and hands it to the
 // normal download pipeline. Any source that gates its file behind a captcha can
 // opt in by setting DownloadCandidate.captchaUrl.
+
 
 
 
