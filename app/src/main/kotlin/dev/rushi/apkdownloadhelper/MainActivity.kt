@@ -18,6 +18,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -458,6 +464,8 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             var isSettingsSubpageOpen by remember { mutableStateOf(false) }
+            var activeSettingsCategory by rememberSaveable { mutableStateOf<SettingsCategory?>(null) }
+            var showSourcesScreen by rememberSaveable { mutableStateOf(false) }
             val focusManager = LocalFocusManager.current
             LaunchedEffect(showUpdates) {
                 if (showUpdates) focusManager.clearFocus(force = true)
@@ -566,62 +574,16 @@ class MainActivity : ComponentActivity() {
                             )
                         },
                         settingsContent = { bottomBarHeight ->
-                            var showSources by rememberSaveable { mutableStateOf(false) }
-                            if (showSources) {
-                                SourcesSettingsScreen(
-                                    settings = helperSettings,
-                                    onSettingsChange = ::updateHelperSettings,
-                                    onBack = { showSources = false }
-                                )
-                            } else {
-                                SettingsPage(
-                                    bottomBarHeight = bottomBarHeight,
-                                    versionName = BuildConfig.VERSION_NAME,
-                                    settings = helperSettings,
-                                    onSettingsChange = ::updateHelperSettings,
-                                    onOpenUpdates = { showUpdates = true },
-                                    onActiveCategoryChanged = { isSettingsSubpageOpen = it },
-                                    categoryContent = { category, innerBar, onBack ->
-                                        SettingsPageDetail(
-                                            title = category.title,
-                                            bottomBarHeight = innerBar,
-                                            onBack = onBack
-                                        ) {
-                                            // REMOVED the nested LazyColumn that was here!
-                                            when (category) {
-                                                SettingsCategory.DOWNLOADS -> SystemTabContent(
-                                                    settings = helperSettings,
-                                                    onSettingsChange = ::updateHelperSettings,
-                                                    onOpenUpdates = { showUpdates = true },
-                                                    onOpenSources = { showSources = true }
-                                                )
-                                                SettingsCategory.APPEARANCE -> AppearanceTabContent(
-                                                    settings = helperSettings,
-                                                    onSettingsChange = ::updateHelperSettings
-                                                )
-                                                SettingsCategory.ADVANCED -> AdvancedTabContent(
-                                                    settings = helperSettings,
-                                                    onSettingsChange = ::updateHelperSettings
-                                                )
-                                                SettingsCategory.LOGS -> LogsTabContent(
-                                                    settings = helperSettings,
-                                                    onSettingsChange = ::updateHelperSettings,
-                                                    logs = AppLog.entries,
-                                                    onClearLogs = { AppLog.clear() },
-                                                    historyEntries = DownloadHistoryStore.entries(applicationContext),
-                                                    onOpenHistoryEntry = ::openHistoryEntry,
-                                                    onShareHistoryEntry = ::shareHistoryEntry,
-                                                    onClearHistory = { DownloadHistoryStore.clear(applicationContext) }
-                                                )
-                                            }
-                                        }
-                                    }
-                                )
-                            }
+                            SettingsPage(
+                                versionName = BuildConfig.VERSION_NAME,
+                                onOpenCategory = { activeSettingsCategory = it },
+                                onOpenUpdates = { showUpdates = true }
+                            )
                         },
                         navigationCovered = {
-                            showUpdates ||               // Hides the bar when Update screen is open
-                            isSettingsSubpageOpen ||     // Hides the bar when a Settings category is open
+                            showUpdates ||
+                            activeSettingsCategory != null ||
+                            showSourcesScreen ||
                             uiState is UiState.Downloading ||
                             uiState is UiState.FastMode ||
                             uiState is UiState.ScanAsk ||
@@ -662,6 +624,60 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 }
+                }
+                // Overlay for Settings Categories
+                AnimatedVisibility(
+                    visible = activeSettingsCategory != null,
+                    enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                    exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+                ) {
+                    val cat = activeSettingsCategory
+                    if (cat != null) {
+                        SettingsPageDetail(
+                            title = cat.title,
+                            onBack = { activeSettingsCategory = null }
+                        ) {
+                            when (cat) {
+                                SettingsCategory.DOWNLOADS -> SystemTabContent(
+                                    settings = helperSettings,
+                                    onSettingsChange = ::updateHelperSettings,
+                                    onOpenUpdates = { showUpdates = true },
+                                    onOpenSources = { showSourcesScreen = true }
+                                )
+                                SettingsCategory.APPEARANCE -> AppearanceTabContent(
+                                    settings = helperSettings,
+                                    onSettingsChange = ::updateHelperSettings
+                                )
+                                SettingsCategory.ADVANCED -> AdvancedTabContent(
+                                    settings = helperSettings,
+                                    onSettingsChange = ::updateHelperSettings
+                                )
+                                SettingsCategory.LOGS -> LogsTabContent(
+                                    settings = helperSettings,
+                                    onSettingsChange = ::updateHelperSettings,
+                                    logs = AppLog.entries,
+                                    onClearLogs = { AppLog.clear() },
+                                    historyEntries = DownloadHistoryStore.entries(applicationContext),
+                                    onOpenHistoryEntry = ::openHistoryEntry,
+                                    onShareHistoryEntry = ::shareHistoryEntry,
+                                    onClearHistory = { DownloadHistoryStore.clear(applicationContext) }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Overlay for Sources sub-page
+                AnimatedVisibility(
+                    visible = showSourcesScreen,
+                    enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                    exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+                ) {
+                    SourcesSettingsScreen(
+                        settings = helperSettings,
+                        onSettingsChange = ::updateHelperSettings,
+                        onBack = { showSourcesScreen = false }
+                    )
                 }
                 val prompt = updatePrompt
                 if (prompt != null) {
