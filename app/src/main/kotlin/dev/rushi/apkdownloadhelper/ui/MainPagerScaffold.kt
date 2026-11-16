@@ -1,88 +1,67 @@
 ﻿package dev.rushi.apkdownloadhelper.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.HazeState
 
 @Composable
 internal fun MainPagerScaffold(
     pagerState: PagerState,
-    navigationCovered: () -> Boolean,
+    modifier: Modifier = Modifier,
+    navigationCovered: () -> Boolean = { false },
     swipeEnabled: Boolean = true,
+    settingsIcon: ImageVector = MainPage.SETTINGS.icon,
+    settingsDescription: String? = null,
     overlay: @Composable BoxScope.() -> Unit = {},
-    pageContent: @Composable (page: MainPage, bottomBarHeight: Dp) -> Unit
+    content: @Composable (page: MainPage, bottomBarHeight: Dp) -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
-    val density = LocalDensity.current
-    var measuredBarHeight by remember { mutableStateOf(80.dp) }
-    val isCovered = navigationCovered()
+    val covered = navigationCovered()
+    var barHeight by remember { mutableStateOf(0.dp) }
+    val barHaze = remember { HazeState() }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background,
-        bottomBar = {
-            AnimatedVisibility(
-                visible = !isCovered,
-                enter = slideInVertically { it },
-                exit = slideOutVertically { it }
-            ) {
-                NavigationBar(
-                    modifier = Modifier
-                        .navigationBarsPadding()
-                        .onSizeChanged { size ->
-                            measuredBarHeight = with(density) { size.height.toDp() }
-                        },
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    tonalElevation = 3.dp
-                ) {
-                    MainPage.entries.forEach { page ->
-                        val selected = pagerState.currentPage == page.ordinal
-                        NavigationBarItem(
-                            selected = selected,
-                            onClick = { scope.launch { pagerState.turnTo(page) } },
-                            icon = { Icon(page.icon, contentDescription = page.label) },
-                            label = { Text(page.label) },
-                            alwaysShowLabel = true
-                        )
-                    }
-                }
-            }
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        // Mark the pager as the haze source so scrolling content blurs under the pill.
+        HorizontalPager(
+            state = pagerState,
+            userScrollEnabled = swipeEnabled,
+            modifier = Modifier
+                .fillMaxSize()
+                .hazeSource(state = barHaze),
+        ) { pageIndex ->
+            content(MainPage.entries[pageIndex], barHeight)
         }
-    ) { _ ->
-        Box(modifier = Modifier.fillMaxSize()) {
-            val effectiveBottomBar = if (isCovered) 0.dp else measuredBarHeight
-            HorizontalPager(
-                state = pagerState,
-                userScrollEnabled = swipeEnabled,
-                modifier = Modifier.fillMaxSize()
-            ) { index ->
-                pageContent(MainPage.entries[index], effectiveBottomBar)
-            }
-            overlay()
-        }
+
+        // Pass barHaze into MorpheNavigationBar so glassFill blurs the pager behind it.
+        MorpheNavigationBar(
+            pagerState = pagerState,
+            covered = covered,
+            hazeState = barHaze,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            settingsIcon = settingsIcon,
+            settingsDescription = settingsDescription,
+            onHeightChanged = { barHeight = it },
+        )
+
+        overlay()
     }
 }
