@@ -21,7 +21,7 @@ internal enum class SettingsCategory(
 ) {
     SOURCES("Sources", "Enable, disable and reorder providers", Icons.Outlined.Dns),
     APPEARANCE("Appearance", "Theme, colors, and app icon", Icons.Outlined.Palette),
-    DOWNLOADS("Downloads", "Save location, storage & Fast Mode", Icons.Outlined.SdStorage),
+    DOWNLOADS("Downloads & Storage", "Save location, storage & Fast Mode", Icons.Outlined.SdStorage),
     SECURITY_NETWORK("Security & Network", "Network policy, DNS & VirusTotal", Icons.Outlined.Security),
     SYSTEM_LOGS("System & Logs", "Updates, history & diagnostics", Icons.AutoMirrored.Outlined.ViewList),
     ABOUT("About", "Version, licenses & GitHub", Icons.Outlined.Info)

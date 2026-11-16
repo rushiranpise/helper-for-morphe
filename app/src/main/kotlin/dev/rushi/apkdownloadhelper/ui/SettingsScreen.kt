@@ -142,7 +142,7 @@ internal fun AppearanceTabContent(
 
         // ACCENT COLOR SECTION (Restored grid + reset button)
         if (settings.themeStyle == ThemeStyle.MORPHE) {
-            SettingsSection(title = "Accent Colour", icon = Icons.Outlined.Colorize) {
+            SettingsSection(title = "Accent Color", icon = Icons.Outlined.Colorize) {
                 SettingsGroup {
                     AccentGridSection {
                         AccentSwatchGrid(
