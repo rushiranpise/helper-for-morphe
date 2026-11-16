@@ -171,6 +171,10 @@ import dev.rushi.apkdownloadhelper.ui.searchDomain
 import dev.rushi.apkdownloadhelper.ui.toAccentColorOrNull
 import dev.rushi.apkdownloadhelper.ui.withCustomAccent
 import dev.rushi.apkdownloadhelper.ui.withPureBlack
+import dev.rushi.apkdownloadhelper.ui.MorphePinnedHeaderPage
+import dev.rushi.apkdownloadhelper.ui.MorpheHeaderBar
+import dev.rushi.apkdownloadhelper.ui.MorpheSubpageScaffold
+import dev.rushi.apkdownloadhelper.ui.SettingsItem
 import dev.rushi.apkdownloadhelper.updater.UpdateInfo
 import dev.rushi.apkdownloadhelper.updater.UpdateManager
 import kotlinx.coroutines.CompletableDeferred
@@ -188,6 +192,12 @@ import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.ui.unit.dp
 
 
 internal const val AURORA_AUTH_URL = "https://auroraoss.com/api/auth"
@@ -466,6 +476,13 @@ class MainActivity : ComponentActivity() {
             var isSettingsSubpageOpen by remember { mutableStateOf(false) }
             var activeSettingsCategory by rememberSaveable { mutableStateOf<SettingsCategory?>(null) }
             var showSourcesScreen by rememberSaveable { mutableStateOf(false) }
+
+            // --- FIX: Holds the category on screen during the exit animation ---
+            var lastActiveCategory by remember { mutableStateOf<SettingsCategory?>(null) }
+            if (activeSettingsCategory != null) {
+                lastActiveCategory = activeSettingsCategory
+            }
+
             val focusManager = LocalFocusManager.current
             LaunchedEffect(showUpdates) {
                 if (showUpdates) focusManager.clearFocus(force = true)
@@ -476,239 +493,228 @@ class MainActivity : ComponentActivity() {
                 pureBlackTheme = helperSettings.pureBlackTheme,
                 accentColorHex = helperSettings.customAccentColor
             ) {
-                // Source reachability is checked on demand from Settings, never at
-                // launch: a ping to every source's home page is another request in
-                // each site's rate-limit pool, spent before the user has asked for
-                // anything, and it competes with the download that prompted the app to
-                // open. The Settings card keeps a Re-check button for when it is wanted.
                 Box(modifier = Modifier.fillMaxSize()) {
-                val captcha = captchaBrowser
-                if (captcha != null) {
-                    CaptchaBrowserScreen(
-                        candidate = captcha,
-                        request = request,
-                        requiredAppName = request?.appName,
-                        requiredVersion = request?.requestedVersionName,
-                        onClose = ::closeCaptchaBrowser,
-                        onDownloadCaptured = ::onBrowserDownloadCaptured,
-                        onBuildMismatch = ::onBrowserBuildMismatch,
-                        onChallengeTimeout = ::onBrowserChallengeTimeout
-                    )
-                } else {
-                    // Updates is pushed over this screen instead of replacing it, so
-                    // tab order and screen readers must not reach the covered Settings
-                    // UI. Clearing semantics removes the whole subtree while leaving it
-                    // composed, which keeps its tab, scroll position and dialogs intact.
-                    val backgroundModifier = if (showUpdates) {
-                        Modifier
-                            .focusProperties { canFocus = false }
-                            .clearAndSetSemantics {}
+                    val captcha = captchaBrowser
+                    if (captcha != null) {
+                        CaptchaBrowserScreen(
+                            candidate = captcha,
+                            request = request,
+                            requiredAppName = request?.appName,
+                            requiredVersion = request?.requestedVersionName,
+                            onClose = ::closeCaptchaBrowser,
+                            onDownloadCaptured = ::onBrowserDownloadCaptured,
+                            onBuildMismatch = ::onBrowserBuildMismatch,
+                            onChallengeTimeout = ::onBrowserChallengeTimeout
+                        )
                     } else {
-                        Modifier
+                        val backgroundModifier = if (showUpdates || activeSettingsCategory != null || showSourcesScreen) {
+                            Modifier
+                                .focusProperties { canFocus = false }
+                                .clearAndSetSemantics {}
+                        } else {
+                            Modifier
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .then(backgroundModifier)
+                        ) {
+                            HomePagerScreen(
+                                findAppsContent = { bottomBarHeight ->
+                                    AppBrowserScreen(
+                                        onBack = null,
+                                        modifier = Modifier.padding(bottom = bottomBarHeight)
+                                    )
+                                },
+                                homeContent = { bottomBarHeight ->
+                                    HelperScreen(
+                                        request = request,
+                                        state = uiState,
+                                        settings = helperSettings,
+                                        virusTotalApiKey = if (helperSettings.virusTotalEnabled) {
+                                            helperSettings.virusTotalApiKey
+                                        } else {
+                                            ""
+                                        },
+                                        logs = AppLog.entries,
+                                        installedPackageRefreshToken = installedPackageRefreshToken,
+                                        selectedPagerPage = selectedPagerPage,
+                                        onPagerPageChanged = { selectedPagerPage = it },
+                                        onSettingsChange = ::updateHelperSettings,
+                                        onOpenUpdates = { showUpdates = true },
+                                        onRefresh = ::loadCandidates,
+                                        canRetryFailedSources = failedAttempts.isNotEmpty(),
+                                        onRetryAll = ::retryAllSources,
+                                        onRetryFailedSources = ::retryFailedSources,
+                                        onCopyFailureDetails = ::copyFailureDetails,
+                                        onResolve = ::resolveCandidates,
+                                        onDownload = ::downloadAndReturn,
+                                        onPickDownloadedFile = ::returnPickedFile,
+                                        onUseInstalledApp = ::returnInstalledApp,
+                                        onVersionHistory = ::loadVersionHistory,
+                                        onDownloadVersion = ::downloadVersion,
+                                        onOpenHistoryEntry = ::openHistoryEntry,
+                                        onShareHistoryEntry = ::shareHistoryEntry,
+                                        onClearHistory = { DownloadHistoryStore.clear(applicationContext) },
+                                        onClearLogs = { AppLog.clear() },
+                                        onCancel = {
+                                            appendLog("Query canceled by user.", LogLevel.Warning)
+                                            setResult(Activity.RESULT_CANCELED)
+                                            finish()
+                                        },
+                                        onCancelDownload = ::cancelDownload,
+                                        onPauseDownload = ::pauseDownload,
+                                        onResumeDownload = ::resumeDownload,
+                                        onSwitchDownloadSource = ::switchDownloadSource,
+                                        onSkipScanWait = { VirusTotalScanner.rateLimiter.requestSkip() },
+                                        onCancelFastMode = ::cancelFastMode,
+                                        onUseFastModeMismatch = { fastModeChoose(FastModeChoice.USE) },
+                                        onSkipFastModeMismatch = { fastModeChoose(FastModeChoice.NEXT) },
+                                        onChooseVersion = ::fastModeChooseVersion,
+                                        onOpenMorphe = ::openMorpheManager,
+                                        onSolveCaptcha = ::openCaptchaBrowser,
+                                        onFormatToggle = ::toggleRequestedFileKind,
+                                        onProceedAfterScan = ::proceedAfterScan,
+                                        onCancelAfterScan = ::cancelAfterScan,
+                                        onSkipScan = ::skipScanAndHandoff
+                                    )
+                                },
+                                settingsContent = { bottomBarHeight ->
+                                    SettingsPage(
+                                        versionName = BuildConfig.VERSION_NAME,
+                                        onOpenCategory = { activeSettingsCategory = it },
+                                        onOpenUpdates = { showUpdates = true }
+                                    )
+                                },
+                                navigationCovered = {
+                                    showUpdates ||
+                                            activeSettingsCategory != null ||
+                                            showSourcesScreen ||
+                                            uiState is UiState.Downloading ||
+                                            uiState is UiState.FastMode ||
+                                            uiState is UiState.ScanAsk ||
+                                            uiState is UiState.ScanResult ||
+                                            (uiState is UiState.Ready && request != null)
+                                }
+                            )
+                        }
                     }
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .then(backgroundModifier)
-                    ) {
-                                        var bottomBarCovered by remember { mutableStateOf(false) }
 
-                    HomePagerScreen(
-                        findAppsContent = { bottomBarHeight ->
-                            AppBrowserScreen(
-                                onBack = null,
-                                modifier = Modifier.padding(bottom = bottomBarHeight)
-                            )
-                        },
-                        homeContent = { bottomBarHeight ->
-                            HelperScreen(
-                                request = request,
-                                state = uiState,
-                                settings = helperSettings,
-                                virusTotalApiKey = if (helperSettings.virusTotalEnabled) {
-                                    helperSettings.virusTotalApiKey
-                                } else {
-                                    ""
-                                },
-                                logs = AppLog.entries,
-                                installedPackageRefreshToken = installedPackageRefreshToken,
-                                selectedPagerPage = selectedPagerPage,
-                                onPagerPageChanged = { selectedPagerPage = it },
-                                onSettingsChange = ::updateHelperSettings,
-                                onOpenUpdates = { showUpdates = true },
-                                onRefresh = ::loadCandidates,
-                                canRetryFailedSources = failedAttempts.isNotEmpty(),
-                                onRetryAll = ::retryAllSources,
-                                onRetryFailedSources = ::retryFailedSources,
-                                onCopyFailureDetails = ::copyFailureDetails,
-                                onResolve = ::resolveCandidates,
-                                onDownload = ::downloadAndReturn,
-                                onPickDownloadedFile = ::returnPickedFile,
-                                onUseInstalledApp = ::returnInstalledApp,
-                                onVersionHistory = ::loadVersionHistory,
-                                onDownloadVersion = ::downloadVersion,
-                                onOpenHistoryEntry = ::openHistoryEntry,
-                                onShareHistoryEntry = ::shareHistoryEntry,
-                                onClearHistory = { DownloadHistoryStore.clear(applicationContext) },
-                                onClearLogs = { AppLog.clear() },
-                                onCancel = {
-                                    appendLog("Query canceled by user.", LogLevel.Warning)
-                                    setResult(Activity.RESULT_CANCELED)
-                                    finish()
-                                },
-                                onCancelDownload = ::cancelDownload,
-                                onPauseDownload = ::pauseDownload,
-                                onResumeDownload = ::resumeDownload,
-                                onSwitchDownloadSource = ::switchDownloadSource,
-                                onSkipScanWait = { VirusTotalScanner.rateLimiter.requestSkip() },
-                                onCancelFastMode = ::cancelFastMode,
-                                onUseFastModeMismatch = { fastModeChoose(FastModeChoice.USE) },
-                                onSkipFastModeMismatch = { fastModeChoose(FastModeChoice.NEXT) },
-                                onChooseVersion = ::fastModeChooseVersion,
-                                onOpenMorphe = ::openMorpheManager,
-                                onSolveCaptcha = ::openCaptchaBrowser,
-                                onFormatToggle = ::toggleRequestedFileKind,
-                                onProceedAfterScan = ::proceedAfterScan,
-                                onCancelAfterScan = ::cancelAfterScan,
-                                onSkipScan = ::skipScanAndHandoff
-                            )
-                        },
-                        settingsContent = { bottomBarHeight ->
-                            SettingsPage(
-                                versionName = BuildConfig.VERSION_NAME,
-                                onOpenCategory = { activeSettingsCategory = it },
-                                onOpenUpdates = { showUpdates = true }
-                            )
-                        },
-                        navigationCovered = {
-                            showUpdates ||
-                            activeSettingsCategory != null ||
-                            showSourcesScreen ||
-                            uiState is UiState.Downloading ||
-                            uiState is UiState.FastMode ||
-                            uiState is UiState.ScanAsk ||
-                            uiState is UiState.ScanResult ||
-                            (uiState is UiState.Ready && request != null)
-                        }
-                    )
-                    }
-                }
-                val offer = reuseOffer
-                if (offer != null) {
-                    ReuseOfferDialog(
-                        options = offer,
-                        onUseExisting = ::useReuseOffer,
-                        // "Download new" (or dismissing) dismisses the offer and,
-                        // when Fast Mode is on, starts it only now  never while
-                        // the dialog is up, so it cannot download behind it.
-                        onDownloadNew = {
-                            reuseOffer = null
-                            request?.let(::startFastModeIfEnabled)
-                        }
-                    )
-                }
-                // Keep the screen beneath Updates composed so Back returns to
-                // the exact Settings tab, scroll position and dialogs the user
-                // left, instead of rebuilding the main screen.
-                AnimatedVisibility(
-                    visible = showUpdates,
-                    enter = MorpheAnimations.pushEnter,
-                    exit = MorpheAnimations.pushExit
-                ) {
-                    MorphePushedScreen {
-                        UpdateScreen(
-                            settings = helperSettings,
-                            onSettingsChange = ::updateHelperSettings,
-                            refreshToken = updateRefreshToken,
-                            onBack = { showUpdates = false }
+                    val offer = reuseOffer
+                    if (offer != null) {
+                        ReuseOfferDialog(
+                            options = offer,
+                            onUseExisting = ::useReuseOffer,
+                            onDownloadNew = {
+                                reuseOffer = null
+                                request?.let(::startFastModeIfEnabled)
+                            }
                         )
                     }
-                }
-                }
-                // Overlay for Settings Categories
-                AnimatedVisibility(
-                    visible = activeSettingsCategory != null,
-                    enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                    exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
-                ) {
-                    val cat = activeSettingsCategory
-                    if (cat != null) {
-                        SettingsPageDetail(
-                            title = cat.title,
-                            onBack = { activeSettingsCategory = null }
-                        ) {
-                            when (cat) {
-                                SettingsCategory.DOWNLOADS -> SystemTabContent(
-                                    settings = helperSettings,
-                                    onSettingsChange = ::updateHelperSettings,
-                                    onOpenUpdates = { showUpdates = true },
-                                    onOpenSources = { showSourcesScreen = true }
-                                )
-                                SettingsCategory.APPEARANCE -> AppearanceTabContent(
-                                    settings = helperSettings,
-                                    onSettingsChange = ::updateHelperSettings
-                                )
-                                SettingsCategory.ADVANCED -> AdvancedTabContent(
-                                    settings = helperSettings,
-                                    onSettingsChange = ::updateHelperSettings
-                                )
-                                SettingsCategory.LOGS -> LogsTabContent(
-                                    settings = helperSettings,
-                                    onSettingsChange = ::updateHelperSettings,
-                                    logs = AppLog.entries,
-                                    onClearLogs = { AppLog.clear() },
-                                    historyEntries = DownloadHistoryStore.entries(applicationContext),
-                                    onOpenHistoryEntry = ::openHistoryEntry,
-                                    onShareHistoryEntry = ::shareHistoryEntry,
-                                    onClearHistory = { DownloadHistoryStore.clear(applicationContext) }
-                                )
+
+                    // --- OVERLAY FOR SETTINGS CATEGORIES ---
+                    AnimatedVisibility(
+                        visible = activeSettingsCategory != null,
+                        enter = MorpheAnimations.pushEnter,
+                        exit = MorpheAnimations.pushExit    // This will now play correctly
+                    ) {
+                        // Use lastActiveCategory so the UI doesn't vanish before sliding down
+                        val cat = lastActiveCategory
+                        if (cat != null) {
+                            SettingsPageDetail(
+                                title = cat.title,
+                                onBack = { activeSettingsCategory = null }
+                            ) {
+                                when (cat) {
+                                    SettingsCategory.DOWNLOADS -> SystemTabContent(
+                                        settings = helperSettings,
+                                        onSettingsChange = ::updateHelperSettings,
+                                        onOpenUpdates = { showUpdates = true },
+                                        onOpenSources = { showSourcesScreen = true }
+                                    )
+                                    SettingsCategory.APPEARANCE -> AppearanceTabContent(
+                                        settings = helperSettings,
+                                        onSettingsChange = ::updateHelperSettings
+                                    )
+                                    SettingsCategory.ADVANCED -> AdvancedTabContent(
+                                        settings = helperSettings,
+                                        onSettingsChange = ::updateHelperSettings
+                                    )
+                                    SettingsCategory.LOGS -> LogsTabContent(
+                                        settings = helperSettings,
+                                        onSettingsChange = ::updateHelperSettings,
+                                        logs = AppLog.entries,
+                                        onClearLogs = { AppLog.clear() },
+                                        historyEntries = DownloadHistoryStore.entries(applicationContext),
+                                        onOpenHistoryEntry = ::openHistoryEntry,
+                                        onShareHistoryEntry = ::shareHistoryEntry,
+                                        onClearHistory = { DownloadHistoryStore.clear(applicationContext) }
+                                    )
+                                }
                             }
                         }
                     }
-                }
 
-                // Overlay for Sources sub-page
-                AnimatedVisibility(
-                    visible = showSourcesScreen,
-                    enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                    exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
-                ) {
-                    SourcesSettingsScreen(
-                        settings = helperSettings,
-                        onSettingsChange = ::updateHelperSettings,
-                        onBack = { showSourcesScreen = false }
-                    )
-                }
-                val prompt = updatePrompt
-                if (prompt != null) {
-                    UpdatePromptDialog(
-                        info = prompt,
-                        currentVersion = BuildConfig.VERSION_NAME,
-                        onView = {
-                            updatePrompt = null
-                            showUpdates = true
-                        },
-                        onLater = {
-                            UpdateManager.snooze(applicationContext)
-                            updatePrompt = null
-                        },
-                        onSkip = {
-                            UpdateManager.skipVersion(applicationContext, prompt.version)
-                            updatePrompt = null
-                        },
-                        onDismiss = {
-                            UpdateManager.snooze(applicationContext)
-                            updatePrompt = null
+                    // --- OVERLAY FOR SOURCES SUB-PAGE ---
+                    AnimatedVisibility(
+                        visible = showSourcesScreen,
+                        enter = MorpheAnimations.pushEnter,
+                        exit = MorpheAnimations.pushExit
+                    ) {
+                        SourcesSettingsScreen(
+                            settings = helperSettings,
+                            onSettingsChange = ::updateHelperSettings,
+                            onBack = { showSourcesScreen = false }
+                        )
+                    }
+
+                    // --- OVERLAY FOR UPDATES ---
+                    AnimatedVisibility(
+                        visible = showUpdates,
+                        enter = MorpheAnimations.pushEnter,
+                        exit = MorpheAnimations.pushExit
+                    ) {
+                        MorphePushedScreen {
+                            UpdateScreen(
+                                settings = helperSettings,
+                                onSettingsChange = ::updateHelperSettings,
+                                refreshToken = updateRefreshToken,
+                                onBack = { showUpdates = false }
+                            )
                         }
-                    )
-                }
-                val switchPrompt = switchCandidatePrompt
-                if (switchPrompt != null) {
-                    SwitchCandidateDialog(
-                        prompt = switchPrompt,
-                        onChoose = ::chooseSwitchCandidate,
-                        onDismiss = { switchCandidatePrompt = null }
-                    )
+                    }
+
+                    val prompt = updatePrompt
+                    if (prompt != null) {
+                        UpdatePromptDialog(
+                            info = prompt,
+                            currentVersion = BuildConfig.VERSION_NAME,
+                            onView = {
+                                updatePrompt = null
+                                showUpdates = true
+                            },
+                            onLater = {
+                                UpdateManager.snooze(applicationContext)
+                                updatePrompt = null
+                            },
+                            onSkip = {
+                                UpdateManager.skipVersion(applicationContext, prompt.version)
+                                updatePrompt = null
+                            },
+                            onDismiss = {
+                                UpdateManager.snooze(applicationContext)
+                                updatePrompt = null
+                            }
+                        )
+                    }
+                    val switchPrompt = switchCandidatePrompt
+                    if (switchPrompt != null) {
+                        SwitchCandidateDialog(
+                            prompt = switchPrompt,
+                            onChoose = ::chooseSwitchCandidate,
+                            onDismiss = { switchCandidatePrompt = null }
+                        )
+                    }
                 }
             }
         }

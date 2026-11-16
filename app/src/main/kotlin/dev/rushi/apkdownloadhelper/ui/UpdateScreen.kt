@@ -6,20 +6,12 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.HelpOutline
@@ -34,7 +26,6 @@ import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -45,7 +36,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -61,7 +51,6 @@ import dev.rushi.apkdownloadhelper.updater.ShizukuHelper
 import dev.rushi.apkdownloadhelper.updater.UpdateInfo
 import dev.rushi.apkdownloadhelper.updater.UpdateManager
 import kotlinx.coroutines.launch
-
 
 @Composable
 internal fun UpdateScreen(
@@ -164,260 +153,204 @@ internal fun UpdateScreen(
     }
 
     BackHandler(onBack = onBack)
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
+
+    // Use MorpheSubpageScaffold to get the exact sticky header and bottom padding
+    MorpheSubpageScaffold(
+        title = "Updates",
+        onBack = onBack
     ) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding()
-                .padding(
-                    horizontal = MorpheDefaults.ContentPadding,
-                    vertical = MorpheDefaults.ContentPadding
-                ),
-            verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
-        ) {
-            item {
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
+        SettingsSection(title = "Release", icon = Icons.Outlined.Refresh) {
+            SettingsGroup {
+                SettingsItem(
+                    icon = Icons.Outlined.PhoneAndroid,
+                    title = "Current version",
+                    onClick = { },
+                    trailingContent = {
                         Text(
-                            text = "Updates",
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Version ${BuildConfig.VERSION_NAME}",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodySmall
+                            text = "v${BuildConfig.VERSION_NAME}",
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodyMedium
                         )
                     }
-                    HelperHeaderIconButton(
-                        icon = Icons.AutoMirrored.Outlined.ArrowBack,
-                        contentDescription = "Back",
-                        onClick = onBack,
-                        modifier = Modifier.align(Alignment.CenterStart)
+                )
+                SettingsItem(
+                    icon = Icons.Outlined.Refresh,
+                    title = if (checking) "Checking for updates…" else "Check for updates",
+                    subtitle = checkMessage ?: "Look for a newer release on GitHub.",
+                    onClick = { checkNow() },
+                    trailingContent = {
+                        Text(
+                            text = if (checking) "" else "Check",
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                )
+                latest?.let { info ->
+                    SettingsItem(
+                        icon = Icons.Outlined.Verified,
+                        title = "Latest version",
+                        onClick = { },
+                        subtitle = if (updateAvailable) {
+                            val channel = if (UpdateInfo.isPrerelease(info.version)) "Beta" else "Stable"
+                            "$channel update available"
+                        } else {
+                            "You are up to date"
+                        },
+                        trailingContent = {
+                            Text(
+                                text = "v${info.version}",
+                                color = MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
                     )
                 }
             }
+        }
 
-            item {
-                SettingsSection(title = "Release", icon = Icons.Outlined.Refresh) {
-                    SettingsGroup {
-                        SettingsItem(
-                            icon = Icons.Outlined.PhoneAndroid,
-                            title = "Current version",
-                            onClick = { },
-                            trailingContent = {
-                                Text(
-                                    text = "v${BuildConfig.VERSION_NAME}",
-                                    color = MaterialTheme.colorScheme.primary,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
+        latest?.let { info ->
+            SettingsSection(title = "Changelog", icon = Icons.Outlined.History) {
+                SettingsGroup {
+                    SelectionContainer {
+                        Text(
+                            text = cleanReleaseNotes(info.notes).ifBlank { "No release notes for this version." },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(MorpheDefaults.ContentPadding),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        SettingsItem(
-                            icon = Icons.Outlined.Refresh,
-                            title = if (checking) "Checking for updates…" else "Check for updates",
-                            subtitle = checkMessage ?: "Look for a newer release on GitHub.",
-                            onClick = { checkNow() },
-                            trailingContent = {
-                                Text(
-                                    text = if (checking) "" else "Check",
-                                    color = MaterialTheme.colorScheme.primary,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                        )
-                        latest?.let { info ->
-                            SettingsItem(
-                                icon = Icons.Outlined.Verified,
-                                title = "Latest version",
-                                onClick = { },
-                                subtitle = if (updateAvailable) {
-                                    val channel = if (UpdateInfo.isPrerelease(info.version)) {
-                                        "Beta"
-                                    } else {
-                                        "Stable"
-                                    }
-                                    "$channel update available"
-                                } else {
-                                    "You are up to date"
-                                },
-                                trailingContent = {
-                                    Text(
-                                        text = "v${info.version}",
-                                        color = MaterialTheme.colorScheme.primary,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                }
-                            )
-                        }
                     }
-                }
-            }
-
-            latest?.let { info ->
-                item {
-                    SettingsSection(title = "Changelog", icon = Icons.Outlined.History) {
-                        SettingsGroup {
-                            SelectionContainer {
-                                Text(
-                                    text = cleanReleaseNotes(info.notes)
-                                        .ifBlank { "No release notes for this version." },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(MorpheDefaults.ContentPadding),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            if (info.releaseUrl.isNotBlank()) {
-                                SettingsItem(
-                                    icon = Icons.Outlined.OpenInNew,
-                                    title = "Open release page",
-                                    onClick = { openExternal(context, info.releaseUrl) }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (updateAvailable && latest != null) {
-                item {
-                    val info = latest!!
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
-                    ) {
-                        HelperButton(
-                            text = if (installing) "Working…" else "Download and install",
-                            onClick = { install(false) },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        if (shizukuStatus == ShizukuHelper.READY) {
-                            HelperOutlinedButton(
-                                text = "Install via Shizuku",
-                                onClick = { install(true) },
-                                icon = Icons.Outlined.Shield,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                        if (info.assetUrl.isBlank()) {
-                            Text(
-                                text = "This release has no APK attached.",
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        installMessage?.let { message ->
-                            Text(
-                                text = message,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-                }
-            }
-
-            item {
-                SettingsSection(title = "Update settings", icon = Icons.Outlined.Settings) {
-                    SettingsGroup {
-                        SettingsSwitchItem(
-                            icon = Icons.Outlined.Refresh,
-                            title = "Check for updates",
-                            subtitle = "Look for a newer release when the helper starts.",
-                            checked = settings.checkUpdates,
-                            onToggle = {
-                                onSettingsChange(settings.copy(checkUpdates = !settings.checkUpdates))
-                            }
-                        )
-                        SettingsSwitchItem(
-                            icon = Icons.Outlined.HelpOutline,
-                            title = "In-app update popup",
-                            subtitle = "Show a dialog on launch when a newer release is available.",
-                            checked = settings.updatePopup,
-                            onToggle = {
-                                onSettingsChange(settings.copy(updatePopup = !settings.updatePopup))
-                            }
-                        )
+                    if (info.releaseUrl.isNotBlank()) {
                         SettingsItem(
-                            icon = Icons.Outlined.TrendingUp,
-                            title = "Update channel",
-                            subtitle = settings.updateChannel.description,
-                            onClick = { channelDialog = true },
-                            trailingContent = {
-                                Text(
-                                    text = settings.updateChannel.title,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                        )
-                        SettingsItem(
-                            icon = Icons.Outlined.Download,
-                            title = "Update mode",
-                            subtitle = settings.updateMode.description,
-                            onClick = { modeDialog = true },
-                            trailingContent = {
-                                Text(
-                                    text = settings.updateMode.title,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                        )
-                        SettingsItem(
-                            icon = Icons.Outlined.Shield,
-                            title = "Shizuku",
-                            subtitle = "Silent installs need Shizuku running and this app approved.",
-                            onClick = { handleShizukuAction(context, shizukuStatus) },
-                            trailingContent = {
-                                Text(
-                                    text = ShizukuHelper.statusLabel(context, shizukuStatus),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                        )
-                        SettingsItem(
-                            icon = Icons.Outlined.PhoneAndroid,
-                            title = "Shizuku app package",
-                            subtitle = "Only needed for a Shizuku fork with a different package name.",
-                            onClick = { packageDialog = true },
-                            trailingContent = {
-                                Text(
-                                    text = settings.shizukuPackage.ifBlank { "Default" },
-                                    color = MaterialTheme.colorScheme.primary,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                        )
-                        SettingsItem(
-                            icon = Icons.Outlined.Settings,
-                            title = "Battery optimization",
-                            subtitle = "Keep update checks reliable when Android restricts background work.",
-                            onClick = { UpdateManager.requestBatteryExemption(context) },
-                            trailingContent = {
-                                Text(
-                                    text = if (batteryUnrestricted) "Unrestricted" else "Optimized",
-                                    color = MaterialTheme.colorScheme.primary,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
+                            icon = Icons.Outlined.OpenInNew,
+                            title = "Open release page",
+                            onClick = { openExternal(context, info.releaseUrl) }
                         )
                     }
                 }
             }
+        }
 
-            item { Spacer(modifier = Modifier.height(16.dp)) }
+        if (updateAvailable && latest != null) {
+            val info = latest!!
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
+            ) {
+                HelperButton(
+                    text = if (installing) "Working…" else "Download and install",
+                    onClick = { install(false) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (shizukuStatus == ShizukuHelper.READY) {
+                    HelperOutlinedButton(
+                        text = "Install via Shizuku",
+                        onClick = { install(true) },
+                        icon = Icons.Outlined.Shield,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (info.assetUrl.isBlank()) {
+                    Text(
+                        text = "This release has no APK attached.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                installMessage?.let { message ->
+                    Text(
+                        text = message,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
+
+        SettingsSection(title = "Update settings", icon = Icons.Outlined.Settings) {
+            SettingsGroup {
+                SettingsSwitchItem(
+                    icon = Icons.Outlined.Refresh,
+                    title = "Check for updates",
+                    subtitle = "Look for a newer release when the helper starts.",
+                    checked = settings.checkUpdates,
+                    onToggle = { onSettingsChange(settings.copy(checkUpdates = !settings.checkUpdates)) }
+                )
+                SettingsSwitchItem(
+                    icon = Icons.Outlined.HelpOutline,
+                    title = "In-app update popup",
+                    subtitle = "Show a dialog on launch when a newer release is available.",
+                    checked = settings.updatePopup,
+                    onToggle = { onSettingsChange(settings.copy(updatePopup = !settings.updatePopup)) }
+                )
+                SettingsItem(
+                    icon = Icons.Outlined.TrendingUp,
+                    title = "Update channel",
+                    subtitle = settings.updateChannel.description,
+                    onClick = { channelDialog = true },
+                    trailingContent = {
+                        Text(
+                            text = settings.updateChannel.title,
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                )
+                SettingsItem(
+                    icon = Icons.Outlined.Download,
+                    title = "Update mode",
+                    subtitle = settings.updateMode.description,
+                    onClick = { modeDialog = true },
+                    trailingContent = {
+                        Text(
+                            text = settings.updateMode.title,
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                )
+                SettingsItem(
+                    icon = Icons.Outlined.Shield,
+                    title = "Shizuku",
+                    subtitle = "Silent installs need Shizuku running and this app approved.",
+                    onClick = { handleShizukuAction(context, shizukuStatus) },
+                    trailingContent = {
+                        Text(
+                            text = ShizukuHelper.statusLabel(context, shizukuStatus),
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                )
+                SettingsItem(
+                    icon = Icons.Outlined.PhoneAndroid,
+                    title = "Shizuku app package",
+                    subtitle = "Only needed for a Shizuku fork with a different package name.",
+                    onClick = { packageDialog = true },
+                    trailingContent = {
+                        Text(
+                            text = settings.shizukuPackage.ifBlank { "Default" },
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                )
+                SettingsItem(
+                    icon = Icons.Outlined.Settings,
+                    title = "Battery optimization",
+                    subtitle = "Keep update checks reliable when Android restricts background work.",
+                    onClick = { UpdateManager.requestBatteryExemption(context) },
+                    trailingContent = {
+                        Text(
+                            text = if (batteryUnrestricted) "Unrestricted" else "Optimized",
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                )
+            }
         }
     }
 
@@ -427,11 +360,7 @@ internal fun UpdateScreen(
             title = "Update channel",
             choices = channels.map { channel ->
                 SettingsChoice(
-                    icon = if (channel == UpdateChannel.BETA) {
-                        Icons.Outlined.TrendingUp
-                    } else {
-                        Icons.Outlined.CheckCircle
-                    },
+                    icon = if (channel == UpdateChannel.BETA) Icons.Outlined.TrendingUp else Icons.Outlined.CheckCircle,
                     title = channel.title,
                     description = channel.description
                 )
