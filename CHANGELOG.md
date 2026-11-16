@@ -6,6 +6,24 @@ matches the tag (see `tools/release-notes.sh`), so a new version needs a section
 before it is tagged. Commit subjects are only used as a fallback when a section is
 missing.
 
+## 5.4.0 - 2026-11-16
+
+Defaults that need less setup, and a clearer Settings screen.
+
+### New
+
+- **APKCube is on by default.** It joins the default source list, so more apps
+  resolve without enabling a source first. Existing installs are migrated once.
+- **AdGuard DNS is on by default.** It blocks ads and trackers on download pages
+  and in the captcha browser, and falls back to the system resolver on failure.
+  Existing installs are migrated once.
+- **Logs is split into sub-tabs.** History, Logging and Request logs each get
+  their own tab, so a long history no longer pushes the request log down the
+  screen.
+- **Settings are rebalanced.** Connection, download connections, AdGuard DNS and
+  Use Morphe's resolver now sit in Advanced alongside VirusTotal. System keeps
+  downloads, sources, Fast Mode and updates.
+
 ## 5.3.0 - 2026-11-15
 
 Faster APKMirror lookups, more download control, and updates from inside the app.
