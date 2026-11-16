@@ -743,58 +743,48 @@ internal fun SourcesSettingsScreen(
         )
     }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .padding(
-                horizontal = MorpheDefaults.ContentPadding,
-                vertical = MorpheDefaults.ContentPadding
-            ),
-        verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
+    // FIXED: Use MorpheSubpageScaffold for the solid background, sticky header, and correct bottom padding
+    MorpheSubpageScaffold(
+        title = "Sources",
+        onBack = onBack
     ) {
-        item {
-            Box(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.align(Alignment.Center),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Text(
-                        text = stringResource(R.string.sources),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        text = "Enable providers and set their priority",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-                HelperHeaderIconButton(
-                    icon = Icons.AutoMirrored.Outlined.ArrowBack,
-                    contentDescription = stringResource(R.string.back),
-                    onClick = onBack,
-                    modifier = Modifier.align(Alignment.CenterStart)
+        SettingsSection(title = stringResource(R.string.default_source), icon = Icons.Outlined.Star) {
+            SettingsGroup {
+                SettingsItem(
+                    icon = Icons.Outlined.Star,
+                    title = stringResource(R.string.default_source),
+                    subtitle = "Used first when a request is resolved",
+                    onClick = { sourceDialog = true },
+                    trailingContent = {
+                        Text(
+                            text = settings.preferredSource?.label ?: "Automatic",
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
                 )
             }
         }
 
-        item {
-            SettingsSection(title = stringResource(R.string.default_source), icon = Icons.Outlined.Star) {
-                SettingsGroup {
-                    SettingsItem(
-                        icon = Icons.Outlined.Star,
-                        title = stringResource(R.string.default_source),
-                        subtitle = "Used first when a request is resolved",
-                        onClick = { sourceDialog = true },
-                        trailingContent = {
-                            Text(
-                                text = settings.preferredSource?.label ?: "Automatic",
-                                color = MaterialTheme.colorScheme.primary,
-                                style = MaterialTheme.typography.bodyMedium
+        SettingsSection(title = "Providers", icon = Icons.Outlined.Dns) {
+            SettingsGroup {
+                orderedSources.forEachIndexed { index, source ->
+                    SettingsSwitchItem(
+                        leadingContent = {
+                            SourceAvatar(source = source, size = MorpheDefaults.IconSize)
+                        },
+                        title = source.label,
+                        checked = source !in settings.disabledSources,
+                        onToggle = {
+                            val enabled = source !in settings.disabledSources
+                            onSettingsChange(
+                                settings.copy(
+                                    disabledSources = if (enabled) {
+                                        settings.disabledSources + source
+                                    } else {
+                                        settings.disabledSources - source
+                                    }
+                                )
                             )
                         }
                     )
@@ -802,94 +792,64 @@ internal fun SourcesSettingsScreen(
             }
         }
 
-        item {
-            SettingsSection(title = "Providers", icon = Icons.Outlined.Dns) {
-                SettingsGroup {
-                    orderedSources.forEachIndexed { index, source ->
-                        SettingsSwitchItem(
-                            leadingContent = {
-                                SourceAvatar(source = source, size = MorpheDefaults.IconSize)
-                            },
-                            title = source.label,
-                            checked = source !in settings.disabledSources,
-                            onToggle = {
-                                val enabled = source !in settings.disabledSources
-                                onSettingsChange(
-                                    settings.copy(
-                                        disabledSources = if (enabled) {
-                                            settings.disabledSources + source
-                                        } else {
-                                            settings.disabledSources - source
-                                        }
+        SettingsSection(title = "Priority", icon = Icons.Outlined.SortByAlpha) {
+            SettingsGroup {
+                orderedSources.forEachIndexed { index, source ->
+                    SettingsItem(
+                        leadingContent = {
+                            SourceAvatar(source = source, size = MorpheDefaults.IconSize)
+                        },
+                        title = source.label,
+                        subtitle = when {
+                            source in settings.disabledSources -> "Disabled"
+                            index == 0 -> "Tried first"
+                            else -> null
+                        },
+                        onClick = { },
+                        trailingContent = {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (index > 0) {
+                                    HelperIconButton(
+                                        icon = Icons.Outlined.ExpandLess,
+                                        contentDescription = "Move ${source.label} up",
+                                        onClick = { moveSourceOrder(source, -1) }
                                     )
-                                )
-                            }
-                        )
-                    }
-                }
-            }
-        }
-
-        item {
-            SettingsSection(title = "Priority", icon = Icons.Outlined.SortByAlpha) {
-                SettingsGroup {
-                    orderedSources.forEachIndexed { index, source ->
-                        SettingsItem(
-                            leadingContent = {
-                                SourceAvatar(source = source, size = MorpheDefaults.IconSize)
-                            },
-                            title = source.label,
-                            subtitle = when {
-                                source in settings.disabledSources -> "Disabled"
-                                index == 0 -> "Tried first"
-                                else -> null
-                            },
-                            onClick = { },
-                            trailingContent = {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    if (index > 0) {
-                                        HelperIconButton(
-                                            icon = Icons.Outlined.ExpandLess,
-                                            contentDescription = "Move ${source.label} up",
-                                            onClick = { moveSourceOrder(source, -1) }
-                                        )
-                                    } else {
-                                        Spacer(Modifier.size(MorpheDefaults.GlassButtonHeight))
-                                    }
-                                    if (index < orderedSources.lastIndex) {
-                                        HelperIconButton(
-                                            icon = Icons.Outlined.ExpandMore,
-                                            contentDescription = "Move ${source.label} down",
-                                            onClick = { moveSourceOrder(source, 1) }
-                                        )
-                                    } else {
-                                        Spacer(Modifier.size(MorpheDefaults.GlassButtonHeight))
-                                    }
+                                } else {
+                                    Spacer(Modifier.size(MorpheDefaults.GlassButtonHeight))
+                                }
+                                if (index < orderedSources.lastIndex) {
+                                    HelperIconButton(
+                                        icon = Icons.Outlined.ExpandMore,
+                                        contentDescription = "Move ${source.label} down",
+                                        onClick = { moveSourceOrder(source, 1) }
+                                    )
+                                } else {
+                                    Spacer(Modifier.size(MorpheDefaults.GlassButtonHeight))
                                 }
                             }
-                        )
-                    }
-                    SettingsItem(
-                        icon = Icons.Outlined.Refresh,
-                        title = "Reset source order",
-                        subtitle = "Restore the default priority.",
-                        onClick = {
-                            onSettingsChange(
-                                latestSettings.copy(sourceOrder = DEFAULT_SOURCE_ORDER)
-                            )
-                        },
-                        trailingContent = {
-                            Text(
-                                text = "Reset",
-                                color = MaterialTheme.colorScheme.primary,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
                         }
                     )
                 }
+                SettingsItem(
+                    icon = Icons.Outlined.Refresh,
+                    title = "Reset source order",
+                    subtitle = "Restore the default priority.",
+                    onClick = {
+                        onSettingsChange(
+                            latestSettings.copy(sourceOrder = DEFAULT_SOURCE_ORDER)
+                        )
+                    },
+                    trailingContent = {
+                        Text(
+                            text = "Reset",
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                )
             }
         }
     }

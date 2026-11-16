@@ -100,4 +100,3 @@ internal fun Footnote(
         Text(text, style = MaterialTheme.typography.bodyMedium, color = tone.accent, modifier = Modifier.weight(1f))
     }
 }
-
