@@ -457,6 +457,7 @@ class MainActivity : ComponentActivity() {
         if (request != null) offerExistingDownloadIfPresent(request!!)
 
         setContent {
+            var isSettingsSubpageOpen by remember { mutableStateOf(false) }
             val focusManager = LocalFocusManager.current
             LaunchedEffect(showUpdates) {
                 if (showUpdates) focusManager.clearFocus(force = true)
@@ -576,45 +577,42 @@ class MainActivity : ComponentActivity() {
                                 SettingsPage(
                                     bottomBarHeight = bottomBarHeight,
                                     versionName = BuildConfig.VERSION_NAME,
+                                    settings = helperSettings,
+                                    onSettingsChange = ::updateHelperSettings,
                                     onOpenUpdates = { showUpdates = true },
+                                    onActiveCategoryChanged = { isSettingsSubpageOpen = it },
                                     categoryContent = { category, innerBar, onBack ->
                                         SettingsPageDetail(
                                             title = category.title,
                                             bottomBarHeight = innerBar,
                                             onBack = onBack
                                         ) {
-                                            LazyColumn(
-                                                modifier = Modifier.fillMaxSize(),
-                                                verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
-                                            ) {
-                                                item {
-                                                    when (category) {
-                                                        SettingsCategory.DOWNLOADS -> SystemTabContent(
-                                                            settings = helperSettings,
-                                                            onSettingsChange = ::updateHelperSettings,
-                                                            onOpenUpdates = { showUpdates = true },
-                                                            onOpenSources = { showSources = true }
-                                                        )
-                                                        SettingsCategory.APPEARANCE -> AppearanceTabContent(
-                                                            settings = helperSettings,
-                                                            onSettingsChange = ::updateHelperSettings
-                                                        )
-                                                        SettingsCategory.ADVANCED -> AdvancedTabContent(
-                                                            settings = helperSettings,
-                                                            onSettingsChange = ::updateHelperSettings
-                                                        )
-                                                        SettingsCategory.LOGS -> LogsTabContent(
-                                                            settings = helperSettings,
-                                                            onSettingsChange = ::updateHelperSettings,
-                                                            logs = AppLog.entries,
-                                                            onClearLogs = { AppLog.clear() },
-                                                            historyEntries = DownloadHistoryStore.entries(applicationContext),
-                                                            onOpenHistoryEntry = ::openHistoryEntry,
-                                                            onShareHistoryEntry = ::shareHistoryEntry,
-                                                            onClearHistory = { DownloadHistoryStore.clear(applicationContext) }
-                                                        )
-                                                    }
-                                                }
+                                            // REMOVED the nested LazyColumn that was here!
+                                            when (category) {
+                                                SettingsCategory.DOWNLOADS -> SystemTabContent(
+                                                    settings = helperSettings,
+                                                    onSettingsChange = ::updateHelperSettings,
+                                                    onOpenUpdates = { showUpdates = true },
+                                                    onOpenSources = { showSources = true }
+                                                )
+                                                SettingsCategory.APPEARANCE -> AppearanceTabContent(
+                                                    settings = helperSettings,
+                                                    onSettingsChange = ::updateHelperSettings
+                                                )
+                                                SettingsCategory.ADVANCED -> AdvancedTabContent(
+                                                    settings = helperSettings,
+                                                    onSettingsChange = ::updateHelperSettings
+                                                )
+                                                SettingsCategory.LOGS -> LogsTabContent(
+                                                    settings = helperSettings,
+                                                    onSettingsChange = ::updateHelperSettings,
+                                                    logs = AppLog.entries,
+                                                    onClearLogs = { AppLog.clear() },
+                                                    historyEntries = DownloadHistoryStore.entries(applicationContext),
+                                                    onOpenHistoryEntry = ::openHistoryEntry,
+                                                    onShareHistoryEntry = ::shareHistoryEntry,
+                                                    onClearHistory = { DownloadHistoryStore.clear(applicationContext) }
+                                                )
                                             }
                                         }
                                     }
@@ -622,11 +620,13 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         navigationCovered = {
+                            showUpdates ||               // Hides the bar when Update screen is open
+                            isSettingsSubpageOpen ||     // Hides the bar when a Settings category is open
                             uiState is UiState.Downloading ||
-                                uiState is UiState.FastMode ||
-                                uiState is UiState.ScanAsk ||
-                                uiState is UiState.ScanResult ||
-                                (uiState is UiState.Ready && request != null)
+                            uiState is UiState.FastMode ||
+                            uiState is UiState.ScanAsk ||
+                            uiState is UiState.ScanResult ||
+                            (uiState is UiState.Ready && request != null)
                         }
                     )
                     }

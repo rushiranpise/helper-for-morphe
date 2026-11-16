@@ -146,7 +146,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
 
-
 @Composable
 internal fun HistoryEntryCard(
     entry: DownloadHistoryEntry,
@@ -208,12 +207,10 @@ internal fun HistoryEntryCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            // A game that refuses to start after patching is usually missing this, so
-            // say it was inside the file and where Android expects it.
             entry.obbContents?.let { obb ->
                 Text(
                     text = "Includes game data (${obb.summary}). Install it to " +
-                        "Android/obb/${entry.packageName} if the app will not start.",
+                            "Android/obb/${entry.packageName} if the app will not start.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 3,
@@ -479,8 +476,8 @@ internal fun SystemTabContent(
         val data = result.data ?: return@rememberLauncherForActivityResult
         val uri = data.data ?: return@rememberLauncherForActivityResult
         val requestedFlags = data.flags and (
-            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-        )
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
         val flags = requestedFlags.takeIf { it != 0 }
             ?: (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         val persisted = runCatching {
@@ -525,8 +522,8 @@ internal fun SystemTabContent(
         Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
             addFlags(
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
-                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                        Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
             )
         }
     }
@@ -544,9 +541,9 @@ internal fun SystemTabContent(
                     }
             }
             location == DownloadLocation.DOWNLOADS &&
-                Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
-                context.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
-                PackageManager.PERMISSION_GRANTED -> {
+                    Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
+                    context.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
+                    PackageManager.PERMISSION_GRANTED -> {
                 pendingLocation = location
                 storagePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
             }
@@ -605,114 +602,89 @@ internal fun SystemTabContent(
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingMedium)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        SettingsGroup(title = stringResource(R.string.downloads_storage), icon = Icons.Outlined.SdStorage) {
-            SettingsRow(
-                icon = settings.downloadLocation.icon(),
-                title = stringResource(R.string.save_downloads),
-                subtitle = settings.downloadLocation.description,
-                value = downloadLocationLabel(context, settings),
-                onClick = { locationDialog = true }
-            )
-            MorpheDivider()
-            SettingsRow(
-                icon = Icons.Outlined.CleaningServices,
-                title = stringResource(R.string.storage_used),
-                subtitle = "Cache ${cacheBytes.formatBytes()}  ·  External ${externalBytes.formatBytes()}  " +
-                    "·  Downloads ${downloadsBytes.formatBytes()}  ·  Custom ${customBytes.formatBytes()}",
-                value = "Clear",
-                onClick = {
-                    scope.launch(Dispatchers.IO) {
-                        context.clearAllDownloads()
-                        val cache = context.temporaryDownloadsSize()
-                        val external = context.externalDownloadsSize()
-                        val downloads = context.downloadsCopySize()
-                        val custom = context.customDownloadsSize()
-                        withContext(Dispatchers.Main) {
-                            cacheBytes = cache
-                            externalBytes = external
-                            downloadsBytes = downloads
-                            customBytes = custom
-                        }
-                    }
-                }
-            )
-            MorpheDivider()
-            SettingsRow(
-                icon = settings.downloadRetention.icon(),
-                title = "Keep downloads",
-                subtitle = "${settings.downloadRetention.description} Cleanup runs when Helper opens.",
-                value = settings.downloadRetention.title,
-                onClick = { retentionDialog = true }
-            )
-            MorpheDivider()
-            SettingsSwitchItem(
-                icon = Icons.Outlined.PhoneAndroid,
-                title = "Prefer density-specific APKs",
-                subtitle = "Use APKMirror's variant for this screen's density instead of nodpi. " +
-                    "Some density rows are split APKs that may not patch or install on their own.",
-                checked = settings.preferDensitySpecificVariants,
-                onToggle = {
-                    onSettingsChange(
-                        settings.copy(
-                            preferDensitySpecificVariants = !settings.preferDensitySpecificVariants
+        SettingsSection(title = "Downloads & storage", icon = Icons.Outlined.SdStorage) {
+            SettingsGroup {
+                SettingsItem(
+                    icon = settings.downloadLocation.icon(),
+                    title = "Save downloads",
+                    subtitle = settings.downloadLocation.description,
+                    onClick = { locationDialog = true },
+                    trailingContent = {
+                        Text(
+                            text = downloadLocationLabel(context, settings),
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodyMedium
                         )
-                    )
-                }
-            )
-        }
+                    }
+                )
 
-        SettingsGroup(title = stringResource(R.string.sources), icon = Icons.Outlined.Dns) {
-            val enabledCount = settings.orderedSources.count { it !in settings.disabledSources }
-            SettingsRow(
-                icon = Icons.Outlined.Dns,
-                title = "Manage sources",
-                subtitle = "$enabledCount of ${settings.orderedSources.size} enabled, default " +
-                    (settings.preferredSource?.label ?: "Automatic"),
-                value = "Manage",
-                onClick = onOpenSources
-            )
-        }
+                SettingsItem(
+                    icon = Icons.Outlined.CleaningServices,
+                    title = "Storage used",
+                    subtitle = "Cache, External, Downloads, Custom",
+                    onClick = { scope.launch(Dispatchers.IO) { context.clearAllDownloads(); val c = context.temporaryDownloadsSize(); val e = context.externalDownloadsSize(); val d = context.downloadsCopySize(); val u = context.customDownloadsSize(); withContext(Dispatchers.Main) { cacheBytes = c; externalBytes = e; downloadsBytes = d; customBytes = u } } },
+                    trailingContent = {
+                        Text(
+                            text = "Clear",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                )
 
-        SettingsGroup(title = stringResource(R.string.fast_mode), icon = Icons.Outlined.Bolt) {
-            SettingsSwitchItem(
-                icon = Icons.Outlined.Bolt,
-                title = stringResource(R.string.fast_mode),
-                subtitle = "Auto-fetch a version across sources and return it to Morphe automatically. " +
-                    "Format differences are allowed.",
-                checked = settings.fastMode,
-                onToggle = {
-                    onSettingsChange(settings.copy(fastMode = !settings.fastMode))
-                }
-            )
-            if (settings.fastMode) {
-                MorpheDivider()
-                SettingsRow(
-                    icon = Icons.Outlined.Tune,
-                    title = stringResource(R.string.which_version_to_fetch),
-                    value = settings.fastModePolicy.title,
-                    onClick = { fastModePolicyDialog = true }
+                SettingsSwitchItem(
+                    icon = Icons.Outlined.PhoneAndroid,
+                    title = "Prefer density-specific APKs",
+                    subtitle = "Use APKMirror's variant for this screen's density instead of nodpi.",
+                    checked = settings.preferDensitySpecificVariants,
+                    onToggle = {
+                        onSettingsChange(settings.copy(preferDensitySpecificVariants = !settings.preferDensitySpecificVariants))
+                    }
                 )
             }
         }
 
-        SettingsGroup(title = "Updates", icon = Icons.Outlined.Refresh) {
-            SettingsRow(
-                icon = Icons.Outlined.Refresh,
-                title = "Updates",
-                subtitle = "Check for a new release, read the changelog, or install through Shizuku.",
-                value = "v${BuildConfig.VERSION_NAME}",
-                onClick = onOpenUpdates
-            )
+        SettingsSection(title = "Sources", icon = Icons.Outlined.Dns) {
+            SettingsGroup {
+                SettingsItem(
+                    icon = Icons.Outlined.Dns,
+                    title = "Manage sources",
+                    subtitle = "Enable, disable and reorder providers",
+                    onClick = onOpenSources
+                )
+            }
+        }
+
+        SettingsSection(title = "Fast Mode", icon = Icons.Outlined.Bolt) {
+            SettingsGroup {
+                SettingsSwitchItem(
+                    icon = Icons.Outlined.Bolt,
+                    title = "Enable Fast Mode",
+                    subtitle = "Auto-fetch a version across sources and return it to Morphe automatically.",
+                    checked = settings.fastMode,
+                    onToggle = { onSettingsChange(settings.copy(fastMode = !settings.fastMode)) }
+                )
+                if (settings.fastMode) {
+                    SettingsItem(
+                        icon = Icons.Outlined.Tune,
+                        title = "Which version to fetch",
+                        onClick = { fastModePolicyDialog = true },
+                        trailingContent = {
+                            Text(
+                                text = settings.fastModePolicy.title,
+                                color = MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    )
+                }
+            }
         }
     }
 }
 
-/**
- * Dedicated source management screen. The Settings tab keeps one summary row instead
- * of repeating every provider twice (once to enable it, once to reorder it).
- */
 @Composable
 internal fun SourcesSettingsScreen(
     settings: HelperSettings,
@@ -811,40 +783,18 @@ internal fun SourcesSettingsScreen(
         }
 
         item {
-            SettingsGroup(
-                title = stringResource(R.string.default_source),
-                icon = Icons.Outlined.Star
-            ) {
-                SettingsRow(
-                    icon = Icons.Outlined.Star,
-                    title = stringResource(R.string.default_source),
-                    subtitle = "Used first when a request is resolved",
-                    value = settings.preferredSource?.label ?: "Automatic",
-                    onClick = { sourceDialog = true }
-                )
-            }
-        }
-
-        item {
-            SettingsGroup(title = "Providers", icon = Icons.Outlined.Dns) {
-                orderedSources.forEachIndexed { index, source ->
-                    if (index > 0) MorpheDivider()
-                    SettingsSwitchItem(
-                        leading = {
-                            SourceAvatar(source = source, size = MorpheDefaults.IconSize)
-                        },
-                        title = source.label,
-                        checked = source !in settings.disabledSources,
-                        onToggle = {
-                            val enabled = source !in settings.disabledSources
-                            onSettingsChange(
-                                settings.copy(
-                                    disabledSources = if (enabled) {
-                                        settings.disabledSources + source
-                                    } else {
-                                        settings.disabledSources - source
-                                    }
-                                )
+            SettingsSection(title = stringResource(R.string.default_source), icon = Icons.Outlined.Star) {
+                SettingsGroup {
+                    SettingsItem(
+                        icon = Icons.Outlined.Star,
+                        title = stringResource(R.string.default_source),
+                        subtitle = "Used first when a request is resolved",
+                        onClick = { sourceDialog = true },
+                        trailingContent = {
+                            Text(
+                                text = settings.preferredSource?.label ?: "Automatic",
+                                color = MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.bodyMedium
                             )
                         }
                     )
@@ -853,67 +803,98 @@ internal fun SourcesSettingsScreen(
         }
 
         item {
-            SettingsGroup(title = "Priority", icon = Icons.Outlined.SortByAlpha) {
-                orderedSources.forEachIndexed { index, source ->
-                    if (index > 0) MorpheDivider()
-                    SettingsRow(
-                        leading = {
-                            SourceAvatar(source = source, size = MorpheDefaults.IconSize)
-                        },
-                        title = source.label,
-                        subtitle = when {
-                            source in settings.disabledSources -> "Disabled"
-                            index == 0 -> "Tried first"
-                            else -> null
-                        },
-                        trailing = {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (index > 0) {
-                                    HelperIconButton(
-                                        icon = Icons.Outlined.ExpandLess,
-                                        contentDescription = "Move ${source.label} up",
-                                        onClick = { moveSourceOrder(source, -1) }
+            SettingsSection(title = "Providers", icon = Icons.Outlined.Dns) {
+                SettingsGroup {
+                    orderedSources.forEachIndexed { index, source ->
+                        SettingsSwitchItem(
+                            leadingContent = {
+                                SourceAvatar(source = source, size = MorpheDefaults.IconSize)
+                            },
+                            title = source.label,
+                            checked = source !in settings.disabledSources,
+                            onToggle = {
+                                val enabled = source !in settings.disabledSources
+                                onSettingsChange(
+                                    settings.copy(
+                                        disabledSources = if (enabled) {
+                                            settings.disabledSources + source
+                                        } else {
+                                            settings.disabledSources - source
+                                        }
                                     )
-                                } else {
-                                    Spacer(Modifier.size(MorpheDefaults.GlassButtonHeight))
-                                }
-                                if (index < orderedSources.lastIndex) {
-                                    HelperIconButton(
-                                        icon = Icons.Outlined.ExpandMore,
-                                        contentDescription = "Move ${source.label} down",
-                                        onClick = { moveSourceOrder(source, 1) }
-                                    )
-                                } else {
-                                    Spacer(Modifier.size(MorpheDefaults.GlassButtonHeight))
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            SettingsSection(title = "Priority", icon = Icons.Outlined.SortByAlpha) {
+                SettingsGroup {
+                    orderedSources.forEachIndexed { index, source ->
+                        SettingsItem(
+                            leadingContent = {
+                                SourceAvatar(source = source, size = MorpheDefaults.IconSize)
+                            },
+                            title = source.label,
+                            subtitle = when {
+                                source in settings.disabledSources -> "Disabled"
+                                index == 0 -> "Tried first"
+                                else -> null
+                            },
+                            onClick = { },
+                            trailingContent = {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (index > 0) {
+                                        HelperIconButton(
+                                            icon = Icons.Outlined.ExpandLess,
+                                            contentDescription = "Move ${source.label} up",
+                                            onClick = { moveSourceOrder(source, -1) }
+                                        )
+                                    } else {
+                                        Spacer(Modifier.size(MorpheDefaults.GlassButtonHeight))
+                                    }
+                                    if (index < orderedSources.lastIndex) {
+                                        HelperIconButton(
+                                            icon = Icons.Outlined.ExpandMore,
+                                            contentDescription = "Move ${source.label} down",
+                                            onClick = { moveSourceOrder(source, 1) }
+                                        )
+                                    } else {
+                                        Spacer(Modifier.size(MorpheDefaults.GlassButtonHeight))
+                                    }
                                 }
                             }
+                        )
+                    }
+                    SettingsItem(
+                        icon = Icons.Outlined.Refresh,
+                        title = "Reset source order",
+                        subtitle = "Restore the default priority.",
+                        onClick = {
+                            onSettingsChange(
+                                latestSettings.copy(sourceOrder = DEFAULT_SOURCE_ORDER)
+                            )
+                        },
+                        trailingContent = {
+                            Text(
+                                text = "Reset",
+                                color = MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
                         }
                     )
                 }
-                MorpheDivider()
-                SettingsRow(
-                    icon = Icons.Outlined.Refresh,
-                    title = "Reset source order",
-                    subtitle = "Restore the default priority.",
-                    value = "Reset",
-                    onClick = {
-                        onSettingsChange(
-                            latestSettings.copy(sourceOrder = DEFAULT_SOURCE_ORDER)
-                        )
-                    }
-                )
             }
         }
     }
 }
 
-/**
- * Appearance tab: theme mode, colour style, pure black and the accent colour,
- * mirroring the manager's own appearance tab.
- */
 @Composable
 internal fun AppearanceTabContent(
     settings: HelperSettings,
@@ -923,8 +904,6 @@ internal fun AppearanceTabContent(
     var confirmHideIcon by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val supportsDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    // Wallpaper colours need a platform palette, so the option is not offered
-    // where it could not work. A stored choice still resolves on the other side.
     val styles = ThemeStyle.entries.filter {
         it != ThemeStyle.MATERIAL_YOU || supportsDynamicColor
     }
@@ -934,81 +913,85 @@ internal fun AppearanceTabContent(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingMedium)
     ) {
-        SettingsGroup(title = stringResource(R.string.theme), icon = Icons.Outlined.Palette) {
-            ThemeMode.entries.forEachIndexed { index, mode ->
-                if (index > 0) MorpheDivider()
-                SettingsRow(
-                    icon = mode.icon(),
-                    title = mode.title,
-                    subtitle = mode.description,
-                    onClick = { onSettingsChange(settings.copy(themeMode = mode)) },
-                    trailing = { RadioDot(selected = settings.themeMode == mode) }
-                )
-            }
-        }
-
-        SettingsGroup(title = "App icon", icon = Icons.Outlined.Smartphone) {
-            SettingsSwitchItem(
-                icon = Icons.Outlined.Smartphone,
-                title = "Show app icon",
-                subtitle = "Keep the app visible in your launcher. When hidden, open it " +
-                    "from Android Settings or when Morphe starts a download.",
-                checked = settings.showLauncherIcon,
-                onToggle = {
-                    if (settings.showLauncherIcon) {
-                        confirmHideIcon = true
-                    } else {
-                        onSettingsChange(settings.copy(showLauncherIcon = true))
-                        Toast.makeText(context, "App icon shown.", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            )
-        }
-
-        SettingsGroup(title = stringResource(R.string.colour_style), icon = Icons.Outlined.ColorLens) {
-            styles.forEachIndexed { index, style ->
-                if (index > 0) MorpheDivider()
-                SettingsRow(
-                    icon = style.icon(),
-                    title = style.title,
-                    subtitle = style.description,
-                    onClick = { onSettingsChange(settings.copy(themeStyle = style)) },
-                    trailing = { RadioDot(selected = settings.themeStyle == style) }
-                )
-            }
-        }
-
-        // Pure black only means anything behind dark content, so it is hidden
-        // while the app is pinned to the light theme.
-        if (settings.themeMode != ThemeMode.LIGHT) {
-            SettingsGroup(title = stringResource(R.string.dark_theme), icon = Icons.Outlined.DarkMode) {
-                SettingsSwitchItem(
-                    icon = Icons.Outlined.Contrast,
-                    title = stringResource(R.string.pure_black),
-                    subtitle = "Paint backgrounds fully black instead of the theme's near-black. " +
-                        "Saves power on OLED screens.",
-                    checked = settings.pureBlackTheme,
-                    onToggle = {
-                        onSettingsChange(settings.copy(pureBlackTheme = !settings.pureBlackTheme))
-                    }
-                )
-            }
-        }
-
-        // Wallpaper colours are the accent, and the neutral style has none to
-        // swap, so the grid is offered for the Morphe palette alone.
-        if (settings.themeStyle == ThemeStyle.MORPHE) {
-            SettingsGroup(title = stringResource(R.string.accent_colour), icon = Icons.Outlined.Colorize) {
-                AccentGridSection {
-                    AccentSwatchGrid(
-                        colors = MorpheAccentPresets,
-                        selected = accent,
-                        onSelect = { color ->
-                            onSettingsChange(settings.copy(customAccentColor = color.toHexString()))
-                        },
-                        onClear = { onSettingsChange(settings.copy(customAccentColor = "")) },
-                        onCustomClick = { showAccentPicker = true }
+        SettingsSection(title = stringResource(R.string.theme), icon = Icons.Outlined.Palette) {
+            SettingsGroup {
+                ThemeMode.entries.forEachIndexed { index, mode ->
+                    SettingsItem(
+                        icon = mode.icon(),
+                        title = mode.title,
+                        subtitle = mode.description,
+                        onClick = { onSettingsChange(settings.copy(themeMode = mode)) },
+                        trailingContent = { RadioDot(selected = settings.themeMode == mode) }
                     )
+                }
+            }
+        }
+
+        SettingsSection(title = "App icon", icon = Icons.Outlined.Smartphone) {
+            SettingsGroup {
+                SettingsSwitchItem(
+                    icon = Icons.Outlined.Smartphone,
+                    title = "Show app icon",
+                    subtitle = "Keep the app visible in your launcher. When hidden, open it " +
+                            "from Android Settings or when Morphe starts a download.",
+                    checked = settings.showLauncherIcon,
+                    onToggle = {
+                        if (settings.showLauncherIcon) {
+                            confirmHideIcon = true
+                        } else {
+                            onSettingsChange(settings.copy(showLauncherIcon = true))
+                            Toast.makeText(context, "App icon shown.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                )
+            }
+        }
+
+        SettingsSection(title = stringResource(R.string.colour_style), icon = Icons.Outlined.ColorLens) {
+            SettingsGroup {
+                styles.forEachIndexed { index, style ->
+                    SettingsItem(
+                        icon = style.icon(),
+                        title = style.title,
+                        subtitle = style.description,
+                        onClick = { onSettingsChange(settings.copy(themeStyle = style)) },
+                        trailingContent = { RadioDot(selected = settings.themeStyle == style) }
+                    )
+                }
+            }
+        }
+
+        if (settings.themeMode != ThemeMode.LIGHT) {
+            SettingsSection(title = stringResource(R.string.dark_theme), icon = Icons.Outlined.DarkMode) {
+                SettingsGroup {
+                    SettingsSwitchItem(
+                        icon = Icons.Outlined.Contrast,
+                        title = stringResource(R.string.pure_black),
+                        subtitle = "Paint backgrounds fully black instead of the theme's near-black. " +
+                                "Saves power on OLED screens.",
+                        checked = settings.pureBlackTheme,
+                        onToggle = {
+                            onSettingsChange(settings.copy(pureBlackTheme = !settings.pureBlackTheme))
+                        }
+                    )
+                }
+            }
+        }
+
+        if (settings.themeStyle == ThemeStyle.MORPHE) {
+            SettingsSection(title = stringResource(R.string.accent_colour), icon = Icons.Outlined.Colorize) {
+                SettingsGroup {
+                    AccentGridSection {
+                        AccentSwatchGrid(
+                            colors = MorpheAccentPresets,
+                            selected = accent,
+                            onSelect = { color ->
+                                onSettingsChange(settings.copy(customAccentColor = color.toHexString()))
+                            },
+                            onClear = { onSettingsChange(settings.copy(customAccentColor = "")) },
+                            onCustomClick = { showAccentPicker = true }
+                        )
+                    }
                 }
             }
         }
@@ -1037,8 +1020,8 @@ internal fun AppearanceTabContent(
         ) {
             Text(
                 text = "The app will disappear from your launcher. You can still open it " +
-                    "from Android Settings > Apps > Morphe Helper > Open, or when Morphe " +
-                    "starts a download.",
+                        "from Android Settings > Apps > Morphe Helper > Open, or when Morphe " +
+                        "starts a download.",
                 style = MaterialTheme.typography.bodyMedium
             )
         }
@@ -1056,17 +1039,12 @@ internal fun AppearanceTabContent(
     }
 }
 
-/** Icon for each colour style, mirroring the manager's selector. */
 internal fun ThemeStyle.icon(): ImageVector = when (this) {
     ThemeStyle.MORPHE -> Icons.Outlined.Palette
     ThemeStyle.MATERIAL_YOU -> Icons.Outlined.AutoAwesome
     ThemeStyle.MONOCHROME -> Icons.Outlined.Contrast
 }
 
-/**
- * Advanced tab: connection, resolver and VirusTotal scanning. What has been
- * handed off, and what the app logged doing it, live on the Logs tab.
- */
 @Composable
 internal fun AdvancedTabContent(
     settings: HelperSettings,
@@ -1113,109 +1091,113 @@ internal fun AdvancedTabContent(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingMedium)
     ) {
-        SettingsGroup(title = stringResource(R.string.connection), icon = Icons.Outlined.NetworkCheck) {
-            SettingsRow(
-                icon = settings.networkPolicy.icon(),
-                title = stringResource(R.string.network_policy),
-                subtitle = settings.networkPolicy.description,
-                value = settings.networkPolicy.title,
-                onClick = { policyDialog = true }
-            )
-            MorpheDivider()
-            SettingsRow(
-                icon = Icons.Outlined.Bolt,
-                title = "Download connections",
-                subtitle = "Maximum parallel connections. Large files are split into 4 MiB chunks, " +
-                    "and file size can reduce the count.",
-                value = settings.downloadConnections.title,
-                onClick = { connectionCountDialog = true }
-            )
-            MorpheDivider()
-            SettingsSwitchItem(
-                icon = Icons.Outlined.Dns,
-                title = stringResource(R.string.adguard_dns),
-                subtitle = "Blocks ads and trackers on download pages and in the captcha browser. " +
-                    "Falls back to the system resolver whenever it fails.",
-                checked = settings.adGuardDns,
-                onToggle = {
-                    onSettingsChange(settings.copy(adGuardDns = !settings.adGuardDns))
-                }
-            )
-            MorpheDivider()
-            SettingsSwitchItem(
-                icon = Icons.Outlined.Explore,
-                title = "Use Morphe's resolver",
-                subtitle = "Ask Morphe where its own download dialog would go and open that " +
-                    "page directly, instead of searching the site. Faster; turn it off to " +
-                    "always fetch through this app's own source pages.",
-                checked = settings.useMorpheResolver,
-                onToggle = {
-                    onSettingsChange(settings.copy(useMorpheResolver = !settings.useMorpheResolver))
-                }
-            )
+        SettingsSection(title = stringResource(R.string.connection), icon = Icons.Outlined.NetworkCheck) {
+            SettingsGroup {
+                SettingsItem(
+                    icon = settings.networkPolicy.icon(),
+                    title = stringResource(R.string.network_policy),
+                    subtitle = settings.networkPolicy.description,
+                    onClick = { policyDialog = true },
+                    trailingContent = {
+                        Text(
+                            text = settings.networkPolicy.title,
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                )
+                SettingsItem(
+                    icon = Icons.Outlined.Bolt,
+                    title = "Download connections",
+                    subtitle = "Maximum parallel connections. Large files are split into 4 MiB chunks, " +
+                            "and file size can reduce the count.",
+                    onClick = { connectionCountDialog = true },
+                    trailingContent = {
+                        Text(
+                            text = settings.downloadConnections.title,
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                )
+                SettingsSwitchItem(
+                    icon = Icons.Outlined.Dns,
+                    title = stringResource(R.string.adguard_dns),
+                    subtitle = "Blocks ads and trackers on download pages and in the captcha browser. " +
+                            "Falls back to the system resolver whenever it fails.",
+                    checked = settings.adGuardDns,
+                    onToggle = {
+                        onSettingsChange(settings.copy(adGuardDns = !settings.adGuardDns))
+                    }
+                )
+                SettingsSwitchItem(
+                    icon = Icons.Outlined.Explore,
+                    title = "Use Morphe's resolver",
+                    subtitle = "Ask Morphe where its own download dialog would go and open that " +
+                            "page directly, instead of searching the site. Faster; turn it off to " +
+                            "always fetch through this app's own source pages.",
+                    checked = settings.useMorpheResolver,
+                    onToggle = {
+                        onSettingsChange(settings.copy(useMorpheResolver = !settings.useMorpheResolver))
+                    }
+                )
+            }
         }
 
-        SettingsGroup(title = stringResource(R.string.virustotal), icon = Icons.Outlined.Shield) {
-            SettingsSwitchItem(
-                icon = Icons.Outlined.Shield,
-                title = stringResource(R.string.virustotal_scanning),
-                subtitle = "Scan downloaded files with VirusTotal before returning them to Morphe.",
-                checked = settings.virusTotalEnabled,
-                onToggle = {
-                    onSettingsChange(settings.copy(virusTotalEnabled = !settings.virusTotalEnabled))
-                }
-            )
-            if (settings.virusTotalEnabled) {
-                VirusTotalScanMode.entries.forEach { mode ->
-                    MorpheDivider()
-                    SettingsRow(
-                        icon = when (mode) {
-                            VirusTotalScanMode.NEVER -> Icons.Outlined.Block
-                            VirusTotalScanMode.ASK -> Icons.Outlined.HelpOutline
-                            VirusTotalScanMode.ALWAYS -> Icons.Outlined.CheckCircle
-                        },
-                        title = mode.title,
-                        subtitle = mode.description,
-                        onClick = { onSettingsChange(settings.copy(virusTotalScanMode = mode)) },
-                        trailing = { RadioDot(selected = settings.virusTotalScanMode == mode) }
-                    )
-                }
-                MorpheDivider()
-                ApiKeyEditor(
-                    apiKey = settings.virusTotalApiKey,
-                    onApiKeyChange = { onSettingsChange(settings.copy(virusTotalApiKey = it)) }
+        SettingsSection(title = stringResource(R.string.virustotal), icon = Icons.Outlined.Shield) {
+            SettingsGroup {
+                SettingsSwitchItem(
+                    icon = Icons.Outlined.Shield,
+                    title = stringResource(R.string.virustotal_scanning),
+                    subtitle = "Scan downloaded files with VirusTotal before returning them to Morphe.",
+                    checked = settings.virusTotalEnabled,
+                    onToggle = {
+                        onSettingsChange(settings.copy(virusTotalEnabled = !settings.virusTotalEnabled))
+                    }
                 )
-                if (settings.virusTotalScanMode != VirusTotalScanMode.NEVER) {
-                    MorpheDivider()
-                    SettingsSwitchItem(
-                        icon = Icons.Outlined.Verified,
-                        title = "Proceed automatically when clean",
-                        subtitle = "Hand off without showing the result when VirusTotal finds " +
-                            "nothing and every inner APK was scanned.",
-                        checked = settings.virusTotalAutoProceed,
-                        onToggle = {
-                            onSettingsChange(
-                                settings.copy(virusTotalAutoProceed = !settings.virusTotalAutoProceed)
-                            )
-                        }
+                if (settings.virusTotalEnabled) {
+                    VirusTotalScanMode.entries.forEach { mode ->
+                        SettingsItem(
+                            icon = when (mode) {
+                                VirusTotalScanMode.NEVER -> Icons.Outlined.Block
+                                VirusTotalScanMode.ASK -> Icons.Outlined.HelpOutline
+                                VirusTotalScanMode.ALWAYS -> Icons.Outlined.CheckCircle
+                            },
+                            title = mode.title,
+                            subtitle = mode.description,
+                            onClick = { onSettingsChange(settings.copy(virusTotalScanMode = mode)) },
+                            trailingContent = { RadioDot(selected = settings.virusTotalScanMode == mode) }
+                        )
+                    }
+                    ApiKeyEditor(
+                        apiKey = settings.virusTotalApiKey,
+                        onApiKeyChange = { onSettingsChange(settings.copy(virusTotalApiKey = it)) }
                     )
-                }
-                if (settings.virusTotalApiKey.isNotBlank()) {
-                    MorpheDivider()
-                    Box(modifier = Modifier.padding(MorpheDefaults.ContentPadding)) {
-                        VirusTotalQuotaCard(apiKey = settings.virusTotalApiKey)
+                    if (settings.virusTotalScanMode != VirusTotalScanMode.NEVER) {
+                        SettingsSwitchItem(
+                            icon = Icons.Outlined.Verified,
+                            title = "Proceed automatically when clean",
+                            subtitle = "Hand off without showing the result when VirusTotal finds " +
+                                    "nothing and every inner APK was scanned.",
+                            checked = settings.virusTotalAutoProceed,
+                            onToggle = {
+                                onSettingsChange(
+                                    settings.copy(virusTotalAutoProceed = !settings.virusTotalAutoProceed)
+                                )
+                            }
+                        )
+                    }
+                    if (settings.virusTotalApiKey.isNotBlank()) {
+                        Box(modifier = Modifier.padding(MorpheDefaults.ContentPadding)) {
+                            VirusTotalQuotaCard(apiKey = settings.virusTotalApiKey)
+                        }
                     }
                 }
             }
         }
-
     }
 }
 
-/**
- * Logs tab: history, Logcat logging and the in-app request log each get a sub-tab
- * so the page no longer stacks all three into one long scroll.
- */
 internal enum class LogsSubTab(
     val label: String,
     val icon: ImageVector
@@ -1258,19 +1240,21 @@ internal fun LogsTabContent(
                 onShare = onShareHistoryEntry
             )
 
-            LogsSubTab.LOGGING -> SettingsGroup(
+            LogsSubTab.LOGGING -> SettingsSection(
                 title = stringResource(R.string.logging),
                 icon = Icons.Outlined.BugReport
             ) {
-                SettingsSwitchItem(
-                    icon = Icons.Outlined.BugReport,
-                    title = stringResource(R.string.log_to_logcat),
-                    subtitle = "Write request, result, and source HTTP details to the system log (adb logcat) for debugging.",
-                    checked = settings.logcatLogging,
-                    onToggle = {
-                        onSettingsChange(settings.copy(logcatLogging = !settings.logcatLogging))
-                    }
-                )
+                SettingsGroup {
+                    SettingsSwitchItem(
+                        icon = Icons.Outlined.BugReport,
+                        title = stringResource(R.string.log_to_logcat),
+                        subtitle = "Write request, result, and source HTTP details to the system log (adb logcat) for debugging.",
+                        checked = settings.logcatLogging,
+                        onToggle = {
+                            onSettingsChange(settings.copy(logcatLogging = !settings.logcatLogging))
+                        }
+                    )
+                }
             }
 
             LogsSubTab.REQUEST_LOGS -> RequestLogsCard(
@@ -1281,7 +1265,6 @@ internal fun LogsTabContent(
     }
 }
 
-/** API key entry plus the manager link, laid out as a group row. */
 @Composable
 internal fun ApiKeyEditor(
     apiKey: String,
@@ -1356,142 +1339,13 @@ internal fun ApiKeyEditor(
     }
 }
 
-
-
-/**
- * One settings section: the manager's `SectionTitle` over a single group card
- * holding compact rows separated by dividers.
- */
-@Composable
-internal fun SettingsGroup(
-    title: String,
-    icon: ImageVector,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPadding)
-    ) {
-        MorpheSectionTitle(text = title, icon = icon)
-        SectionCard {
-            Column(content = content)
-        }
-    }
-}
-
-/**
- * Compact settings row in the manager's `SettingsItem` language: icon, title and
- * subtitle, with either a trailing value/chevron (opens a dialog) or a caller
- * supplied trailing control such as a switch.
- */
-@Composable
-internal fun SettingsRow(
-    icon: ImageVector? = null,
-    title: String,
-    subtitle: String? = null,
-    value: String? = null,
-    onClick: (() -> Unit)? = null,
-    /** Leading content used instead of [icon], e.g. a source's brand logo. */
-    leading: (@Composable () -> Unit)? = null,
-    trailing: (@Composable () -> Unit)? = null
-) {
-    val colors = MaterialTheme.colorScheme
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(MorpheDefaults.SettingsCornerRadius))
-            .then(
-                if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
-            )
-            .padding(
-                horizontal = MorpheDefaults.ContentPadding,
-                vertical = MorpheDefaults.ContentPaddingSmall + 4.dp
-            ),
-        horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPadding)
-    ) {
-        if (leading != null) {
-            leading()
-        } else if (icon != null) {
-            ThemedIcon(icon = icon, modifier = Modifier.padding(top = 2.dp))
-        }
-
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                color = colors.onSurface
-            )
-            subtitle?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.onSurfaceVariant
-                )
-            }
-            value?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = colors.primary
-                )
-            }
-        }
-
-        Box(
-            modifier = Modifier.align(Alignment.CenterVertically),
-            contentAlignment = Alignment.Center
-        ) {
-            if (trailing != null) trailing() else if (onClick != null) ForwardChevronIcon(size = MorpheDefaults.IconSizeSmall)
-        }
-    }
-}
-
-/** [SettingsRow] trailed by a switch that reflects [checked]; tapping the row toggles it. */
-@Composable
-internal fun SettingsSwitchItem(
-    icon: ImageVector? = null,
-    title: String,
-    subtitle: String? = null,
-    checked: Boolean,
-    onToggle: () -> Unit,
-    /** Leading content used instead of [icon], e.g. a source's brand logo. */
-    leading: (@Composable () -> Unit)? = null
-) {
-    val enabledLabel = "Enabled"
-    val disabledLabel = "Disabled"
-    SettingsRow(
-        icon = icon,
-        title = title,
-        subtitle = subtitle,
-        leading = leading,
-        onClick = onToggle,
-        trailing = {
-            Box(
-                modifier = Modifier.semantics { stateDescription = if (checked) enabledLabel else disabledLabel }
-            ) {
-                MorpheToggleSwitch(checked = checked, onCheckedChange = null)
-            }
-        }
-    )
-}
-
-/** One option offered by [SettingsChoiceDialog]. */
 internal data class SettingsChoice(
     val icon: ImageVector?,
     val title: String,
     val description: String,
-    /** When set, the choice shows this source's brand logo instead of [icon]. */
     val source: DownloadSource? = null
 )
 
-/**
- * Multi-choice settings are picked in a dialog rather than as a stack of full
- * width cards, which is what keeps the manager's tabs scannable.
- */
 @Composable
 internal fun SettingsChoiceDialog(
     title: String,
@@ -1502,17 +1356,11 @@ internal fun SettingsChoiceDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        // The platform container is an already-elevated tone, which the option rows
-        // (elevated surfaces themselves) sit flush against  the two read as one flat
-        // block. The manager paints its dialogs on the plain background so the cards on
-        // top stand out, so do the same here.
         containerColor = MaterialTheme.colorScheme.background,
         title = {
             Text(text = title, fontWeight = FontWeight.Bold)
         },
         text = {
-            // The source picker carries one row per source, which overflows a small
-            // screen, so the list scrolls inside a capped height instead of being clipped.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1563,10 +1411,6 @@ internal fun ThemeMode.icon(): ImageVector = when (this) {
     ThemeMode.LIGHT -> Icons.Outlined.LightMode
 }
 
-/**
- * Neutral settings row card in the manager's `SettingsItemCard` language: theme
- * surface fill, hairline border only when selected.
- */
 @Composable
 internal fun SettingsRowSurface(
     modifier: Modifier = Modifier,
@@ -1651,11 +1495,6 @@ internal fun SettingsOptionCard(
     }
 }
 
-/**
- * Compact dropdown trigger in the same card language as [SettingsOptionCard],
- * but showing the current value on the right and a chevron instead of a radio
- * dot. Tap opens the anchored [DropdownMenu].
- */
 @Composable
 internal fun SettingsDropdownCard(
     icon: ImageVector,
@@ -1905,12 +1744,6 @@ internal fun SettingTextFieldRow(
     }
 }
 
-/**
- * Detailed VirusTotal quota card shared by the Settings screen and the
- * scan-flow screens. Shows the live per-minute bucket (tracked client-side
- * against the 4/min free tier) plus the hourly/daily/monthly buckets reported
- * by the API. Returns nothing when no API key is set.
- */
 @Composable
 internal fun VirusTotalQuotaCard(apiKey: String) {
     if (apiKey.isBlank()) return
@@ -1920,8 +1753,6 @@ internal fun VirusTotalQuotaCard(apiKey: String) {
     var failed by remember { mutableStateOf(false) }
     var minuteUsed by remember { mutableIntStateOf(0) }
     var rollingUsed by remember { mutableIntStateOf(0) }
-    // Seconds until the wall-clock minute boundary ticks over and the per-minute
-    // count resets to 0. Ceiled so it reads 60 right after a rollover.
     var secsToRollover by remember { mutableIntStateOf(60) }
     val scope = rememberCoroutineScope()
     val load: () -> Unit = {
@@ -1935,8 +1766,6 @@ internal fun VirusTotalQuotaCard(apiKey: String) {
     }
     LaunchedEffect(apiKey) {
         load()
-        // The per-minute count is tracked locally in the rate limiter, so tick
-        // it once a second to keep the bar honest while a scan is running.
         while (true) {
             minuteUsed = VirusTotalScanner.rateLimiter.callsInCurrentMinute()
             rollingUsed = VirusTotalScanner.rateLimiter.callsInLastMinute()
@@ -1993,10 +1822,6 @@ internal fun VirusTotalQuotaCard(apiKey: String) {
                     )
                 }
             }
-            // Per minute is always available locally, even while the API quota
-            // is still loading. The wall-clock minute count resets at each
-            // minute boundary; the rolling 60s count is what the API actually
-            // enforces, so show both and flash when either nears the cap.
             QuotaBar(
                 "Per minute",
                 minuteUsed,
@@ -2026,10 +1851,7 @@ internal fun QuotaBar(
     label: String,
     used: Int,
     allowed: Int,
-    // Pulsing amber flash used for the per-minute bar when it nears the cap.
     flash: Boolean = false,
-    // Optional second line under the bar, e.g. the rolling 60s count next to
-    // the wall-clock minute count.
     caption: String? = null
 ) {
     val colors = MaterialTheme.colorScheme
@@ -2040,8 +1862,6 @@ internal fun QuotaBar(
         ratio >= 0.7f -> warningAccent
         else -> colors.primary
     }
-    // When near the cap, pulse the bar between amber and a dim amber so the
-    // mid-scan warning is visible even without looking at the number.
     val barColor = if (flash) {
         val transition = rememberInfiniteTransition(label = "quota-flash-$label")
         warningAccent.copy(
@@ -2141,7 +1961,4 @@ internal fun SourceToggleRow(
         }
     }
 }
-
-
-
 

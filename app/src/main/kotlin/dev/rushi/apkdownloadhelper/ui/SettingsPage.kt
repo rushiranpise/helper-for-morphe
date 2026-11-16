@@ -1,17 +1,7 @@
 ﻿package dev.rushi.apkdownloadhelper.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -20,21 +10,15 @@ import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.SdStorage
 import androidx.compose.material.icons.outlined.Tune
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import dev.rushi.apkdownloadhelper.R
+import dev.rushi.apkdownloadhelper.storage.HelperSettings
 
 internal enum class SettingsCategory(
     val title: String,
@@ -51,77 +35,88 @@ internal enum class SettingsCategory(
 internal fun SettingsPage(
     bottomBarHeight: Dp,
     versionName: String,
+    settings: HelperSettings,
+    onSettingsChange: (HelperSettings) -> Unit,
     onOpenUpdates: () -> Unit,
+    onActiveCategoryChanged: (Boolean) -> Unit = {}, // NEW PARAMETER
     categoryContent: @Composable (category: SettingsCategory, bottomBarHeight: Dp, onBack: () -> Unit) -> Unit
 ) {
     var activeCategory by rememberSaveable { mutableStateOf<SettingsCategory?>(null) }
+    val search = remember { SettingsSearch { "" } }
+
+    // Notify MainActivity to hide the nav bar
+    LaunchedEffect(activeCategory) {
+        onActiveCategoryChanged(activeCategory != null)
+    }
 
     BackHandler(enabled = activeCategory != null) {
         activeCategory = null
     }
 
-    AnimatedContent(targetState = activeCategory, label = "settings_hub") { category ->
-        if (category != null) {
-            categoryContent(category, bottomBarHeight) { activeCategory = null }
-        } else {
+    if (activeCategory != null) {
+        categoryContent(activeCategory!!, bottomBarHeight) { activeCategory = null }
+    } else {
+        // HUB SCREEN
+        CompositionLocalProvider(LocalSettingsSearch provides search) {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .statusBarsPadding()
-                    .padding(horizontal = MorpheDefaults.ContentPadding),
+                    .padding(horizontal = 16.dp),
                 contentPadding = PaddingValues(
-                    top = MorpheDefaults.ContentPadding,
-                    bottom = bottomBarHeight + MorpheDefaults.ContentPadding
+                    top = 16.dp,
+                    bottom = bottomBarHeight + 32.dp
                 ),
-                verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item {
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = stringResource(R.string.settings),
+                            text = "Settings",
                             style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground
                         )
                         Text(
-                            text = "Version ",
+                            text = "Version $versionName",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
                 }
 
-                items(SettingsCategory.entries.size) { index ->
-                    val item = SettingsCategory.entries[index]
-                    SettingsItem(
-                        onClick = { activeCategory = item },
-                        icon = item.icon,
-                        title = item.title,
-                        subtitle = item.subtitle,
-                        showBorder = true
-                    )
+                item {
+                    SettingsGroup {
+                        SettingsCategory.entries.forEachIndexed { index, category ->
+                            SettingsItem(
+                                onClick = { activeCategory = category },
+                                icon = category.icon,
+                                title = category.title,
+                                subtitle = category.subtitle
+                            )
+                        }
+                    }
                 }
 
                 item {
-                    SettingsItem(
-                        onClick = onOpenUpdates,
-                        icon = Icons.Outlined.Refresh,
-                        title = "Updates",
-                        subtitle = "Check for new releases, changelog & Shizuku install",
-                        showBorder = true
-                    )
+                    SettingsGroup {
+                        SettingsItem(
+                            onClick = onOpenUpdates,
+                            icon = Icons.Outlined.Refresh,
+                            title = "Updates",
+                            subtitle = "Check for new releases, changelog & Shizuku install"
+                        )
+                    }
                 }
             }
         }
     }
 }
 
+// Subpage detail header
 @Composable
 internal fun SettingsPageDetail(
     title: String,
@@ -133,42 +128,36 @@ internal fun SettingsPageDetail(
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding()
-            .navigationBarsPadding()
-            .padding(
-                start = MorpheDefaults.ContentPadding,
-                end = MorpheDefaults.ContentPadding,
-                top = MorpheDefaults.ContentPadding,
-                bottom = bottomBarHeight
-            ),
-        verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
     ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+            }
             Text(
                 text = title,
                 style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.align(Alignment.Center)
-            )
-            HelperHeaderIconButton(
-                icon = Icons.AutoMirrored.Outlined.ArrowBack,
-                contentDescription = stringResource(R.string.back),
-                onClick = onBack,
-                modifier = Modifier.align(Alignment.CenterStart)
+                modifier = Modifier.padding(start = 8.dp)
             )
         }
-        content()
-    }
-}
 
-@Composable
-internal fun MorpheSectionHeader(title: String, icon: ImageVector? = null) {
-    MorpheSectionTitle(text = title, icon = icon)
-}
-
-@Composable
-internal fun MorpheSectionCard(content: @Composable ColumnScope.() -> Unit) {
-    SectionCard {
-        Column(content = content)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = 8.dp,
+                bottom = bottomBarHeight + 32.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item {
+                Column(content = content)
+            }
+        }
     }
 }
