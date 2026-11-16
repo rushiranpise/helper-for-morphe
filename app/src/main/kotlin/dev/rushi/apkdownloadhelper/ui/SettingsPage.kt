@@ -6,10 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ViewList
-import androidx.compose.material.icons.outlined.Palette
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.SdStorage
-import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
@@ -21,24 +18,24 @@ internal enum class SettingsCategory(
     val subtitle: String,
     val icon: ImageVector
 ) {
-    DOWNLOADS("Downloads & sources", "Save location, retention, Fast Mode & providers", Icons.Outlined.SdStorage),
-    APPEARANCE("Appearance", "Theme mode, colour style, pure black & accent", Icons.Outlined.Palette),
-    ADVANCED("Advanced", "Network policy, connections, DNS & VirusTotal", Icons.Outlined.Tune),
-    LOGS("Logs & history", "Download history, Logcat & request diagnostics", Icons.AutoMirrored.Outlined.ViewList)
+    SOURCES("Sources", "Enable, disable and reorder providers", Icons.Outlined.Dns),
+    APPEARANCE("Appearance", "Theme, colors, and app icon", Icons.Outlined.Palette),
+    DOWNLOADS("Downloads", "Save location, storage & Fast Mode", Icons.Outlined.SdStorage),
+    SECURITY_NETWORK("Security & Network", "Network policy, DNS & VirusTotal", Icons.Outlined.Security),
+    SYSTEM_LOGS("System & Logs", "Updates, history & diagnostics", Icons.AutoMirrored.Outlined.ViewList),
+    ABOUT("About", "Version, licenses & GitHub", Icons.Outlined.Info)
 }
 
 @Composable
 internal fun SettingsPage(
     versionName: String,
-    onOpenCategory: (SettingsCategory) -> Unit,
-    onOpenUpdates: () -> Unit
+    onOpenCategory: (SettingsCategory) -> Unit
 ) {
     val search = SettingsSearch { "" }
     val scrollState = rememberScrollState()
 
     MorphePinnedHeaderPage(
         header = {
-            // Kept the "Settings" title here in the sticky header
             MorpheHeaderBar(title = "Settings")
         },
         scrollState = scrollState
@@ -56,8 +53,6 @@ internal fun SettingsPage(
                     ),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Version text removed from here
-
                 SettingsGroup {
                     SettingsCategory.entries.forEach { categoryItem ->
                         SettingsItem(
@@ -67,15 +62,6 @@ internal fun SettingsPage(
                             subtitle = categoryItem.subtitle
                         )
                     }
-                }
-
-                SettingsGroup {
-                    SettingsItem(
-                        onClick = onOpenUpdates,
-                        icon = Icons.Outlined.Refresh,
-                        title = "Updates",
-                        subtitle = "Check for new releases, changelog & Shizuku install"
-                    )
                 }
             }
         }
@@ -89,11 +75,7 @@ internal fun SettingsPageDetail(
     content: @Composable ColumnScope.() -> Unit
 ) {
     BackHandler { onBack() }
-
-    MorpheSubpageScaffold(
-        title = title,
-        onBack = onBack
-    ) {
+    MorpheSubpageScaffold(title = title, onBack = onBack) {
         content()
     }
 }

@@ -16,100 +16,25 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ViewList
-import androidx.compose.material.icons.outlined.ArrowDropDown
-import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.Block
-import androidx.compose.material.icons.outlined.Bolt
-import androidx.compose.material.icons.outlined.BugReport
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.CleaningServices
-import androidx.compose.material.icons.outlined.ColorLens
-import androidx.compose.material.icons.outlined.Colorize
-import androidx.compose.material.icons.outlined.Contrast
-import androidx.compose.material.icons.outlined.DarkMode
-import androidx.compose.material.icons.outlined.DeleteOutline
-import androidx.compose.material.icons.outlined.Dns
-import androidx.compose.material.icons.outlined.ExpandLess
-import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.Explore
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.HelpOutline
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.LightMode
-import androidx.compose.material.icons.outlined.NetworkCheck
-import androidx.compose.material.icons.outlined.OpenInNew
-import androidx.compose.material.icons.outlined.Palette
-import androidx.compose.material.icons.outlined.PhoneAndroid
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.SaveAlt
-import androidx.compose.material.icons.outlined.SdStorage
-import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material.icons.outlined.Shield
-import androidx.compose.material.icons.outlined.SignalCellularAlt
-import androidx.compose.material.icons.outlined.Smartphone
-import androidx.compose.material.icons.outlined.SortByAlpha
-import androidx.compose.material.icons.outlined.Star
-import androidx.compose.material.icons.outlined.TrendingUp
-import androidx.compose.material.icons.outlined.Tune
-import androidx.compose.material.icons.outlined.Verified
-import androidx.compose.material.icons.outlined.Warning
-import androidx.compose.material.icons.outlined.Wifi
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.surfaceColorAtElevation
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -120,31 +45,816 @@ import dev.rushi.apkdownloadhelper.HelperOutlinedButton
 import dev.rushi.apkdownloadhelper.R
 import dev.rushi.apkdownloadhelper.download.VirusTotalScanner
 import dev.rushi.apkdownloadhelper.formatHistoryTimestamp
-import dev.rushi.apkdownloadhelper.storage.DEFAULT_SOURCE_ORDER
-import dev.rushi.apkdownloadhelper.storage.DownloadConnectionCount
-import dev.rushi.apkdownloadhelper.storage.DownloadHistoryEntry
-import dev.rushi.apkdownloadhelper.storage.DownloadLocation
-import dev.rushi.apkdownloadhelper.storage.DownloadRetention
-import dev.rushi.apkdownloadhelper.storage.FastModePolicy
-import dev.rushi.apkdownloadhelper.storage.HelperSettings
-import dev.rushi.apkdownloadhelper.storage.NetworkPolicy
-import dev.rushi.apkdownloadhelper.storage.RequestLogEntry
-import dev.rushi.apkdownloadhelper.storage.ThemeMode
-import dev.rushi.apkdownloadhelper.storage.ThemeStyle
-import dev.rushi.apkdownloadhelper.storage.VirusTotalScanMode
-import dev.rushi.apkdownloadhelper.storage.clearAllDownloads
-import dev.rushi.apkdownloadhelper.storage.customDownloadsSize
-import dev.rushi.apkdownloadhelper.storage.downloadLocationLabel
-import dev.rushi.apkdownloadhelper.storage.downloadsCopySize
-import dev.rushi.apkdownloadhelper.storage.externalDownloadsSize
-import dev.rushi.apkdownloadhelper.storage.orderedSources
-import dev.rushi.apkdownloadhelper.storage.temporaryDownloadsSize
-import dev.rushi.apkdownloadhelper.ui.*
+import dev.rushi.apkdownloadhelper.storage.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
+
+// ==========================================
+// 1. APPEARANCE TAB
+// ==========================================
+@Composable
+internal fun AppearanceTabContent(
+    settings: HelperSettings,
+    onSettingsChange: (HelperSettings) -> Unit
+) {
+    var showAccentPicker by rememberSaveable { mutableStateOf(false) }
+    var confirmHideIcon by remember { mutableStateOf(false) }
+    val supportsDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val styles = ThemeStyle.entries.filter { it != ThemeStyle.MATERIAL_YOU || supportsDynamicColor }
+    val accent = settings.customAccentColor.toAccentColorOrNull()
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // THEME SECTION (Restored spacing)
+        SettingsSection(title = "Theme", icon = Icons.Outlined.DarkMode) {
+            SettingsGroup {
+                ThemeMode.entries.forEach { mode ->
+                    SettingsItem(
+                        icon = mode.icon(),
+                        title = mode.title,
+                        subtitle = mode.description,
+                        onClick = { onSettingsChange(settings.copy(themeMode = mode)) },
+                        trailingContent = { RadioDot(selected = settings.themeMode == mode) }
+                    )
+                }
+            }
+        }
+
+        // COLOR STYLE SECTION
+        SettingsSection(title = "Color Style", icon = Icons.Outlined.Palette) {
+            SettingsGroup {
+                styles.forEach { style ->
+                    SettingsItem(
+                        icon = style.icon(),
+                        title = style.title,
+                        subtitle = style.description,
+                        onClick = { onSettingsChange(settings.copy(themeStyle = style)) },
+                        trailingContent = { RadioDot(selected = settings.themeStyle == style) }
+                    )
+                }
+            }
+        }
+
+        // PURE BLACK SECTION
+        if (settings.themeMode != ThemeMode.LIGHT) {
+            SettingsSection(title = "Dark Theme", icon = Icons.Outlined.Contrast) {
+                SettingsGroup {
+                    SettingsSwitchItem(
+                        icon = Icons.Outlined.Contrast,
+                        title = stringResource(R.string.pure_black),
+                        subtitle = "Paint backgrounds fully black. Saves power on OLED screens.",
+                        checked = settings.pureBlackTheme,
+                        onToggle = { onSettingsChange(settings.copy(pureBlackTheme = !settings.pureBlackTheme)) }
+                    )
+                }
+            }
+        }
+
+        // ACCENT COLOR SECTION (Restored grid + reset button)
+        if (settings.themeStyle == ThemeStyle.MORPHE) {
+            SettingsSection(title = "Accent Colour", icon = Icons.Outlined.Colorize) {
+                SettingsGroup {
+                    AccentGridSection {
+                        AccentSwatchGrid(
+                            colors = MorpheAccentPresets,
+                            selected = accent,
+                            onSelect = { color ->
+                                onSettingsChange(settings.copy(customAccentColor = color.toHexString()))
+                            },
+                            onClear = { onSettingsChange(settings.copy(customAccentColor = "")) },
+                            onCustomClick = { showAccentPicker = true }
+                        )
+                    }
+                    SettingsItem(
+                        icon = Icons.Outlined.Refresh,
+                        title = "Reset to default",
+                        subtitle = "Restore the app's default blue accent",
+                        onClick = { onSettingsChange(settings.copy(customAccentColor = "")) },
+                        trailingContent = { Text("Reset", color = MaterialTheme.colorScheme.primary) }
+                    )
+                }
+            }
+        }
+
+        // APP ICON SECTION
+        SettingsSection(title = "App Icon", icon = Icons.Outlined.Smartphone) {
+            SettingsGroup {
+                SettingsSwitchItem(
+                    icon = Icons.Outlined.Smartphone,
+                    title = "Show app icon",
+                    subtitle = "Keep the app visible in your launcher.",
+                    checked = settings.showLauncherIcon,
+                    onToggle = {
+                        if (settings.showLauncherIcon) confirmHideIcon = true
+                        else onSettingsChange(settings.copy(showLauncherIcon = true))
+                    }
+                )
+            }
+        }
+    }
+
+    if (confirmHideIcon) {
+        MorpheDialog(
+            title = "Hide app icon?",
+            onDismiss = { confirmHideIcon = false },
+            actions = {
+                HelperOutlinedButton("Cancel", { confirmHideIcon = false }, Modifier.weight(1f))
+                HelperButton("Hide icon", {
+                    confirmHideIcon = false
+                    onSettingsChange(settings.copy(showLauncherIcon = false))
+                }, Modifier.weight(1f))
+            }
+        ) {
+            Text("The app will disappear from your launcher. You can still open it from Android Settings or when Morphe starts a download.")
+        }
+    }
+
+    if (showAccentPicker) {
+        MorpheAccentPickerDialog(
+            currentColorHex = settings.customAccentColor,
+            onColorSelected = { color ->
+                onSettingsChange(settings.copy(customAccentColor = color.toHexString()))
+                showAccentPicker = false
+            },
+            onDismiss = { showAccentPicker = false }
+        )
+    }
+}
+
+// ==========================================
+// 2. DOWNLOADS TAB
+// ==========================================
+@Composable
+internal fun SystemTabContent(
+    settings: HelperSettings,
+    onSettingsChange: (HelperSettings) -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var locationDialog by remember { mutableStateOf(false) }
+    var fastModePolicyDialog by remember { mutableStateOf(false) }
+    var connectionCountDialog by remember { mutableStateOf(false) }
+    var pendingLocation by remember { mutableStateOf<DownloadLocation?>(null) }
+    val latestSettings by rememberUpdatedState(settings)
+
+    val locations = DownloadLocation.entries
+    val fastPolicies = FastModePolicy.entries
+    val connectionCounts = DownloadConnectionCount.entries
+
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        val data = result.data ?: return@rememberLauncherForActivityResult
+        val uri = data.data ?: return@rememberLauncherForActivityResult
+        val flags = (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        val persisted = runCatching { context.contentResolver.takePersistableUriPermission(uri, flags) }.isSuccess
+        if (!persisted) {
+            Toast.makeText(context, "Could not keep write access.", Toast.LENGTH_LONG).show()
+            return@rememberLauncherForActivityResult
+        }
+        onSettingsChange(latestSettings.copy(downloadLocation = DownloadLocation.CUSTOM, downloadCustomTreeUri = uri.toString()))
+    }
+
+    val storagePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val target = pendingLocation
+        pendingLocation = null
+        if (granted && target != null) onSettingsChange(latestSettings.copy(downloadLocation = target))
+    }
+
+    if (locationDialog) {
+        SettingsChoiceDialog(
+            title = stringResource(R.string.save_downloads),
+            choices = locations.map { SettingsChoice(it.icon(), it.title, it.description) },
+            selectedIndex = locations.indexOf(latestSettings.downloadLocation),
+            onSelect = { index ->
+                locationDialog = false
+                val loc = locations[index]
+                if (loc == DownloadLocation.CUSTOM) {
+                    folderPicker.launch(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply { addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) })
+                } else if (loc == DownloadLocation.DOWNLOADS && Build.VERSION.SDK_INT <= Build.VERSION_CODES.P && context.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                    pendingLocation = loc
+                    storagePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                } else {
+                    onSettingsChange(latestSettings.copy(downloadLocation = loc))
+                }
+            },
+            onDismiss = { locationDialog = false }
+        )
+    }
+
+    if (fastModePolicyDialog) {
+        SettingsChoiceDialog(
+            title = stringResource(R.string.which_version_to_fetch),
+            choices = fastPolicies.map { policy -> SettingsChoice(Icons.Outlined.Tune, policy.title, policy.description) },
+            selectedIndex = fastPolicies.indexOf(settings.fastModePolicy),
+            onSelect = { index ->
+                onSettingsChange(settings.copy(fastModePolicy = fastPolicies[index]))
+                fastModePolicyDialog = false
+            },
+            onDismiss = { fastModePolicyDialog = false }
+        )
+    }
+
+    if (connectionCountDialog) {
+        SettingsChoiceDialog(
+            title = "Download connections",
+            choices = connectionCounts.map { SettingsChoice(Icons.Outlined.Bolt, it.title, it.description) },
+            selectedIndex = connectionCounts.indexOf(settings.downloadConnections),
+            onSelect = { index ->
+                onSettingsChange(settings.copy(downloadConnections = connectionCounts[index]))
+                connectionCountDialog = false
+            },
+            onDismiss = { connectionCountDialog = false }
+        )
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        SettingsSection(title = "Storage", icon = Icons.Outlined.SdStorage) {
+            SettingsGroup {
+                SettingsItem(
+                    icon = settings.downloadLocation.icon(),
+                    title = "Save downloads",
+                    subtitle = settings.downloadLocation.description,
+                    onClick = { locationDialog = true },
+                    trailingContent = { Text(downloadLocationLabel(context, settings), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium) }
+                )
+                SettingsItem(
+                    icon = Icons.Outlined.CleaningServices,
+                    title = "Storage used",
+                    subtitle = "Clear cache and temporary files",
+                    onClick = { scope.launch(Dispatchers.IO) { context.clearAllDownloads() } },
+                    trailingContent = { Text("Clear", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+                )
+                SettingsItem(
+                    icon = Icons.Outlined.Bolt,
+                    title = "Download connections",
+                    subtitle = "Maximum parallel connections per download",
+                    onClick = { connectionCountDialog = true },
+                    trailingContent = { Text(settings.downloadConnections.title, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium) }
+                )
+            }
+        }
+
+        SettingsSection(title = "Download Behavior", icon = Icons.Outlined.Tune) {
+            SettingsGroup {
+                SettingsSwitchItem(
+                    icon = Icons.Outlined.PhoneAndroid,
+                    title = "Prefer density-specific APKs",
+                    subtitle = "Use APKMirror's variant for this screen's density instead of nodpi.",
+                    checked = settings.preferDensitySpecificVariants,
+                    onToggle = { onSettingsChange(settings.copy(preferDensitySpecificVariants = !settings.preferDensitySpecificVariants)) }
+                )
+            }
+        }
+
+        SettingsSection(title = "Fast Mode", icon = Icons.Outlined.Explore) {
+            SettingsGroup {
+                SettingsSwitchItem(
+                    icon = Icons.Outlined.Bolt,
+                    title = "Enable Fast Mode",
+                    subtitle = "Auto-fetch a version across sources and return it automatically.",
+                    checked = settings.fastMode,
+                    onToggle = { onSettingsChange(settings.copy(fastMode = !settings.fastMode)) }
+                )
+                if (settings.fastMode) {
+                    SettingsItem(
+                        icon = Icons.Outlined.Tune,
+                        title = "Which version to fetch",
+                        onClick = { fastModePolicyDialog = true },
+                        trailingContent = { Text(settings.fastModePolicy.title, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ==========================================
+// 3. SECURITY & NETWORK TAB
+// ==========================================
+@Composable
+internal fun AdvancedTabContent(
+    settings: HelperSettings,
+    onSettingsChange: (HelperSettings) -> Unit
+) {
+    var policyDialog by remember { mutableStateOf(false) }
+    val policies = NetworkPolicy.entries
+
+    if (policyDialog) {
+        SettingsChoiceDialog(
+            title = stringResource(R.string.connection),
+            choices = policies.map { SettingsChoice(it.icon(), it.title, it.description) },
+            selectedIndex = policies.indexOf(settings.networkPolicy),
+            onSelect = { index ->
+                onSettingsChange(settings.copy(networkPolicy = policies[index]))
+                policyDialog = false
+            },
+            onDismiss = { policyDialog = false }
+        )
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        SettingsSection(title = "Network Routing", icon = Icons.Outlined.NetworkCheck) {
+            SettingsGroup {
+                SettingsItem(
+                    icon = settings.networkPolicy.icon(),
+                    title = stringResource(R.string.network_policy),
+                    subtitle = settings.networkPolicy.description,
+                    onClick = { policyDialog = true },
+                    trailingContent = { Text(settings.networkPolicy.title, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium) }
+                )
+                SettingsSwitchItem(
+                    icon = Icons.Outlined.Dns,
+                    title = stringResource(R.string.adguard_dns),
+                    subtitle = "Blocks ads and trackers on download pages.",
+                    checked = settings.adGuardDns,
+                    onToggle = { onSettingsChange(settings.copy(adGuardDns = !settings.adGuardDns)) }
+                )
+                SettingsSwitchItem(
+                    icon = Icons.Outlined.Explore,
+                    title = "Use Morphe's resolver",
+                    subtitle = "Ask Morphe where its own download dialog would go.",
+                    checked = settings.useMorpheResolver,
+                    onToggle = { onSettingsChange(settings.copy(useMorpheResolver = !settings.useMorpheResolver)) }
+                )
+            }
+        }
+
+        SettingsSection(title = "VirusTotal Scanning", icon = Icons.Outlined.Shield) {
+            SettingsGroup {
+                SettingsSwitchItem(
+                    icon = Icons.Outlined.Shield,
+                    title = stringResource(R.string.virustotal_scanning),
+                    subtitle = "Scan downloaded files before returning them to Morphe.",
+                    checked = settings.virusTotalEnabled,
+                    onToggle = { onSettingsChange(settings.copy(virusTotalEnabled = !settings.virusTotalEnabled)) }
+                )
+                if (settings.virusTotalEnabled) {
+                    VirusTotalScanMode.entries.forEach { mode ->
+                        SettingsItem(
+                            icon = when (mode) {
+                                VirusTotalScanMode.NEVER -> Icons.Outlined.Block
+                                VirusTotalScanMode.ASK -> Icons.Outlined.HelpOutline
+                                VirusTotalScanMode.ALWAYS -> Icons.Outlined.CheckCircle
+                            },
+                            title = mode.title,
+                            subtitle = mode.description,
+                            onClick = { onSettingsChange(settings.copy(virusTotalScanMode = mode)) },
+                            trailingContent = { RadioDot(selected = settings.virusTotalScanMode == mode) }
+                        )
+                    }
+                    ApiKeyEditor(apiKey = settings.virusTotalApiKey, onApiKeyChange = { onSettingsChange(settings.copy(virusTotalApiKey = it)) })
+                    if (settings.virusTotalScanMode != VirusTotalScanMode.NEVER) {
+                        SettingsSwitchItem(
+                            icon = Icons.Outlined.Verified,
+                            title = "Proceed automatically when clean",
+                            subtitle = "Hand off without showing the result when VirusTotal finds nothing.",
+                            checked = settings.virusTotalAutoProceed,
+                            onToggle = { onSettingsChange(settings.copy(virusTotalAutoProceed = !settings.virusTotalAutoProceed)) }
+                        )
+                    }
+                    if (settings.virusTotalApiKey.isNotBlank()) {
+                        Box(modifier = Modifier.padding(16.dp)) { VirusTotalQuotaCard(apiKey = settings.virusTotalApiKey) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ==========================================
+// 4. SYSTEM & LOGS TAB
+// ==========================================
+internal enum class LogsSubTab(val label: String, val icon: ImageVector) {
+    HISTORY("History", Icons.Outlined.History),
+    LOGGING("Logging", Icons.Outlined.BugReport),
+    REQUEST_LOGS("Request logs", Icons.AutoMirrored.Outlined.ViewList)
+}
+
+@Composable
+internal fun LogsTabContent(
+    settings: HelperSettings,
+    onSettingsChange: (HelperSettings) -> Unit,
+    logs: List<RequestLogEntry>,
+    onClearLogs: () -> Unit,
+    historyEntries: List<DownloadHistoryEntry>,
+    onOpenHistoryEntry: (DownloadHistoryEntry) -> Unit,
+    onShareHistoryEntry: (DownloadHistoryEntry) -> Unit,
+    onClearHistory: () -> Unit,
+    onOpenUpdates: () -> Unit
+) {
+    var subTab by rememberSaveable { mutableStateOf(LogsSubTab.HISTORY) }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        SettingsSection(title = "Updates", icon = Icons.Outlined.Refresh) {
+            SettingsGroup {
+                SettingsItem(
+                    icon = Icons.Outlined.SystemUpdate,
+                    title = "Check for updates & changelog",
+                    subtitle = "View latest release and install",
+                    onClick = onOpenUpdates
+                )
+                SettingsSwitchItem(
+                    icon = Icons.Outlined.Refresh,
+                    title = "Check automatically",
+                    subtitle = "Look for a newer release when the helper starts.",
+                    checked = settings.checkUpdates,
+                    onToggle = { onSettingsChange(settings.copy(checkUpdates = !settings.checkUpdates)) }
+                )
+            }
+        }
+
+        SettingsSection(title = "Logs & History", icon = Icons.AutoMirrored.Outlined.ViewList) {
+            MorpheSelectorRow(
+                options = LogsSubTab.entries.map { MorpheSelectorOption(label = it.label, icon = it.icon) },
+                selectedIndex = LogsSubTab.entries.indexOf(subTab),
+                onSelect = { subTab = LogsSubTab.entries[it] },
+                labelStyle = MaterialTheme.typography.labelLarge
+            )
+            Spacer(Modifier.height(8.dp))
+
+            when (subTab) {
+                LogsSubTab.HISTORY -> DownloadHistorySection(entries = historyEntries, onClear = onClearHistory, onOpen = onOpenHistoryEntry, onShare = onShareHistoryEntry)
+                LogsSubTab.LOGGING -> SettingsGroup {
+                    SettingsSwitchItem(
+                        icon = Icons.Outlined.BugReport,
+                        title = stringResource(R.string.log_to_logcat),
+                        subtitle = "Write logs to the system log (adb logcat).",
+                        checked = settings.logcatLogging,
+                        onToggle = { onSettingsChange(settings.copy(logcatLogging = !settings.logcatLogging)) }
+                    )
+                }
+                LogsSubTab.REQUEST_LOGS -> RequestLogsCard(logs = logs, onClearLogs = onClearLogs)
+            }
+        }
+    }
+}
+
+// ==========================================
+// 5. ABOUT TAB
+// ==========================================
+@Composable
+internal fun AboutTabContent() {
+    val context = LocalContext.current
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        SettingsSection(title = "App Info", icon = Icons.Outlined.Info) {
+            SettingsGroup {
+                SettingsItem(
+                    icon = Icons.Outlined.PhoneAndroid,
+                    title = "Version",
+                    onClick = { },
+                    trailingContent = { Text(BuildConfig.VERSION_NAME, color = MaterialTheme.colorScheme.primary) }
+                )
+                SettingsItem(
+                    icon = Icons.Outlined.OpenInNew,
+                    title = "GitHub Repository",
+                    subtitle = "View source code and report issues",
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/darkbyteprojects/helper-for-morphe"))
+                        context.startActivity(intent)
+                    }
+                )
+            }
+        }
+    }
+}
+
+// ==========================================
+// SHARED COMPONENTS
+// ==========================================
+
+// FIXED: Removed MorpheSubpageScaffold and BackHandler to prevent nested scroll crash
+@Composable
+internal fun SourcesSettingsScreen(
+    settings: HelperSettings,
+    onSettingsChange: (HelperSettings) -> Unit
+) {
+    var sourceDialog by remember { mutableStateOf(false) }
+    val latestSettings by rememberUpdatedState(settings)
+    val orderedSources = settings.orderedSources
+
+    fun moveSourceOrder(source: DownloadSource, delta: Int) {
+        val order = latestSettings.orderedSources.toMutableList()
+        val index = order.indexOf(source)
+        val target = index + delta
+        if (index < 0 || target !in order.indices) return
+        order.removeAt(index)
+        order.add(target, source)
+        onSettingsChange(latestSettings.copy(sourceOrder = order))
+    }
+
+    if (sourceDialog) {
+        val choices = buildList {
+            add(SettingsChoice(Icons.Outlined.AutoAwesome, "Automatic", "Use the first enabled source in the custom order"))
+            addAll(orderedSources.map { SettingsChoice(icon = null, title = it.label, description = "Prefer this source when it has the file", source = it) })
+        }
+        SettingsChoiceDialog(
+            title = stringResource(R.string.default_source),
+            choices = choices,
+            selectedIndex = settings.preferredSource?.let { source -> orderedSources.indexOf(source) + 1 }?.takeIf { it > 0 } ?: 0,
+            onSelect = { index ->
+                onSettingsChange(settings.copy(preferredSource = if (index == 0) null else orderedSources[index - 1]))
+                sourceDialog = false
+            },
+            onDismiss = { sourceDialog = false }
+        )
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        SettingsSection(title = stringResource(R.string.default_source), icon = Icons.Outlined.Star) {
+            SettingsGroup {
+                SettingsItem(
+                    icon = Icons.Outlined.Star,
+                    title = stringResource(R.string.default_source),
+                    subtitle = "Used first when a request is resolved",
+                    onClick = { sourceDialog = true },
+                    trailingContent = { Text(settings.preferredSource?.label ?: "Automatic", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium) }
+                )
+            }
+        }
+
+        SettingsSection(title = "Providers", icon = Icons.Outlined.Dns) {
+            SettingsGroup {
+                orderedSources.forEach { source ->
+                    SettingsSwitchItem(
+                        leadingContent = { SourceAvatar(source = source, size = MorpheDefaults.IconSize) },
+                        title = source.label,
+                        checked = source !in settings.disabledSources,
+                        onToggle = {
+                            val enabled = source !in settings.disabledSources
+                            onSettingsChange(settings.copy(disabledSources = if (enabled) settings.disabledSources + source else settings.disabledSources - source))
+                        }
+                    )
+                }
+            }
+        }
+
+        SettingsSection(title = "Priority", icon = Icons.Outlined.SortByAlpha) {
+            SettingsGroup {
+                orderedSources.forEachIndexed { index, source ->
+                    SettingsItem(
+                        leadingContent = { SourceAvatar(source = source, size = MorpheDefaults.IconSize) },
+                        title = source.label,
+                        subtitle = when { source in settings.disabledSources -> "Disabled"; index == 0 -> "Tried first"; else -> null },
+                        onClick = { },
+                        trailingContent = {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                if (index > 0) HelperIconButton(icon = Icons.Outlined.ExpandLess, contentDescription = "Move up", onClick = { moveSourceOrder(source, -1) })
+                                else Spacer(Modifier.size(MorpheDefaults.GlassButtonHeight))
+                                if (index < orderedSources.lastIndex) HelperIconButton(icon = Icons.Outlined.ExpandMore, contentDescription = "Move down", onClick = { moveSourceOrder(source, 1) })
+                                else Spacer(Modifier.size(MorpheDefaults.GlassButtonHeight))
+                            }
+                        }
+                    )
+                }
+                SettingsItem(
+                    icon = Icons.Outlined.Refresh,
+                    title = "Reset source order",
+                    subtitle = "Restore the default priority.",
+                    onClick = { onSettingsChange(latestSettings.copy(sourceOrder = DEFAULT_SOURCE_ORDER)) },
+                    trailingContent = { Text("Reset", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium) }
+                )
+            }
+        }
+    }
+}
+
+internal data class SettingsChoice(
+    val icon: ImageVector?,
+    val title: String,
+    val description: String,
+    val source: DownloadSource? = null
+)
+
+@Composable
+internal fun SettingsChoiceDialog(
+    title: String,
+    choices: List<SettingsChoice>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.background,
+        title = { Text(text = title, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingSmall)
+            ) {
+                choices.forEachIndexed { index, choice ->
+                    SettingsOptionCard(
+                        icon = choice.icon,
+                        title = choice.title,
+                        description = choice.description,
+                        selected = index == selectedIndex,
+                        source = choice.source,
+                        onClick = { onSelect(index) }
+                    )
+                }
+            }
+        },
+        confirmButton = {}
+    )
+}
+
+internal fun DownloadLocation.icon(): ImageVector = when (this) {
+    DownloadLocation.TEMPORARY -> Icons.Outlined.SdStorage
+    DownloadLocation.EXTERNAL -> Icons.Outlined.PhoneAndroid
+    DownloadLocation.DOWNLOADS -> Icons.Outlined.SaveAlt
+    DownloadLocation.CUSTOM -> Icons.Outlined.FolderOpen
+}
+
+internal fun NetworkPolicy.icon(): ImageVector = when (this) {
+    NetworkPolicy.WIFI_ONLY -> Icons.Outlined.Wifi
+    NetworkPolicy.MOBILE_DATA_ONLY -> Icons.Outlined.SignalCellularAlt
+    NetworkPolicy.WIFI_AND_MOBILE -> Icons.Outlined.NetworkCheck
+}
+
+internal fun ThemeMode.icon(): ImageVector = when (this) {
+    ThemeMode.SYSTEM -> Icons.Outlined.Smartphone
+    ThemeMode.DARK -> Icons.Outlined.DarkMode
+    ThemeMode.LIGHT -> Icons.Outlined.LightMode
+}
+
+internal fun ThemeStyle.icon(): ImageVector = when (this) {
+    ThemeStyle.MORPHE -> Icons.Outlined.Palette
+    ThemeStyle.MATERIAL_YOU -> Icons.Outlined.AutoAwesome
+    ThemeStyle.MONOCHROME -> Icons.Outlined.Contrast
+}
+
+internal fun Long.formatBytes(): String {
+    if (this <= 0L) return "0 B"
+    val units = listOf("B", "KB", "MB", "GB")
+    var value = toDouble()
+    var unit = 0
+    while (value >= 1024.0 && unit < units.lastIndex) { value /= 1024.0; unit++ }
+    return if (unit == 0) "${toLong()} B" else String.format(Locale.US, "%.1f %s", value, units[unit])
+}
+
+@Composable
+internal fun SettingsOptionCard(
+    icon: ImageVector?,
+    title: String,
+    description: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    source: DownloadSource? = null
+) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MorpheDefaults.SettingsCornerRadius)).clickable(enabled = enabled, onClick = onClick),
+        shape = RoundedCornerShape(MorpheDefaults.SettingsCornerRadius),
+        color = if (selected) colors.surfaceVariant else colors.surfaceColorAtElevation(3.dp),
+        contentColor = colors.onSurface,
+        tonalElevation = if (selected) 0.dp else 1.dp,
+        border = if (selected) BorderStroke(1.5.dp, colors.onSurface.copy(alpha = 0.5f)) else null
+    ) {
+        Row(modifier = Modifier.fillMaxWidth().padding(MorpheDefaults.ContentPadding), horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing), verticalAlignment = Alignment.CenterVertically) {
+            if (source != null) SourceAvatar(source = source, size = MorpheDefaults.IconSize)
+            else if (icon != null) ThemedIcon(icon = icon, size = MorpheDefaults.IconSize, tint = if (selected) colors.primary else colors.onSurfaceVariant)
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, color = colors.onSurface)
+                Text(description, color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            }
+            RadioDot(selected = selected)
+        }
+    }
+}
+
+@Composable
+internal fun ApiKeyEditor(
+    apiKey: String,
+    onApiKeyChange: (String) -> Unit
+) {
+    val context = LocalContext.current
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(stringResource(R.string.api_key), style = MaterialTheme.typography.titleSmall)
+        OutlinedTextField(
+            value = apiKey,
+            onValueChange = onApiKeyChange,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            placeholder = { Text(stringResource(R.string.enter_api_key)) }
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable {
+                val open = Intent(Intent.ACTION_VIEW, Uri.parse("https://docs.virustotal.com/docs/please-give-me-an-api-key"))
+                runCatching { context.startActivity(open) }
+            }.padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.how_to_get_a_free_api),
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(Icons.Outlined.OpenInNew, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+        }
+    }
+}
+
+@Composable
+internal fun VirusTotalQuotaCard(apiKey: String) {
+    if (apiKey.isBlank()) return
+    val colors = MaterialTheme.colorScheme
+    var quota by remember { mutableStateOf<VirusTotalScanner.QuotaUsage?>(null) }
+    var loading by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
+    var minuteUsed by remember { mutableIntStateOf(0) }
+    var rollingUsed by remember { mutableIntStateOf(0) }
+    var secsToRollover by remember { mutableIntStateOf(60) }
+    val scope = rememberCoroutineScope()
+    val load: () -> Unit = {
+        scope.launch {
+            loading = true
+            failed = false
+            quota = withContext(Dispatchers.IO) { VirusTotalScanner.fetchQuotaUsage(apiKey) }
+            if (quota == null) failed = true
+            loading = false
+        }
+    }
+    LaunchedEffect(apiKey) {
+        load()
+        while (true) {
+            minuteUsed = VirusTotalScanner.rateLimiter.callsInCurrentMinute()
+            rollingUsed = VirusTotalScanner.rateLimiter.callsInLastMinute()
+            secsToRollover = ((60_000L - System.currentTimeMillis() % 60_000L + 999L) / 1000L).toInt()
+            delay(1000)
+        }
+    }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(MorpheDefaults.CardCornerRadius),
+        color = sourceCardFill(),
+        border = BorderStroke(1.dp, sourceCardBorder())
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Shield, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(22.dp))
+                Column(modifier = Modifier.weight(1f)) { Text(stringResource(R.string.virustotal_quota), fontWeight = FontWeight.Bold, color = colors.onSurface) }
+                if (loading) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                else Icon(Icons.Outlined.Refresh, contentDescription = "Refresh", tint = colors.primary, modifier = Modifier.size(20.dp).clip(MorpheDefaults.PillShape).clickable { load() }.padding(2.dp))
+            }
+            QuotaBar("Per minute", minuteUsed, VirusTotalScanner.MINUTE_LOOKUP_LIMIT, flash = maxOf(minuteUsed, rollingUsed) >= VirusTotalScanner.MINUTE_LOOKUP_LIMIT - 1, caption = "rolling 60s: $rollingUsed / ${VirusTotalScanner.MINUTE_LOOKUP_LIMIT} · resets in ${secsToRollover}s")
+            val current = quota
+            when {
+                current != null -> {
+                    QuotaBar("Per hour", current.hourlyUsed, current.hourlyAllowed)
+                    QuotaBar("Per day", current.dailyUsed, current.dailyAllowed)
+                    QuotaBar("Per month", current.monthlyUsed, current.monthlyAllowed)
+                }
+                failed -> Text(stringResource(R.string.couldn_t_load_quota_check_your), color = colors.error, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable
+internal fun QuotaBar(label: String, used: Int, allowed: Int, flash: Boolean = false, caption: String? = null) {
+    val colors = MaterialTheme.colorScheme
+    val ratio = if (allowed > 0) used.toFloat() / allowed else 0f
+    val warningAccent = SemanticTone.Warning.accent
+    val baseColor = when { ratio >= 0.9f -> colors.error; ratio >= 0.7f -> warningAccent; else -> colors.primary }
+    val barColor = if (flash) {
+        val transition = rememberInfiniteTransition(label = "quota-flash-$label")
+        warningAccent.copy(alpha = transition.animateFloat(1f, 0.3f, infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "quota-alpha-$label").value)
+    } else baseColor
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(label, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, modifier = Modifier.weight(1f))
+            Text("$used / $allowed", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, color = if (ratio >= 0.7f) barColor else colors.onSurface)
+        }
+        LinearProgressIndicator(progress = { ratio.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)), color = barColor, trackColor = colors.surfaceVariant)
+        if (caption != null) Text(caption, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+    }
+}
 
 @Composable
 internal fun HistoryEntryCard(
@@ -322,1603 +1032,3 @@ internal fun HistoryEntryCard(
         }
     }
 }
-
-@Composable
-internal fun HelperSettingsScreen(
-    settings: HelperSettings,
-    onSettingsChange: (HelperSettings) -> Unit,
-    onOpenUpdates: () -> Unit,
-    logs: List<RequestLogEntry>,
-    onClearLogs: () -> Unit,
-    historyEntries: List<DownloadHistoryEntry>,
-    onOpenHistoryEntry: (DownloadHistoryEntry) -> Unit,
-    onShareHistoryEntry: (DownloadHistoryEntry) -> Unit,
-    onClearHistory: () -> Unit,
-    onBack: () -> Unit
-) {
-    val context = LocalContext.current
-    val swipeThresholdPx = with(LocalDensity.current) { 72.dp.toPx() }
-    var tab by rememberSaveable { mutableStateOf(SettingsTab.SYSTEM) }
-    var showSources by rememberSaveable { mutableStateOf(false) }
-    if (showSources) {
-        SourcesSettingsScreen(
-            settings = settings,
-            onSettingsChange = onSettingsChange,
-            onBack = { showSources = false }
-        )
-        return
-    }
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .padding(horizontal = MorpheDefaults.ContentPadding, vertical = MorpheDefaults.ContentPadding)
-            .pointerInput(swipeThresholdPx) {
-                var totalDrag = 0f
-                detectHorizontalDragGestures(
-                    onDragStart = { totalDrag = 0f },
-                    onHorizontalDrag = { _, dragAmount ->
-                        totalDrag += dragAmount
-                    },
-                    onDragEnd = {
-                        if (totalDrag >= swipeThresholdPx) onBack()
-                    },
-                    onDragCancel = { totalDrag = 0f }
-                )
-            },
-        verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
-    ) {
-        item {
-            Box(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.align(Alignment.Center),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Text(
-                        text = stringResource(R.string.settings),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        text = "Version ${BuildConfig.VERSION_NAME}",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-                HelperHeaderIconButton(
-                    icon = Icons.AutoMirrored.Outlined.ArrowBack,
-                    contentDescription = stringResource(R.string.back),
-                    onClick = onBack,
-                    modifier = Modifier.align(Alignment.CenterStart)
-                )
-            }
-        }
-
-        item {
-            SettingsTabRow(
-                selected = tab,
-                onSelect = { tab = it }
-            )
-        }
-
-        when (tab) {
-            SettingsTab.APPEARANCE -> item {
-                AppearanceTabContent(
-                    settings = settings,
-                    onSettingsChange = onSettingsChange
-                )
-            }
-
-            SettingsTab.SYSTEM -> item {
-                SystemTabContent(
-                    settings = settings,
-                    onSettingsChange = onSettingsChange,
-                    onOpenUpdates = onOpenUpdates,
-                    onOpenSources = { showSources = true }
-                )
-            }
-
-            SettingsTab.ADVANCED -> item {
-                AdvancedTabContent(
-                    settings = settings,
-                    onSettingsChange = onSettingsChange
-                )
-            }
-
-            SettingsTab.LOGS -> item {
-                LogsTabContent(
-                    settings = settings,
-                    onSettingsChange = onSettingsChange,
-                    logs = logs,
-                    onClearLogs = onClearLogs,
-                    historyEntries = historyEntries,
-                    onOpenHistoryEntry = onOpenHistoryEntry,
-                    onShareHistoryEntry = onShareHistoryEntry,
-                    onClearHistory = onClearHistory
-                )
-            }
-        }
-    }
-}
-
-@Composable
-internal fun SystemTabContent(
-    settings: HelperSettings,
-    onSettingsChange: (HelperSettings) -> Unit,
-    onOpenUpdates: () -> Unit,
-    onOpenSources: () -> Unit
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var cacheBytes by remember(context) { mutableStateOf(context.temporaryDownloadsSize()) }
-    var downloadsBytes by remember(context) { mutableStateOf(context.downloadsCopySize()) }
-    var externalBytes by remember(context) { mutableStateOf(context.externalDownloadsSize()) }
-    var customBytes by remember(context) { mutableStateOf(context.customDownloadsSize()) }
-    var locationDialog by remember { mutableStateOf(false) }
-    var retentionDialog by remember { mutableStateOf(false) }
-    var fastModePolicyDialog by remember { mutableStateOf(false) }
-    var pendingLocation by remember { mutableStateOf<DownloadLocation?>(null) }
-    val latestSettings by rememberUpdatedState(settings)
-
-    val locations = DownloadLocation.entries
-    val retentions = DownloadRetention.entries
-    val fastPolicies = FastModePolicy.entries
-
-    val folderPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
-        val data = result.data ?: return@rememberLauncherForActivityResult
-        val uri = data.data ?: return@rememberLauncherForActivityResult
-        val requestedFlags = data.flags and (
-                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                )
-        val flags = requestedFlags.takeIf { it != 0 }
-            ?: (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-        val persisted = runCatching {
-            context.contentResolver.takePersistableUriPermission(uri, flags)
-        }.isSuccess
-        val writable = runCatching {
-            DocumentFile.fromTreeUri(context, uri)?.canWrite() == true
-        }.getOrDefault(false)
-        if (!persisted || !writable) {
-            Toast.makeText(
-                context,
-                "Helper could not keep write access to that folder.",
-                Toast.LENGTH_LONG
-            ).show()
-            return@rememberLauncherForActivityResult
-        }
-        onSettingsChange(
-            latestSettings.copy(
-                downloadLocation = DownloadLocation.CUSTOM,
-                downloadCustomTreeUri = uri.toString()
-            )
-        )
-    }
-
-    val storagePermission = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        val target = pendingLocation
-        pendingLocation = null
-        if (granted && target != null) {
-            onSettingsChange(latestSettings.copy(downloadLocation = target))
-        } else if (!granted) {
-            Toast.makeText(
-                context,
-                "Storage permission is needed to save in Downloads on this Android version.",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-    }
-
-    val folderPickerIntent = remember {
-        Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
-            addFlags(
-                Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
-                        Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
-            )
-        }
-    }
-
-    fun chooseLocation(location: DownloadLocation) {
-        when {
-            location == DownloadLocation.CUSTOM -> {
-                runCatching { folderPicker.launch(folderPickerIntent) }
-                    .onFailure {
-                        Toast.makeText(
-                            context,
-                            "No system folder picker is available.",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-            }
-            location == DownloadLocation.DOWNLOADS &&
-                    Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
-                    context.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
-                    PackageManager.PERMISSION_GRANTED -> {
-                pendingLocation = location
-                storagePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            }
-            else -> onSettingsChange(latestSettings.copy(downloadLocation = location))
-        }
-    }
-
-    if (locationDialog) {
-        SettingsChoiceDialog(
-            title = stringResource(R.string.save_downloads),
-            choices = locations.map { SettingsChoice(it.icon(), it.title, it.description) },
-            selectedIndex = locations.indexOf(latestSettings.downloadLocation),
-            onSelect = { index ->
-                locationDialog = false
-                chooseLocation(locations[index])
-            },
-            onDismiss = { locationDialog = false }
-        )
-    }
-
-    if (retentionDialog) {
-        SettingsChoiceDialog(
-            title = "Keep downloads",
-            choices = retentions.map { SettingsChoice(it.icon(), it.title, it.description) },
-            selectedIndex = retentions.indexOf(latestSettings.downloadRetention),
-            onSelect = { index ->
-                onSettingsChange(latestSettings.copy(downloadRetention = retentions[index]))
-                retentionDialog = false
-            },
-            onDismiss = { retentionDialog = false }
-        )
-    }
-
-    if (fastModePolicyDialog) {
-        SettingsChoiceDialog(
-            title = stringResource(R.string.which_version_to_fetch),
-            choices = fastPolicies.map { policy ->
-                SettingsChoice(
-                    icon = when (policy) {
-                        FastModePolicy.REQUESTED -> Icons.Outlined.Tune
-                        FastModePolicy.LATEST -> Icons.Outlined.TrendingUp
-                        FastModePolicy.ALWAYS_ASK -> Icons.Outlined.HelpOutline
-                    },
-                    title = policy.title,
-                    description = policy.description
-                )
-            },
-            selectedIndex = fastPolicies.indexOf(settings.fastModePolicy),
-            onSelect = { index ->
-                onSettingsChange(settings.copy(fastModePolicy = fastPolicies[index]))
-                fastModePolicyDialog = false
-            },
-            onDismiss = { fastModePolicyDialog = false }
-        )
-    }
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        SettingsSection(title = "Downloads & storage", icon = Icons.Outlined.SdStorage) {
-            SettingsGroup {
-                SettingsItem(
-                    icon = settings.downloadLocation.icon(),
-                    title = "Save downloads",
-                    subtitle = settings.downloadLocation.description,
-                    onClick = { locationDialog = true },
-                    trailingContent = {
-                        Text(
-                            text = downloadLocationLabel(context, settings),
-                            color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                )
-
-                SettingsItem(
-                    icon = Icons.Outlined.CleaningServices,
-                    title = "Storage used",
-                    subtitle = "Cache, External, Downloads, Custom",
-                    onClick = { scope.launch(Dispatchers.IO) { context.clearAllDownloads(); val c = context.temporaryDownloadsSize(); val e = context.externalDownloadsSize(); val d = context.downloadsCopySize(); val u = context.customDownloadsSize(); withContext(Dispatchers.Main) { cacheBytes = c; externalBytes = e; downloadsBytes = d; customBytes = u } } },
-                    trailingContent = {
-                        Text(
-                            text = "Clear",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                )
-
-                SettingsSwitchItem(
-                    icon = Icons.Outlined.PhoneAndroid,
-                    title = "Prefer density-specific APKs",
-                    subtitle = "Use APKMirror's variant for this screen's density instead of nodpi.",
-                    checked = settings.preferDensitySpecificVariants,
-                    onToggle = {
-                        onSettingsChange(settings.copy(preferDensitySpecificVariants = !settings.preferDensitySpecificVariants))
-                    }
-                )
-            }
-        }
-
-        SettingsSection(title = "Sources", icon = Icons.Outlined.Dns) {
-            SettingsGroup {
-                SettingsItem(
-                    icon = Icons.Outlined.Dns,
-                    title = "Manage sources",
-                    subtitle = "Enable, disable and reorder providers",
-                    onClick = onOpenSources
-                )
-            }
-        }
-
-        SettingsSection(title = "Fast Mode", icon = Icons.Outlined.Bolt) {
-            SettingsGroup {
-                SettingsSwitchItem(
-                    icon = Icons.Outlined.Bolt,
-                    title = "Enable Fast Mode",
-                    subtitle = "Auto-fetch a version across sources and return it to Morphe automatically.",
-                    checked = settings.fastMode,
-                    onToggle = { onSettingsChange(settings.copy(fastMode = !settings.fastMode)) }
-                )
-                if (settings.fastMode) {
-                    SettingsItem(
-                        icon = Icons.Outlined.Tune,
-                        title = "Which version to fetch",
-                        onClick = { fastModePolicyDialog = true },
-                        trailingContent = {
-                            Text(
-                                text = settings.fastModePolicy.title,
-                                color = MaterialTheme.colorScheme.primary,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-internal fun SourcesSettingsScreen(
-    settings: HelperSettings,
-    onSettingsChange: (HelperSettings) -> Unit,
-    onBack: () -> Unit
-) {
-    BackHandler(onBack = onBack)
-    var sourceDialog by remember { mutableStateOf(false) }
-    val latestSettings by rememberUpdatedState(settings)
-    val orderedSources = settings.orderedSources
-
-    fun moveSourceOrder(source: DownloadSource, delta: Int) {
-        val order = latestSettings.orderedSources.toMutableList()
-        val index = order.indexOf(source)
-        val target = index + delta
-        if (index < 0 || target !in order.indices) return
-        order.removeAt(index)
-        order.add(target, source)
-        onSettingsChange(latestSettings.copy(sourceOrder = order))
-    }
-
-    if (sourceDialog) {
-        val choices = buildList {
-            add(
-                SettingsChoice(
-                    Icons.Outlined.AutoAwesome,
-                    "Automatic",
-                    "Use the first enabled source in the custom order"
-                )
-            )
-            addAll(orderedSources.map {
-                SettingsChoice(
-                    icon = null,
-                    title = it.label,
-                    description = "Prefer this source when it has the file",
-                    source = it
-                )
-            })
-        }
-        SettingsChoiceDialog(
-            title = stringResource(R.string.default_source),
-            choices = choices,
-            selectedIndex = settings.preferredSource
-                ?.let { source -> orderedSources.indexOf(source) + 1 }
-                ?.takeIf { it > 0 }
-                ?: 0,
-            onSelect = { index ->
-                onSettingsChange(
-                    settings.copy(
-                        preferredSource = if (index == 0) null else orderedSources[index - 1]
-                    )
-                )
-                sourceDialog = false
-            },
-            onDismiss = { sourceDialog = false }
-        )
-    }
-
-    // FIXED: Use MorpheSubpageScaffold for the solid background, sticky header, and correct bottom padding
-    MorpheSubpageScaffold(
-        title = "Sources",
-        onBack = onBack
-    ) {
-        SettingsSection(title = stringResource(R.string.default_source), icon = Icons.Outlined.Star) {
-            SettingsGroup {
-                SettingsItem(
-                    icon = Icons.Outlined.Star,
-                    title = stringResource(R.string.default_source),
-                    subtitle = "Used first when a request is resolved",
-                    onClick = { sourceDialog = true },
-                    trailingContent = {
-                        Text(
-                            text = settings.preferredSource?.label ?: "Automatic",
-                            color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                )
-            }
-        }
-
-        SettingsSection(title = "Providers", icon = Icons.Outlined.Dns) {
-            SettingsGroup {
-                orderedSources.forEachIndexed { index, source ->
-                    SettingsSwitchItem(
-                        leadingContent = {
-                            SourceAvatar(source = source, size = MorpheDefaults.IconSize)
-                        },
-                        title = source.label,
-                        checked = source !in settings.disabledSources,
-                        onToggle = {
-                            val enabled = source !in settings.disabledSources
-                            onSettingsChange(
-                                settings.copy(
-                                    disabledSources = if (enabled) {
-                                        settings.disabledSources + source
-                                    } else {
-                                        settings.disabledSources - source
-                                    }
-                                )
-                            )
-                        }
-                    )
-                }
-            }
-        }
-
-        SettingsSection(title = "Priority", icon = Icons.Outlined.SortByAlpha) {
-            SettingsGroup {
-                orderedSources.forEachIndexed { index, source ->
-                    SettingsItem(
-                        leadingContent = {
-                            SourceAvatar(source = source, size = MorpheDefaults.IconSize)
-                        },
-                        title = source.label,
-                        subtitle = when {
-                            source in settings.disabledSources -> "Disabled"
-                            index == 0 -> "Tried first"
-                            else -> null
-                        },
-                        onClick = { },
-                        trailingContent = {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (index > 0) {
-                                    HelperIconButton(
-                                        icon = Icons.Outlined.ExpandLess,
-                                        contentDescription = "Move ${source.label} up",
-                                        onClick = { moveSourceOrder(source, -1) }
-                                    )
-                                } else {
-                                    Spacer(Modifier.size(MorpheDefaults.GlassButtonHeight))
-                                }
-                                if (index < orderedSources.lastIndex) {
-                                    HelperIconButton(
-                                        icon = Icons.Outlined.ExpandMore,
-                                        contentDescription = "Move ${source.label} down",
-                                        onClick = { moveSourceOrder(source, 1) }
-                                    )
-                                } else {
-                                    Spacer(Modifier.size(MorpheDefaults.GlassButtonHeight))
-                                }
-                            }
-                        }
-                    )
-                }
-                SettingsItem(
-                    icon = Icons.Outlined.Refresh,
-                    title = "Reset source order",
-                    subtitle = "Restore the default priority.",
-                    onClick = {
-                        onSettingsChange(
-                            latestSettings.copy(sourceOrder = DEFAULT_SOURCE_ORDER)
-                        )
-                    },
-                    trailingContent = {
-                        Text(
-                            text = "Reset",
-                            color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-internal fun AppearanceTabContent(
-    settings: HelperSettings,
-    onSettingsChange: (HelperSettings) -> Unit
-) {
-    var showAccentPicker by rememberSaveable { mutableStateOf(false) }
-    var confirmHideIcon by remember { mutableStateOf(false) }
-    val context = LocalContext.current
-    val supportsDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val styles = ThemeStyle.entries.filter {
-        it != ThemeStyle.MATERIAL_YOU || supportsDynamicColor
-    }
-    val accent = settings.customAccentColor.toAccentColorOrNull()
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingMedium)
-    ) {
-        SettingsSection(title = stringResource(R.string.theme), icon = Icons.Outlined.Palette) {
-            SettingsGroup {
-                ThemeMode.entries.forEachIndexed { index, mode ->
-                    SettingsItem(
-                        icon = mode.icon(),
-                        title = mode.title,
-                        subtitle = mode.description,
-                        onClick = { onSettingsChange(settings.copy(themeMode = mode)) },
-                        trailingContent = { RadioDot(selected = settings.themeMode == mode) }
-                    )
-                }
-            }
-        }
-
-        SettingsSection(title = "App icon", icon = Icons.Outlined.Smartphone) {
-            SettingsGroup {
-                SettingsSwitchItem(
-                    icon = Icons.Outlined.Smartphone,
-                    title = "Show app icon",
-                    subtitle = "Keep the app visible in your launcher. When hidden, open it " +
-                            "from Android Settings or when Morphe starts a download.",
-                    checked = settings.showLauncherIcon,
-                    onToggle = {
-                        if (settings.showLauncherIcon) {
-                            confirmHideIcon = true
-                        } else {
-                            onSettingsChange(settings.copy(showLauncherIcon = true))
-                            Toast.makeText(context, "App icon shown.", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                )
-            }
-        }
-
-        SettingsSection(title = stringResource(R.string.colour_style), icon = Icons.Outlined.ColorLens) {
-            SettingsGroup {
-                styles.forEachIndexed { index, style ->
-                    SettingsItem(
-                        icon = style.icon(),
-                        title = style.title,
-                        subtitle = style.description,
-                        onClick = { onSettingsChange(settings.copy(themeStyle = style)) },
-                        trailingContent = { RadioDot(selected = settings.themeStyle == style) }
-                    )
-                }
-            }
-        }
-
-        if (settings.themeMode != ThemeMode.LIGHT) {
-            SettingsSection(title = stringResource(R.string.dark_theme), icon = Icons.Outlined.DarkMode) {
-                SettingsGroup {
-                    SettingsSwitchItem(
-                        icon = Icons.Outlined.Contrast,
-                        title = stringResource(R.string.pure_black),
-                        subtitle = "Paint backgrounds fully black instead of the theme's near-black. " +
-                                "Saves power on OLED screens.",
-                        checked = settings.pureBlackTheme,
-                        onToggle = {
-                            onSettingsChange(settings.copy(pureBlackTheme = !settings.pureBlackTheme))
-                        }
-                    )
-                }
-            }
-        }
-
-        if (settings.themeStyle == ThemeStyle.MORPHE) {
-            SettingsSection(title = stringResource(R.string.accent_colour), icon = Icons.Outlined.Colorize) {
-                SettingsGroup {
-                    AccentGridSection {
-                        AccentSwatchGrid(
-                            colors = MorpheAccentPresets,
-                            selected = accent,
-                            onSelect = { color ->
-                                onSettingsChange(settings.copy(customAccentColor = color.toHexString()))
-                            },
-                            onClear = { onSettingsChange(settings.copy(customAccentColor = "")) },
-                            onCustomClick = { showAccentPicker = true }
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    if (confirmHideIcon) {
-        MorpheDialog(
-            title = "Hide app icon?",
-            onDismiss = { confirmHideIcon = false },
-            actions = {
-                HelperOutlinedButton(
-                    text = "Cancel",
-                    onClick = { confirmHideIcon = false },
-                    modifier = Modifier.weight(1f)
-                )
-                HelperButton(
-                    text = "Hide icon",
-                    onClick = {
-                        confirmHideIcon = false
-                        onSettingsChange(settings.copy(showLauncherIcon = false))
-                        Toast.makeText(context, "App icon hidden.", Toast.LENGTH_SHORT).show()
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        ) {
-            Text(
-                text = "The app will disappear from your launcher. You can still open it " +
-                        "from Android Settings > Apps > Morphe Helper > Open, or when Morphe " +
-                        "starts a download.",
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
-    }
-
-    if (showAccentPicker) {
-        MorpheAccentPickerDialog(
-            currentColorHex = settings.customAccentColor,
-            onColorSelected = { color ->
-                onSettingsChange(settings.copy(customAccentColor = color.toHexString()))
-                showAccentPicker = false
-            },
-            onDismiss = { showAccentPicker = false }
-        )
-    }
-}
-
-internal fun ThemeStyle.icon(): ImageVector = when (this) {
-    ThemeStyle.MORPHE -> Icons.Outlined.Palette
-    ThemeStyle.MATERIAL_YOU -> Icons.Outlined.AutoAwesome
-    ThemeStyle.MONOCHROME -> Icons.Outlined.Contrast
-}
-
-@Composable
-internal fun AdvancedTabContent(
-    settings: HelperSettings,
-    onSettingsChange: (HelperSettings) -> Unit
-) {
-    var policyDialog by remember { mutableStateOf(false) }
-    var connectionCountDialog by remember { mutableStateOf(false) }
-    val policies = NetworkPolicy.entries
-    val connectionCounts = DownloadConnectionCount.entries
-
-    if (policyDialog) {
-        SettingsChoiceDialog(
-            title = stringResource(R.string.connection),
-            choices = policies.map { SettingsChoice(it.icon(), it.title, it.description) },
-            selectedIndex = policies.indexOf(settings.networkPolicy),
-            onSelect = { index ->
-                onSettingsChange(settings.copy(networkPolicy = policies[index]))
-                policyDialog = false
-            },
-            onDismiss = { policyDialog = false }
-        )
-    }
-
-    if (connectionCountDialog) {
-        SettingsChoiceDialog(
-            title = "Download connections",
-            choices = connectionCounts.map {
-                SettingsChoice(
-                    icon = Icons.Outlined.Bolt,
-                    title = it.title,
-                    description = it.description
-                )
-            },
-            selectedIndex = connectionCounts.indexOf(settings.downloadConnections),
-            onSelect = { index ->
-                onSettingsChange(settings.copy(downloadConnections = connectionCounts[index]))
-                connectionCountDialog = false
-            },
-            onDismiss = { connectionCountDialog = false }
-        )
-    }
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingMedium)
-    ) {
-        SettingsSection(title = stringResource(R.string.connection), icon = Icons.Outlined.NetworkCheck) {
-            SettingsGroup {
-                SettingsItem(
-                    icon = settings.networkPolicy.icon(),
-                    title = stringResource(R.string.network_policy),
-                    subtitle = settings.networkPolicy.description,
-                    onClick = { policyDialog = true },
-                    trailingContent = {
-                        Text(
-                            text = settings.networkPolicy.title,
-                            color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                )
-                SettingsItem(
-                    icon = Icons.Outlined.Bolt,
-                    title = "Download connections",
-                    subtitle = "Maximum parallel connections. Large files are split into 4 MiB chunks, " +
-                            "and file size can reduce the count.",
-                    onClick = { connectionCountDialog = true },
-                    trailingContent = {
-                        Text(
-                            text = settings.downloadConnections.title,
-                            color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                )
-                SettingsSwitchItem(
-                    icon = Icons.Outlined.Dns,
-                    title = stringResource(R.string.adguard_dns),
-                    subtitle = "Blocks ads and trackers on download pages and in the captcha browser. " +
-                            "Falls back to the system resolver whenever it fails.",
-                    checked = settings.adGuardDns,
-                    onToggle = {
-                        onSettingsChange(settings.copy(adGuardDns = !settings.adGuardDns))
-                    }
-                )
-                SettingsSwitchItem(
-                    icon = Icons.Outlined.Explore,
-                    title = "Use Morphe's resolver",
-                    subtitle = "Ask Morphe where its own download dialog would go and open that " +
-                            "page directly, instead of searching the site. Faster; turn it off to " +
-                            "always fetch through this app's own source pages.",
-                    checked = settings.useMorpheResolver,
-                    onToggle = {
-                        onSettingsChange(settings.copy(useMorpheResolver = !settings.useMorpheResolver))
-                    }
-                )
-            }
-        }
-
-        SettingsSection(title = stringResource(R.string.virustotal), icon = Icons.Outlined.Shield) {
-            SettingsGroup {
-                SettingsSwitchItem(
-                    icon = Icons.Outlined.Shield,
-                    title = stringResource(R.string.virustotal_scanning),
-                    subtitle = "Scan downloaded files with VirusTotal before returning them to Morphe.",
-                    checked = settings.virusTotalEnabled,
-                    onToggle = {
-                        onSettingsChange(settings.copy(virusTotalEnabled = !settings.virusTotalEnabled))
-                    }
-                )
-                if (settings.virusTotalEnabled) {
-                    VirusTotalScanMode.entries.forEach { mode ->
-                        SettingsItem(
-                            icon = when (mode) {
-                                VirusTotalScanMode.NEVER -> Icons.Outlined.Block
-                                VirusTotalScanMode.ASK -> Icons.Outlined.HelpOutline
-                                VirusTotalScanMode.ALWAYS -> Icons.Outlined.CheckCircle
-                            },
-                            title = mode.title,
-                            subtitle = mode.description,
-                            onClick = { onSettingsChange(settings.copy(virusTotalScanMode = mode)) },
-                            trailingContent = { RadioDot(selected = settings.virusTotalScanMode == mode) }
-                        )
-                    }
-                    ApiKeyEditor(
-                        apiKey = settings.virusTotalApiKey,
-                        onApiKeyChange = { onSettingsChange(settings.copy(virusTotalApiKey = it)) }
-                    )
-                    if (settings.virusTotalScanMode != VirusTotalScanMode.NEVER) {
-                        SettingsSwitchItem(
-                            icon = Icons.Outlined.Verified,
-                            title = "Proceed automatically when clean",
-                            subtitle = "Hand off without showing the result when VirusTotal finds " +
-                                    "nothing and every inner APK was scanned.",
-                            checked = settings.virusTotalAutoProceed,
-                            onToggle = {
-                                onSettingsChange(
-                                    settings.copy(virusTotalAutoProceed = !settings.virusTotalAutoProceed)
-                                )
-                            }
-                        )
-                    }
-                    if (settings.virusTotalApiKey.isNotBlank()) {
-                        Box(modifier = Modifier.padding(MorpheDefaults.ContentPadding)) {
-                            VirusTotalQuotaCard(apiKey = settings.virusTotalApiKey)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-internal enum class LogsSubTab(
-    val label: String,
-    val icon: ImageVector
-) {
-    HISTORY("History", Icons.Outlined.History),
-    LOGGING("Logging", Icons.Outlined.BugReport),
-    REQUEST_LOGS("Request logs", Icons.AutoMirrored.Outlined.ViewList)
-}
-
-@Composable
-internal fun LogsTabContent(
-    settings: HelperSettings,
-    onSettingsChange: (HelperSettings) -> Unit,
-    logs: List<RequestLogEntry>,
-    onClearLogs: () -> Unit,
-    historyEntries: List<DownloadHistoryEntry>,
-    onOpenHistoryEntry: (DownloadHistoryEntry) -> Unit,
-    onShareHistoryEntry: (DownloadHistoryEntry) -> Unit,
-    onClearHistory: () -> Unit
-) {
-    var subTab by rememberSaveable { mutableStateOf(LogsSubTab.HISTORY) }
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingMedium)
-    ) {
-        MorpheSelectorRow(
-            options = LogsSubTab.entries.map {
-                MorpheSelectorOption(label = it.label, icon = it.icon)
-            },
-            selectedIndex = LogsSubTab.entries.indexOf(subTab),
-            onSelect = { subTab = LogsSubTab.entries[it] },
-            labelStyle = MaterialTheme.typography.labelLarge
-        )
-
-        when (subTab) {
-            LogsSubTab.HISTORY -> DownloadHistorySection(
-                entries = historyEntries,
-                onClear = onClearHistory,
-                onOpen = onOpenHistoryEntry,
-                onShare = onShareHistoryEntry
-            )
-
-            LogsSubTab.LOGGING -> SettingsSection(
-                title = stringResource(R.string.logging),
-                icon = Icons.Outlined.BugReport
-            ) {
-                SettingsGroup {
-                    SettingsSwitchItem(
-                        icon = Icons.Outlined.BugReport,
-                        title = stringResource(R.string.log_to_logcat),
-                        subtitle = "Write request, result, and source HTTP details to the system log (adb logcat) for debugging.",
-                        checked = settings.logcatLogging,
-                        onToggle = {
-                            onSettingsChange(settings.copy(logcatLogging = !settings.logcatLogging))
-                        }
-                    )
-                }
-            }
-
-            LogsSubTab.REQUEST_LOGS -> RequestLogsCard(
-                logs = logs,
-                onClearLogs = onClearLogs
-            )
-        }
-    }
-}
-
-@Composable
-internal fun ApiKeyEditor(
-    apiKey: String,
-    onApiKeyChange: (String) -> Unit
-) {
-    val context = LocalContext.current
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-                horizontal = MorpheDefaults.ContentPadding,
-                vertical = MorpheDefaults.ContentPaddingSmall + 4.dp
-            ),
-        verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingSmall)
-    ) {
-        Text(
-            text = stringResource(R.string.api_key),
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        OutlinedTextField(
-            value = apiKey,
-            onValueChange = onApiKeyChange,
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            textStyle = MaterialTheme.typography.bodyMedium.copy(
-                color = MaterialTheme.colorScheme.onSurface
-            ),
-            placeholder = {
-                Text(
-                    stringResource(R.string.enter_api_key),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                )
-            }
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(MorpheDefaults.CompactCornerRadius))
-                .clickable {
-                    val open = Intent(
-                        Intent.ACTION_VIEW,
-                        Uri.parse("https://docs.virustotal.com/docs/please-give-me-an-api-key")
-                    ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-                    runCatching { context.startActivity(open) }
-                        .onFailure {
-                            Toast.makeText(
-                                context,
-                                "No browser available",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                }
-                .padding(vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.how_to_get_a_free_api),
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.weight(1f)
-            )
-            Icon(
-                imageVector = Icons.Outlined.OpenInNew,
-                contentDescription = stringResource(R.string.open_virustotal_api_key_guide),
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(16.dp)
-            )
-        }
-    }
-}
-
-internal data class SettingsChoice(
-    val icon: ImageVector?,
-    val title: String,
-    val description: String,
-    val source: DownloadSource? = null
-)
-
-@Composable
-internal fun SettingsChoiceDialog(
-    title: String,
-    choices: List<SettingsChoice>,
-    selectedIndex: Int,
-    onSelect: (Int) -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.background,
-        title = {
-            Text(text = title, fontWeight = FontWeight.Bold)
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 420.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingSmall)
-            ) {
-                choices.forEachIndexed { index, choice ->
-                    SettingsOptionCard(
-                        icon = choice.icon,
-                        title = choice.title,
-                        description = choice.description,
-                        selected = index == selectedIndex,
-                        source = choice.source,
-                        onClick = { onSelect(index) }
-                    )
-                }
-            }
-        },
-        confirmButton = {}
-    )
-}
-
-internal fun DownloadLocation.icon(): ImageVector = when (this) {
-    DownloadLocation.TEMPORARY -> Icons.Outlined.SdStorage
-    DownloadLocation.EXTERNAL -> Icons.Outlined.PhoneAndroid
-    DownloadLocation.DOWNLOADS -> Icons.Outlined.SaveAlt
-    DownloadLocation.CUSTOM -> Icons.Outlined.FolderOpen
-}
-
-internal fun DownloadRetention.icon(): ImageVector = when (this) {
-    DownloadRetention.KEEP -> Icons.Outlined.SaveAlt
-    DownloadRetention.AFTER_HANDOFF -> Icons.Outlined.DeleteOutline
-    DownloadRetention.HOUR_1,
-    DownloadRetention.HOUR_24,
-    DownloadRetention.DAY_7 -> Icons.Outlined.CleaningServices
-}
-
-internal fun NetworkPolicy.icon(): ImageVector = when (this) {
-    NetworkPolicy.WIFI_ONLY -> Icons.Outlined.Wifi
-    NetworkPolicy.MOBILE_DATA_ONLY -> Icons.Outlined.SignalCellularAlt
-    NetworkPolicy.WIFI_AND_MOBILE -> Icons.Outlined.NetworkCheck
-}
-
-internal fun ThemeMode.icon(): ImageVector = when (this) {
-    ThemeMode.SYSTEM -> Icons.Outlined.Smartphone
-    ThemeMode.DARK -> Icons.Outlined.DarkMode
-    ThemeMode.LIGHT -> Icons.Outlined.LightMode
-}
-
-@Composable
-internal fun SettingsRowSurface(
-    modifier: Modifier = Modifier,
-    selected: Boolean = false,
-    enabled: Boolean = true,
-    onClick: (() -> Unit)? = null,
-    content: @Composable () -> Unit
-) {
-    val colors = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(MorpheDefaults.SettingsCornerRadius)
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .then(
-                if (onClick != null) {
-                    Modifier.clickable(enabled = enabled, onClick = onClick)
-                } else {
-                    Modifier
-                }
-            ),
-        shape = shape,
-        color = if (selected) colors.surfaceVariant else colors.surfaceColorAtElevation(3.dp),
-        contentColor = colors.onSurface,
-        tonalElevation = if (selected) 0.dp else 1.dp,
-        border = if (selected) {
-            BorderStroke(1.5.dp, colors.onSurface.copy(alpha = 0.5f))
-        } else {
-            null
-        }
-    ) {
-        content()
-    }
-}
-
-@Composable
-internal fun SettingsOptionCard(
-    icon: ImageVector?,
-    title: String,
-    description: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    enabled: Boolean = true,
-    source: DownloadSource? = null
-) {
-    val colors = MaterialTheme.colorScheme
-    SettingsRowSurface(selected = selected, enabled = enabled, onClick = onClick) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(MorpheDefaults.ContentPadding),
-            horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (source != null) {
-                SourceAvatar(source = source, size = MorpheDefaults.IconSize)
-            } else if (icon != null) {
-                ThemedIcon(
-                    icon = icon,
-                    size = MorpheDefaults.IconSize,
-                    tint = if (selected) colors.primary else colors.onSurfaceVariant
-                )
-            }
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = colors.onSurface
-                )
-                Text(
-                    description,
-                    color = colors.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-            RadioDot(selected = selected)
-        }
-    }
-}
-
-@Composable
-internal fun SettingsDropdownCard(
-    icon: ImageVector,
-    title: String,
-    value: String,
-    onClick: () -> Unit
-) {
-    val colors = MaterialTheme.colorScheme
-    SettingsRowSurface(onClick = onClick) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(MorpheDefaults.ContentPadding),
-            horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            ThemedIcon(icon = icon, size = MorpheDefaults.IconSize)
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = colors.onSurface
-                )
-                Text(
-                    value,
-                    color = colors.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-            Icon(
-                imageVector = Icons.Outlined.ArrowDropDown,
-                contentDescription = stringResource(R.string.change_default_source),
-                tint = colors.primary,
-                modifier = Modifier.size(MorpheDefaults.IconSize)
-            )
-        }
-    }
-}
-
-@Composable
-internal fun SettingsStorageCard(
-    cacheBytes: Long,
-    downloadsBytes: Long,
-    onClear: () -> Unit
-) {
-    SettingsRowSurface {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(MorpheDefaults.ContentPadding),
-            verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingSmall)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.DeleteOutline,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(MorpheDefaults.IconSize)
-                )
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Text(
-                        stringResource(R.string.clear_storage_cache_downloads),
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = stringResource(R.string.removes_both_the_cache_copies),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-                HelperOutlinedButton(
-                    text = "Clear",
-                    onClick = onClear,
-                    modifier = Modifier.widthIn(min = 96.dp)
-                )
-            }
-            MorpheDivider(fullWidth = true)
-            StorageInfoLine(
-                icon = Icons.Outlined.SdStorage,
-                label = stringResource(R.string.helper_cache),
-                sizeBytes = cacheBytes
-            )
-            StorageInfoLine(
-                icon = Icons.Outlined.FolderOpen,
-                label = stringResource(R.string.downloads_copy),
-                sizeBytes = downloadsBytes
-            )
-        }
-    }
-}
-
-@Composable
-internal fun StorageInfoLine(
-    icon: ImageVector,
-    label: String,
-    sizeBytes: Long
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingSmall),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        ThemedIcon(
-            icon = icon,
-            size = MorpheDefaults.IconSizeSmall,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = label,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.weight(1f)
-        )
-        Text(
-            text = sizeBytes.formatBytes(),
-            fontWeight = FontWeight.Bold,
-            color = if (sizeBytes > 0L) {
-                MaterialTheme.colorScheme.onSurface
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-            },
-            style = MaterialTheme.typography.bodyMedium
-        )
-    }
-}
-
-internal fun Long.formatBytes(): String {
-    if (this <= 0L) return "0 B"
-    val units = listOf("B", "KB", "MB", "GB")
-    var value = toDouble()
-    var unit = 0
-    while (value >= 1024.0 && unit < units.lastIndex) {
-        value /= 1024.0
-        unit++
-    }
-    return if (unit == 0) "${toLong()} B" else String.format(Locale.US, "%.1f %s", value, units[unit])
-}
-
-@Composable
-internal fun SettingSwitchRow(
-    icon: ImageVector,
-    title: String,
-    description: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    val colors = MaterialTheme.colorScheme
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(MorpheDefaults.SettingsCornerRadius))
-            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
-        shape = RoundedCornerShape(MorpheDefaults.SettingsCornerRadius),
-        color = colors.surfaceColorAtElevation(3.dp),
-        contentColor = colors.onSurface,
-        tonalElevation = 1.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(MorpheDefaults.ContentPadding),
-            horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            ThemedIcon(icon = icon, size = MorpheDefaults.IconSize)
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = colors.onSurface
-                )
-                Text(
-                    description,
-                    color = colors.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-            MorpheToggleSwitch(checked = checked, onCheckedChange = null)
-        }
-    }
-}
-
-@Composable
-internal fun SettingTextFieldRow(
-    icon: ImageVector,
-    title: String,
-    description: String,
-    value: String,
-    onValueChange: (String) -> Unit
-) {
-    val colors = MaterialTheme.colorScheme
-    SettingsRowSurface {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(MorpheDefaults.ContentPadding),
-            verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingSmall)
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                ThemedIcon(icon = icon, size = MorpheDefaults.IconSize)
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        title,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
-                        color = colors.onSurface
-                    )
-                    Text(
-                        description,
-                        color = colors.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-            }
-            OutlinedTextField(
-                value = value,
-                onValueChange = onValueChange,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(
-                    color = colors.onSurface
-                ),
-                placeholder = {
-                    Text(stringResource(R.string.enter_api_key), color = colors.onSurfaceVariant.copy(alpha = 0.5f))
-                }
-            )
-        }
-    }
-}
-
-@Composable
-internal fun VirusTotalQuotaCard(apiKey: String) {
-    if (apiKey.isBlank()) return
-    val colors = MaterialTheme.colorScheme
-    var quota by remember { mutableStateOf<VirusTotalScanner.QuotaUsage?>(null) }
-    var loading by remember { mutableStateOf(false) }
-    var failed by remember { mutableStateOf(false) }
-    var minuteUsed by remember { mutableIntStateOf(0) }
-    var rollingUsed by remember { mutableIntStateOf(0) }
-    var secsToRollover by remember { mutableIntStateOf(60) }
-    val scope = rememberCoroutineScope()
-    val load: () -> Unit = {
-        scope.launch {
-            loading = true
-            failed = false
-            quota = withContext(Dispatchers.IO) { VirusTotalScanner.fetchQuotaUsage(apiKey) }
-            if (quota == null) failed = true
-            loading = false
-        }
-    }
-    LaunchedEffect(apiKey) {
-        load()
-        while (true) {
-            minuteUsed = VirusTotalScanner.rateLimiter.callsInCurrentMinute()
-            rollingUsed = VirusTotalScanner.rateLimiter.callsInLastMinute()
-            secsToRollover =
-                ((60_000L - System.currentTimeMillis() % 60_000L + 999L) / 1000L).toInt()
-            delay(1000)
-        }
-    }
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(MorpheDefaults.CardCornerRadius),
-        color = sourceCardFill(),
-        border = BorderStroke(1.dp, sourceCardBorder())
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Shield,
-                    contentDescription = null,
-                    tint = colors.onSurfaceVariant,
-                    modifier = Modifier.size(22.dp)
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        stringResource(R.string.virustotal_quota),
-                        fontWeight = FontWeight.Bold,
-                        color = colors.onSurface
-                    )
-                }
-                if (loading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Outlined.Refresh,
-                        contentDescription = stringResource(R.string.refresh_quota),
-                        tint = colors.primary,
-                        modifier = Modifier
-                            .size(20.dp)
-                            .clip(MorpheDefaults.PillShape)
-                            .clickable { load() }
-                            .padding(2.dp)
-                    )
-                }
-            }
-            QuotaBar(
-                "Per minute",
-                minuteUsed,
-                VirusTotalScanner.MINUTE_LOOKUP_LIMIT,
-                flash = maxOf(minuteUsed, rollingUsed) >= VirusTotalScanner.MINUTE_LOOKUP_LIMIT - 1,
-                caption = "rolling 60s: $rollingUsed / ${VirusTotalScanner.MINUTE_LOOKUP_LIMIT} · resets in ${secsToRollover}s"
-            )
-            val current = quota
-            when {
-                current != null -> {
-                    QuotaBar("Per hour", current.hourlyUsed, current.hourlyAllowed)
-                    QuotaBar("Per day", current.dailyUsed, current.dailyAllowed)
-                    QuotaBar("Per month", current.monthlyUsed, current.monthlyAllowed)
-                }
-                failed -> Text(
-                    text = stringResource(R.string.couldn_t_load_quota_check_your),
-                    color = colors.error,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        }
-    }
-}
-
-@Composable
-internal fun QuotaBar(
-    label: String,
-    used: Int,
-    allowed: Int,
-    flash: Boolean = false,
-    caption: String? = null
-) {
-    val colors = MaterialTheme.colorScheme
-    val ratio = if (allowed > 0) used.toFloat() / allowed else 0f
-    val warningAccent = SemanticTone.Warning.accent
-    val baseColor = when {
-        ratio >= 0.9f -> colors.error
-        ratio >= 0.7f -> warningAccent
-        else -> colors.primary
-    }
-    val barColor = if (flash) {
-        val transition = rememberInfiniteTransition(label = "quota-flash-$label")
-        warningAccent.copy(
-            alpha = transition.animateFloat(
-                initialValue = 1f,
-                targetValue = 0.3f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(600),
-                    repeatMode = RepeatMode.Reverse
-                ),
-                label = "quota-alpha-$label"
-            ).value
-        )
-    } else {
-        baseColor
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.onSurfaceVariant,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = "$used / $allowed",
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Medium,
-                color = if (ratio >= 0.7f) barColor else colors.onSurface
-            )
-        }
-        LinearProgressIndicator(
-            progress = { ratio.coerceIn(0f, 1f) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(4.dp)
-                .clip(RoundedCornerShape(2.dp)),
-            color = barColor,
-            trackColor = colors.surfaceVariant
-        )
-        if (caption != null) {
-            Text(
-                text = caption,
-                style = MaterialTheme.typography.labelSmall,
-                color = colors.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Composable
-internal fun SourceToggleRow(
-    source: DownloadSource,
-    enabled: Boolean,
-    onToggle: (Boolean) -> Unit
-) {
-    val colors = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(MorpheDefaults.SettingsCornerRadius)
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .toggleable(value = enabled, role = Role.Switch, onValueChange = onToggle),
-        shape = shape,
-        color = colors.surfaceColorAtElevation(3.dp),
-        contentColor = colors.onSurface,
-        tonalElevation = 1.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = MorpheDefaults.ContentPadding, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            SourceAvatar(source = source, size = 32.dp)
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(1.dp)
-            ) {
-                Text(
-                    text = source.label,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = if (enabled) colors.onSurface else colors.onSurfaceVariant.copy(alpha = 0.7f)
-                )
-                Text(
-                    text = if (enabled) "Enabled" else "Disabled",
-                    color = colors.onSurfaceVariant.copy(alpha = 0.8f),
-                    style = MaterialTheme.typography.labelSmall
-                )
-            }
-            MorpheToggleSwitch(checked = enabled, onCheckedChange = null)
-        }
-    }
-}
-

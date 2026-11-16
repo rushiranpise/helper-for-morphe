@@ -114,6 +114,7 @@ import dev.rushi.apkdownloadhelper.storage.saveHelperSettings
 import dev.rushi.apkdownloadhelper.storage.scheduleHandoffCleanup
 import dev.rushi.apkdownloadhelper.storage.setLauncherIconVisible
 import dev.rushi.apkdownloadhelper.storage.temporaryDownloadsDir
+import dev.rushi.apkdownloadhelper.ui.AboutTabContent
 import dev.rushi.apkdownloadhelper.ui.AdvancedTabContent
 import dev.rushi.apkdownloadhelper.ui.AppBrowserScreen
 import dev.rushi.apkdownloadhelper.ui.AppearanceTabContent
@@ -582,8 +583,7 @@ class MainActivity : ComponentActivity() {
                                 settingsContent = { bottomBarHeight ->
                                     SettingsPage(
                                         versionName = BuildConfig.VERSION_NAME,
-                                        onOpenCategory = { activeSettingsCategory = it },
-                                        onOpenUpdates = { showUpdates = true }
+                                        onOpenCategory = { activeSettingsCategory = it }
                                     )
                                 },
                                 navigationCovered = {
@@ -625,22 +625,25 @@ class MainActivity : ComponentActivity() {
                                 title = cat.title,
                                 onBack = { activeSettingsCategory = null }
                             ) {
+                                // Inside MainActivity.kt
                                 when (cat) {
+                                    SettingsCategory.SOURCES -> SourcesSettingsScreen(
+                                        settings = helperSettings,
+                                        onSettingsChange = ::updateHelperSettings
+                                    )
                                     SettingsCategory.DOWNLOADS -> SystemTabContent(
                                         settings = helperSettings,
-                                        onSettingsChange = ::updateHelperSettings,
-                                        onOpenUpdates = { showUpdates = true },
-                                        onOpenSources = { showSourcesScreen = true }
+                                        onSettingsChange = ::updateHelperSettings
                                     )
                                     SettingsCategory.APPEARANCE -> AppearanceTabContent(
                                         settings = helperSettings,
                                         onSettingsChange = ::updateHelperSettings
                                     )
-                                    SettingsCategory.ADVANCED -> AdvancedTabContent(
+                                    SettingsCategory.SECURITY_NETWORK -> AdvancedTabContent(
                                         settings = helperSettings,
                                         onSettingsChange = ::updateHelperSettings
                                     )
-                                    SettingsCategory.LOGS -> LogsTabContent(
+                                    SettingsCategory.SYSTEM_LOGS -> LogsTabContent(
                                         settings = helperSettings,
                                         onSettingsChange = ::updateHelperSettings,
                                         logs = AppLog.entries,
@@ -648,24 +651,13 @@ class MainActivity : ComponentActivity() {
                                         historyEntries = DownloadHistoryStore.entries(applicationContext),
                                         onOpenHistoryEntry = ::openHistoryEntry,
                                         onShareHistoryEntry = ::shareHistoryEntry,
-                                        onClearHistory = { DownloadHistoryStore.clear(applicationContext) }
+                                        onClearHistory = { DownloadHistoryStore.clear(applicationContext) },
+                                        onOpenUpdates = { showUpdates = true }
                                     )
+                                    SettingsCategory.ABOUT -> AboutTabContent()
                                 }
                             }
                         }
-                    }
-
-                    // --- OVERLAY FOR SOURCES SUB-PAGE ---
-                    AnimatedVisibility(
-                        visible = showSourcesScreen,
-                        enter = MorpheAnimations.pushEnter,
-                        exit = MorpheAnimations.pushExit
-                    ) {
-                        SourcesSettingsScreen(
-                            settings = helperSettings,
-                            onSettingsChange = ::updateHelperSettings,
-                            onBack = { showSourcesScreen = false }
-                        )
                     }
 
                     // --- OVERLAY FOR UPDATES ---
