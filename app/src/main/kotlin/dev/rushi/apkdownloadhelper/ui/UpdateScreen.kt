@@ -219,6 +219,16 @@ internal fun UpdateScreen(
             }
         }
 
+        if (latest == null && checking) {
+            SettingsSection(title = "Changelog", icon = Icons.Outlined.History) {
+                SettingsGroup {
+                    SettingsItemCard(onClick = null) {
+                        ShimmerReleaseNotes()
+                    }
+                }
+            }
+        }
+
         latest?.let { info ->
             SettingsSection(title = "Changelog", icon = Icons.Outlined.History) {
                 SettingsGroup {

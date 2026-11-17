@@ -361,20 +361,11 @@ internal fun AppBrowserScreen(
                     )
                 }
                 loaded == null -> {
-                    Row(
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
                     ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(Modifier.width(MorpheDefaults.ContentPaddingSmall))
-                        Text(
-                            stringResource(R.string.loading_app_index),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        repeat(5) { ShimmerListRow() }
                     }
                 }
                 else -> {

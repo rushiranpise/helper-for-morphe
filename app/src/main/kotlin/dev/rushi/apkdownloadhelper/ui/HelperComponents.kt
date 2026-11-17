@@ -881,10 +881,9 @@ internal fun SwitchCandidateDialog(
 internal fun LoadingState() {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
     ) {
-        CircularProgressIndicator()
+        repeat(3) { ShimmerListRow() }
     }
 }
 
