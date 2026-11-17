@@ -641,16 +641,32 @@ internal data class BrowserDownloadCapture(
     val cookieHeader: String? = null
 )
 
+private val GENERIC_BROWSER_DOWNLOAD_NAMES = setOf(
+    "download",
+    "download.asp",
+    "download.aspx",
+    "download.cgi",
+    "download.jsp",
+    "download.php",
+    "download.pl"
+)
+
 internal fun capturedDownloadFileName(
     candidate: DownloadCandidate,
     downloadUrl: String,
     fileKind: String
 ): String {
-    val decodedUrl = runCatching { Uri.decode(downloadUrl) }.getOrDefault(downloadUrl)
+    val decodedUrl = downloadUrl.urlDecoded()
     val path = runCatching { java.net.URI(decodedUrl).path }.getOrDefault("")
     val fileName = path.substringAfterLast('/').takeIf { it.isNotBlank() && it != "/" }
-    val extension = fileName?.substringAfterLast('.', "")?.takeIf { it.isNotBlank() } ?: fileKind
-    val baseName = fileName?.takeIf { it.contains('.') }
+    val usableFileName = fileName
+        ?.takeIf { it.contains('.') }
+        ?.takeUnless { it.lowercase(Locale.US) in GENERIC_BROWSER_DOWNLOAD_NAMES }
+    val extension = usableFileName
+        ?.substringAfterLast('.', "")
+        ?.takeIf { it.isNotBlank() }
+        ?: fileKind
+    val baseName = usableFileName
         ?: "${candidate.packageName}-${candidate.versionName ?: "download"}.$extension"
     return baseName.sanitizeFileName()
 }

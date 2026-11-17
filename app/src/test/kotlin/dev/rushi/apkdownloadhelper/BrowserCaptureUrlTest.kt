@@ -65,6 +65,58 @@ class BrowserCaptureUrlTest {
     }
 
     @Test
+    fun `a generic download endpoint does not become the saved file name`() {
+        val candidate = DownloadCandidate(
+            source = DownloadSource.MORPHE_LINK,
+            name = "Twitter",
+            packageName = "com.twitter.android",
+            versionName = "12.43.0-prod.01",
+            versionCode = 312430001,
+            url = "https://www.apkmirror.com/download.php?id=1",
+            fileKind = "apk",
+            option = CandidateOption.REQUESTED,
+            directDownload = false,
+            versionStatus = VersionStatus.REQUESTED,
+            formatMatches = true
+        )
+
+        assertEquals(
+            "com.twitter.android-12.43.0-prod.01.apk",
+            capturedDownloadFileName(
+                candidate,
+                "https://www.apkmirror.com/wp-content/themes/APKMirror/download.php?id=1",
+                "apk"
+            )
+        )
+    }
+
+    @Test
+    fun `a real file name is kept`() {
+        val candidate = DownloadCandidate(
+            source = DownloadSource.UPTODOWN,
+            name = "Example",
+            packageName = "com.example.app",
+            versionName = "1.0",
+            versionCode = 1,
+            url = "https://example.com",
+            fileKind = "apk",
+            option = CandidateOption.MANUAL,
+            directDownload = true,
+            versionStatus = VersionStatus.LATEST,
+            formatMatches = true
+        )
+
+        assertEquals(
+            "Example-1.0.apkm",
+            capturedDownloadFileName(
+                candidate,
+                "https://cdn.example.com/files/Example-1.0.apkm?token=abc",
+                "apkm"
+            )
+        )
+    }
+
+    @Test
     fun `only APKCube uses the APKCube browser guard`() {
         assertTrue(DownloadSource.APK_CUBE.isApkCubeBrowserFlow())
         assertFalse(DownloadSource.APK_MIRROR.isApkCubeBrowserFlow())

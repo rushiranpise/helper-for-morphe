@@ -146,6 +146,23 @@ internal fun File.isStandaloneApkArchive(): Boolean = runCatching {
     }
 }.getOrDefault(false)
 
+/**
+ * The extension this archive's bytes require, or null when its current name is
+ * already usable.
+ *
+ * A generic endpoint name such as `download.php` says nothing about the file,
+ * and an APK served from a bundle page (or the reverse) must be handed to Morphe
+ * with the extension matching its contents.
+ */
+internal fun File.normalizedArchiveExtension(): String? {
+    val current = extension.lowercase(Locale.US)
+    return when {
+        isStandaloneApkArchive() -> "apk".takeIf { current != "apk" }
+        isSplitApkContainer() -> "apkm".takeIf { current !in SPLIT_ARCHIVE_FILE_KINDS }
+        else -> null
+    }
+}
+
 internal fun Context.readDownloadedApkMetadata(
     file: File,
     expectedPackage: String? = null,
