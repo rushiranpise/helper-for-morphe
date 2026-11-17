@@ -105,6 +105,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -176,7 +177,6 @@ internal object MorpheDefaults {
 internal val LocalDialogTextColor = compositionLocalOf { Color.Unspecified }
 
 /** True inside a [SettingsGroup], where rows share the group's single card surface. */
-internal val LocalSettingsGrouped = staticCompositionLocalOf { false }
 
 // ---------------------------------------------------------------------------
 // Motion  ported from morphe-manager's ui/screen/shared/Animations.kt
@@ -677,32 +677,27 @@ internal fun SectionCard(
     }
 }
 
-/** Grouped-settings container: one bordered card with 2 dp segmented rows inside. */
+/**
+ * Settings that belong together, each row a segment of one group: rounded on the group's own
+ * edges and nearly square where two rows meet, as Material's segmented lists are.
+ */
 @Composable
 internal fun SettingsGroup(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val outlineVariant = MaterialTheme.colorScheme.outlineVariant
-    val surfaceTint = MaterialTheme.colorScheme.surfaceTint
-    val gapColor = remember(outlineVariant, surfaceTint) {
-        lerp(outlineVariant, surfaceTint, 0.18f).copy(alpha = 0.55f)
-    }
-    CompositionLocalProvider(LocalSettingsGrouped provides true) {
-        SectionCard(modifier = modifier) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(MorpheDefaults.SectionCornerRadius))
-                    .background(gapColor),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-                content = content
-            )
-        }
+    val registry = remember { SegmentRegistry() }
+    CompositionLocalProvider(LocalSegmentRegistry provides registry) {
+        Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .onPlaced(registry::placeGroup),
+            content = content
+        )
     }
 }
 
-/** Settings item card: tighter radius and lighter elevation than a section card. */
+/** Settings item card: a connected segment inside a group, a standalone card outside one. */
 @Composable
 internal fun SettingsItemCard(
     onClick: (() -> Unit)?,
@@ -713,21 +708,8 @@ internal fun SettingsItemCard(
     color: Color = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp),
     content: @Composable () -> Unit
 ) {
-    if (LocalSettingsGrouped.current) {
-        Box(
-            modifier = modifier
-                .fillMaxWidth()
-                .background(color)
-                .defaultMinSize(minHeight = MorpheDefaults.MinTouchTarget)
-                .clipToBounds()
-                .then(
-                    if (onClick != null) Modifier.clickable(enabled = enabled, onClick = onClick)
-                    else Modifier
-                )
-        ) {
-            content()
-        }
-    } else {
+    val group = LocalSegmentRegistry.current
+    if (group == null) {
         SurfaceCard(
             onClick = onClick,
             enabled = enabled,
@@ -740,6 +722,42 @@ internal fun SettingsItemCard(
         ) {
             content()
         }
+        return
+    }
+
+    val row = remember { Any() }
+    val shape = group.rowShape(row)
+    val rowModifier = modifier
+        .padding(vertical = SegmentGap / 2)
+        .onPlaced { group.place(row, it) }
+        .fillMaxWidth()
+    val rowContent: @Composable () -> Unit = {
+        CompositionLocalProvider(LocalSegmentRegistry provides null) {
+            content()
+        }
+    }
+    if (onClick != null) {
+        Surface(
+            onClick = onClick,
+            enabled = enabled,
+            modifier = rowModifier,
+            shape = shape,
+            color = color,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            tonalElevation = 1.dp,
+            border = BorderStroke(1.dp, borderColor),
+            content = rowContent
+        )
+    } else {
+        Surface(
+            modifier = rowModifier,
+            shape = shape,
+            color = color,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            tonalElevation = 1.dp,
+            border = BorderStroke(1.dp, borderColor),
+            content = rowContent
+        )
     }
 }
 

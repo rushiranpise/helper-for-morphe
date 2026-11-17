@@ -144,16 +144,18 @@ internal fun AppearanceTabContent(
         if (settings.themeStyle == ThemeStyle.MORPHE) {
             SettingsSection(title = "Accent Color", icon = Icons.Outlined.Colorize) {
                 SettingsGroup {
-                    AccentGridSection {
-                        AccentSwatchGrid(
-                            colors = MorpheAccentPresets,
-                            selected = accent,
-                            onSelect = { color ->
-                                onSettingsChange(settings.copy(customAccentColor = color.toHexString()))
-                            },
-                            onClear = { onSettingsChange(settings.copy(customAccentColor = "")) },
-                            onCustomClick = { showAccentPicker = true }
-                        )
+                    SettingsItemCard(onClick = null) {
+                        AccentGridSection {
+                            AccentSwatchGrid(
+                                colors = MorpheAccentPresets,
+                                selected = accent,
+                                onSelect = { color ->
+                                    onSettingsChange(settings.copy(customAccentColor = color.toHexString()))
+                                },
+                                onClear = { onSettingsChange(settings.copy(customAccentColor = "")) },
+                                onCustomClick = { showAccentPicker = true }
+                            )
+                        }
                     }
                     SettingsItem(
                         icon = Icons.Outlined.Refresh,

@@ -222,19 +222,19 @@ internal fun UpdateScreen(
         latest?.let { info ->
             SettingsSection(title = "Changelog", icon = Icons.Outlined.History) {
                 SettingsGroup {
-                    SelectionContainer(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp))
-                    ) {
-                        Text(
-                            text = cleanReleaseNotes(info.notes).ifBlank { "No release notes for this version." },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(MorpheDefaults.ContentPadding),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    SettingsItemCard(onClick = null) {
+                        SelectionContainer(
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = cleanReleaseNotes(info.notes).ifBlank { "No release notes for this version." },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(MorpheDefaults.ContentPadding),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                     if (info.releaseUrl.isNotBlank()) {
                         SettingsItem(
