@@ -8,6 +8,7 @@ import dev.rushi.apkdownloadhelper.updater.*
 
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -28,6 +29,36 @@ class ApkMirrorParserTest {
             apkPureApi = FakeApkPureApi(),
             aptoideApi = FakeAptoideApi()
         )
+
+    @Test
+    fun requestedFallbackCandidate_ignoresSearchAndLookalikeHosts() {
+        val request = testRequest(packageName = packageName, versionName = "2.8.1").copy(
+            fallbackWebUrl = "https://google.com/search?q=%22com.example.app%22+%222.8.1%22+nodpi+%28site%3Aapkmirror.com+OR+site%3Auptodown.com%29&udm=14",
+            sourceHintUrls = listOf(
+                "https://www.apkmirror.com.evil.example/apk/example-org/example-app/"
+            )
+        )
+
+        val candidate = ApkMirrorParser(testParserContext(emptyMap()))
+            .requestedFallbackCandidate(request)
+
+        assertEquals(searchUrl, candidate.url)
+        assertNull(candidate.captchaUrl)
+    }
+
+    @Test
+    fun requestedFallbackCandidate_keepsRealApkMirrorPageAsCaptchaPage() {
+        val request = testRequest(packageName = packageName, versionName = "2.8.1").copy(
+            fallbackWebUrl = "https://google.com/search?q=%22com.example.app%22+site%3Aapkmirror.com",
+            sourceHintUrls = listOf(appPageUrl)
+        )
+
+        val candidate = ApkMirrorParser(testParserContext(emptyMap()))
+            .requestedFallbackCandidate(request)
+
+        assertEquals(appPageUrl, candidate.url)
+        assertEquals(appPageUrl, candidate.captchaUrl)
+    }
 
     private fun apkMirrorPages(
         extraPages: Map<String, String> = emptyMap()

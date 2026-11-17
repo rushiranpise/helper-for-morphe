@@ -39,6 +39,9 @@ private val APKMIRROR_EDITION_SLUG_REGEX = Regex(
 private const val APKMIRROR_BROWSER_NOTE =
     "Complete any browser check, then choose the file on the APKMirror page."
 
+private const val APKMIRROR_SEARCH_NOTE =
+    "Open APKMirror's search results, then choose the app and version."
+
 internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSourceParser {
     override val source: DownloadSource = DownloadSource.APK_MIRROR
 
@@ -139,6 +142,7 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
 
     private fun apkMirrorRequested(request: HelperRequest): DownloadCandidate {
         val browserUrl = apkMirrorBrowserUrl(request)
+        val searchPage = apkMirrorIsSearchPage(browserUrl)
         return DownloadCandidate(
             source = DownloadSource.APK_MIRROR,
             name = request.appName,
@@ -151,8 +155,8 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
             directDownload = false,
             versionStatus = VersionStatus.REQUESTED,
             formatMatches = true,
-            note = APKMIRROR_BROWSER_NOTE,
-            captchaUrl = browserUrl
+            note = if (searchPage) APKMIRROR_SEARCH_NOTE else APKMIRROR_BROWSER_NOTE,
+            captchaUrl = browserUrl.takeUnless { searchPage }
         )
     }
 
@@ -404,6 +408,7 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         latestInfo: ApkMirrorLatestInfo?
     ): DownloadCandidate {
         val browserUrl = latestInfo?.openUrl ?: apkMirrorPackageSearchUrl(request.packageName)
+        val searchPage = apkMirrorIsSearchPage(browserUrl)
         return DownloadCandidate(
             source = DownloadSource.APK_MIRROR,
             name = request.appName,
@@ -416,8 +421,8 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
             directDownload = false,
             versionStatus = VersionStatus.LATEST,
             formatMatches = true,
-            note = APKMIRROR_BROWSER_NOTE,
-            captchaUrl = browserUrl
+            note = if (searchPage) APKMIRROR_SEARCH_NOTE else APKMIRROR_BROWSER_NOTE,
+            captchaUrl = browserUrl.takeUnless { searchPage }
         )
     }
 
@@ -987,11 +992,26 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         captchaUrl = releaseUrl
     )
 
-    private fun apkMirrorBrowserUrl(request: HelperRequest): String =
-        request.sourceHintUrlsFor(DownloadSource.APK_MIRROR)
-            .firstOrNull { it.contains("apkmirror.com", ignoreCase = true) }
-            ?.let(::apkMirrorAbsoluteUrl)
-            ?: apkMirrorPackageSearchUrl(request.packageName)
+    private fun apkMirrorBrowserUrl(request: HelperRequest): String {
+        val hintedPage = request.sourceHintUrlsFor(DownloadSource.APK_MIRROR)
+            .asSequence()
+            .mapNotNull(::apkMirrorAbsoluteUrl)
+            .firstOrNull(::isApkMirrorHostUrl)
+        return hintedPage ?: apkMirrorPackageSearchUrl(request.packageName)
+    }
+
+    /** Only an actual APKMirror host is a page this source can open. */
+    private fun isApkMirrorHostUrl(url: String): Boolean {
+        val host = urlHostOf(url) ?: return false
+        return host == "apkmirror.com" || host.endsWith(".apkmirror.com")
+    }
+
+    private fun apkMirrorIsSearchPage(url: String): Boolean =
+        runCatching {
+            if (!isApkMirrorHostUrl(url)) return@runCatching false
+            val query = java.net.URI(url).query.orEmpty()
+            query.contains("post_type=app_release") || query.contains("searchtype=app")
+        }.getOrDefault(false)
 
     /**
      * The release page's variant rows, numbered in the order it lists them.
