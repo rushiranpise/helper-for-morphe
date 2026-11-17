@@ -1,5 +1,11 @@
 package dev.rushi.apkdownloadhelper
 
+import dev.rushi.apkdownloadhelper.download.*
+import dev.rushi.apkdownloadhelper.sources.*
+import dev.rushi.apkdownloadhelper.storage.*
+import dev.rushi.apkdownloadhelper.ui.*
+import dev.rushi.apkdownloadhelper.updater.*
+
 /** Serves canned HTML/JSON responses keyed by URL so parsers run without the network. */
 internal class FakeSourceTextFetcher(
     private val pages: Map<String, String>,
