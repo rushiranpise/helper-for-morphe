@@ -233,16 +233,11 @@ internal fun UpdateScreen(
             SettingsSection(title = "Changelog", icon = Icons.Outlined.History) {
                 SettingsGroup {
                     SettingsItemCard(onClick = null) {
-                        SelectionContainer(
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = cleanReleaseNotes(info.notes).ifBlank { "No release notes for this version." },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(MorpheDefaults.ContentPadding),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        SelectionContainer {
+                            MorpheReleaseNotes(
+                                version = info.version,
+                                notes = info.notes,
+                                prerelease = UpdateInfo.isPrerelease(info.version)
                             )
                         }
                     }
