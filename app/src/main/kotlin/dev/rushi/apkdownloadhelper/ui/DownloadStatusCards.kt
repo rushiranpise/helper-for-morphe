@@ -394,7 +394,8 @@ internal fun FastModeCard(
                     MorpheWavyProgressRing(
                         progress = null,
                         modifier = Modifier.size(30.dp),
-                        strokeWidth = 3.dp
+                        strokeWidth = 3.dp,
+                        active = !progress.paused
                     )
                 }
             }
@@ -878,7 +879,8 @@ private fun DownloadProgressGauge(
         MorpheWavyProgressRing(
             progress = { shown / 100f },
             modifier = Modifier.fillMaxSize(),
-            strokeWidth = 7.dp
+            strokeWidth = 7.dp,
+            active = !paused
         )
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,

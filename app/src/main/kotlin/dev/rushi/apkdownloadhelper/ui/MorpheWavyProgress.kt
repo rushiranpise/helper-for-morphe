@@ -38,18 +38,26 @@ internal fun MorpheWavyProgressRing(
     color: Color = MaterialTheme.colorScheme.primary,
     trackColor: Color = MaterialTheme.colorScheme.surfaceVariant,
     strokeWidth: Dp = 8.dp,
-    amplitude: Dp = 2.dp
+    amplitude: Dp = 2.dp,
+    active: Boolean = true
 ) {
-    val transition = rememberInfiniteTransition(label = "wavy_progress")
-    val phase by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1400, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "wavy_progress_phase"
-    )
+    // Leaving the transition out of composition while paused stops its frame clock, so a frozen
+    // download does not keep drawing motion that suggests work is still happening.
+    val phase = if (active) {
+        val transition = rememberInfiniteTransition(label = "wavy_progress")
+        val animatedPhase by transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1400, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "wavy_progress_phase"
+        )
+        animatedPhase
+    } else {
+        0f
+    }
 
     Canvas(modifier = modifier) {
         val stroke = strokeWidth.toPx()
