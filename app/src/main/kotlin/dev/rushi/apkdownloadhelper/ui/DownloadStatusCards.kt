@@ -7,10 +7,12 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -34,7 +36,6 @@ import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -390,9 +391,10 @@ internal fun FastModeCard(
                     }
                 }
                 if (!progress.done && progress.percent == null && !progress.awaitingDecision) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp),
-                        strokeWidth = 2.5.dp
+                    MorpheWavyProgressRing(
+                        progress = null,
+                        modifier = Modifier.size(30.dp),
+                        strokeWidth = 3.dp
                     )
                 }
             }
@@ -529,38 +531,40 @@ internal fun FastModeCard(
                     modifier = Modifier.fillMaxWidth()
                 )
             } else if (progress.percent != null && !progress.done) {
-                LinearProgressIndicator(
-                    progress = { progress.percent / 100f },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                val percent = progress.percent
+                val isScan = isScanStatus(progress.detail)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = buildString {
-                            append(progress.percent).append('%')
-                            if (!isScanStatus(progress.detail) && progress.percent < 100) {
-                                val connections = progress.connections
-                                append("  ·  ").append(connections)
-                                    .append(if (connections == 1) " connection" else " connections")
-                            }
-                            if (!progress.paused) {
-                                val speed = formatTransferSpeed(progress.speedBytesPerSec)
-                                if (speed.isNotEmpty()) append("  ·  ").append(speed)
-                                if (progress.etaMs != null && progress.etaMs > 0L) {
-                                    append("  ·  ").append(formatTransferEta(progress.etaMs)).append(" left")
-                                }
-                            }
-                        },
-                        fontWeight = FontWeight.Medium
+                    DownloadProgressGauge(
+                        percent = percent,
+                        paused = progress.paused,
+                        modifier = Modifier.size(104.dp)
                     )
-                    HelperOutlinedButton(
-                        text = "Cancel",
-                        onClick = onCancel,
-                        icon = Icons.Outlined.Close
-                    )
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = formatTransferStats(
+                                connections = progress.connections,
+                                speedBytesPerSec = progress.speedBytesPerSec,
+                                etaMs = progress.etaMs,
+                                paused = progress.paused,
+                                includeConnections = !isScan && percent < 100
+                            ).ifBlank { if (progress.paused) "Paused" else "Downloading" },
+                            modifier = Modifier.weight(1f),
+                            fontWeight = FontWeight.Medium
+                        )
+                        HelperIconButton(
+                            icon = Icons.Outlined.Close,
+                            contentDescription = "Cancel download",
+                            onClick = onCancel
+                        )
+                    }
                 }
                 if (!isScanStatus(progress.detail) && progress.percent < 100) {
                     Row(
@@ -765,49 +769,59 @@ internal fun DownloadingState(
                 ?: if (state.paused) "Paused" else "Downloading from ${state.candidate.source.label}"
             val isScan = isScanStatus(statusText)
             val (phase, detail) = if (isScan) scanPhaseSplit(statusText) else (statusText to "")
-            Text(
-                text = phase,
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.bodyLarge
-            )
-            if (detail.isNotBlank()) {
-                Text(
-                    text = detail,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-            LinearProgressIndicator(
-                progress = { state.percent / 100f },
-                modifier = Modifier.fillMaxWidth()
-            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = buildString {
-                        append(state.percent).append('%')
-                        if (!isScan && state.percent < 100) {
-                            append("  ·  ").append(state.connections)
-                                .append(if (state.connections == 1) " connection" else " connections")
-                        }
-                        if (!state.paused) {
-                            val speed = formatTransferSpeed(state.speedBytesPerSec)
-                            if (speed.isNotEmpty()) append("  ·  ").append(speed)
-                            if (state.etaMs != null && state.etaMs > 0L) {
-                                append("  ·  ").append(formatTransferEta(state.etaMs)).append(" left")
-                            }
-                        }
-                    },
-                    fontWeight = FontWeight.Medium
+                DownloadProgressGauge(
+                    percent = state.percent,
+                    paused = state.paused,
+                    modifier = Modifier.size(104.dp)
                 )
-                HelperOutlinedButton(
-                    text = "Cancel",
-                    onClick = onCancel,
-                    icon = Icons.Outlined.Close
-                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = phase,
+                            modifier = Modifier.weight(1f),
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        HelperIconButton(
+                            icon = Icons.Outlined.Close,
+                            contentDescription = "Cancel download",
+                            onClick = onCancel
+                        )
+                    }
+                    if (detail.isNotBlank()) {
+                        Text(
+                            text = detail,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    val stats = formatTransferStats(
+                        connections = state.connections,
+                        speedBytesPerSec = state.speedBytesPerSec,
+                        etaMs = state.etaMs,
+                        paused = state.paused,
+                        includeConnections = !isScan && state.percent < 100
+                    )
+                    if (stats.isNotBlank()) {
+                        Text(
+                            text = stats,
+                            fontWeight = FontWeight.Medium,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
             }
             if (!isScan && state.percent < 100) {
                 Row(
@@ -851,6 +865,65 @@ internal fun DownloadingState(
             }
         }
     }
+}
+
+@Composable
+private fun DownloadProgressGauge(
+    percent: Int,
+    paused: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val shown = percent.coerceIn(0, 100)
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        MorpheWavyProgressRing(
+            progress = { shown / 100f },
+            modifier = Modifier.fillMaxSize(),
+            strokeWidth = 7.dp
+        )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "$shown%",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            if (paused) {
+                Text(
+                    text = "Paused",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+private fun formatTransferStats(
+    connections: Int,
+    speedBytesPerSec: Double,
+    etaMs: Long?,
+    paused: Boolean,
+    includeConnections: Boolean
+): String {
+    val parts = buildList {
+        if (includeConnections) {
+            add(
+                "$connections " +
+                    if (connections == 1) "connection" else "connections"
+            )
+        }
+        if (!paused) {
+            formatTransferSpeed(speedBytesPerSec)
+                .takeIf { it.isNotEmpty() }
+                ?.let(::add)
+            if (etaMs != null && etaMs > 0L) {
+                add("${formatTransferEta(etaMs)} left")
+            }
+        }
+    }
+    return parts.joinToString("  ·  ")
 }
 
 @Composable
