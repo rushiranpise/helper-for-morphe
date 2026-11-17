@@ -708,14 +708,7 @@ internal fun SourcesSettingsScreen(
         }
 
         SettingsSection(title = "Providers & Priority", icon = Icons.Outlined.Dns) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                        shape = RoundedCornerShape(16.dp)
-                    )
-            ) {
+            SettingsGroup {
                 val draggedHeight = if (startIndex in localOrder.indices) {
                     (rowHeights[localOrder[startIndex]] ?: 180).toFloat()
                 } else 0f
