@@ -7,6 +7,7 @@ import dev.rushi.apkdownloadhelper.TAG
 import dev.rushi.apkdownloadhelper.download.apkMirrorVersionSlug
 import dev.rushi.apkdownloadhelper.download.compareVersionNames
 import dev.rushi.apkdownloadhelper.download.fileKindFromUrl
+import dev.rushi.apkdownloadhelper.download.fileKindFromUrlOrNull
 import dev.rushi.apkdownloadhelper.download.hasVariantBuildMarker
 import dev.rushi.apkdownloadhelper.download.normalizedHttpUrlOrNull
 import dev.rushi.apkdownloadhelper.download.parseInfoTableValue
@@ -889,8 +890,18 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         }
         val resolvedVersion = versionName
             ?: apkMirrorVersionFromReleaseUrl(releaseUrl)
+        // A bundle variant can still serve its base APK: APKMirror sometimes
+        // puts forcebaseapk=true on the only download button, and the CDN then
+        // returns a plain .apk. The file that will actually be downloaded wins
+        // over the page badge, or Morphe gets an APK named .apkm.
+        val urlFileKind = fileKindFromUrlOrNull(finalUrl)
+        val downloadsBaseApk = forceBaseApk ||
+            downloadButtonUrl.contains("forcebaseapk=true", ignoreCase = true) ||
+            finalUrl.contains("forcebaseapk=true", ignoreCase = true) ||
+            urlFileKind == "apk"
         val fileKind = when {
-            forceBaseApk -> "apk"
+            downloadsBaseApk -> "apk"
+            urlFileKind != null -> urlFileKind
             variant != null -> variant.fileKind
             isBundle -> "apkm"
             else -> fileKindFromUrl(finalUrl)
