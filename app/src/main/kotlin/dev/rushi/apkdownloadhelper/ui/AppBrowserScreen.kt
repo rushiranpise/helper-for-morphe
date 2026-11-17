@@ -6,10 +6,11 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -31,14 +33,18 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
@@ -51,12 +57,14 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SortByAlpha
 import androidx.compose.material.icons.outlined.Storefront
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.ViewList
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
@@ -72,17 +80,30 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import dev.rushi.apkdownloadhelper.HelperButton
 import dev.rushi.apkdownloadhelper.MORPHE_MANAGER_PACKAGES
 import dev.rushi.apkdownloadhelper.R
 import dev.rushi.apkdownloadhelper.download.openPlayStoreListing
@@ -102,6 +123,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.Request
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 
 internal enum class AppListTab(
@@ -160,24 +182,30 @@ internal fun AppDisclaimerBanner() {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.Top
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             ThemedIcon(
                 icon = Icons.Outlined.Warning,
-                size = 18.dp,
+                size = 20.dp,
                 tint = SemanticTone.Warning.accent
             )
-            Text(
-                text = stringResource(R.string.patch_index_maintained_by_the_community) +
-                    "Community bundles are maintained by their respective authors and are not " +
-                    "individually verified. Morphe and the developer of this app are not " +
-                    "responsible for third-party patches.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall,
-                textAlign = TextAlign.Center
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = stringResource(R.string.patch_index_maintained_by_the_community),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = "Community bundles are maintained by their respective authors and " +
+                        "are not individually verified. Morphe and the developer of this app are " +
+                        "not responsible for third-party patches.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
         }
     }
 }
@@ -202,6 +230,10 @@ internal fun AppBrowserScreen(
     var loadKey by remember { mutableIntStateOf(0) }
     var tab by remember { mutableStateOf(AppListTab.All) }
     var sort by remember { mutableStateOf(AppSort.AZ) }
+    var optionsOpen by remember { mutableStateOf(false) }
+    var searchOpen by remember { mutableStateOf(false) }
+    val searchFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
     val context = LocalContext.current
     var favourites by remember { mutableStateOf<Set<String>>(emptySet()) }
     var installedPackages by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -240,16 +272,27 @@ internal fun AppBrowserScreen(
         }
     }
 
-    // System back (including the TalkBack back gesture) should first leave the
-    // app detail back to the list; only from the list does it close the browser.
-    BackHandler(enabled = selected != null) {
-        selected = null
+    // Back steps out of the innermost layer first: app detail, then the list
+    // options, then search, and only from the list itself does it close the browser.
+    BackHandler(enabled = selected != null || optionsOpen || searchOpen) {
+        when {
+            selected != null -> selected = null
+            optionsOpen -> optionsOpen = false
+            searchOpen -> searchOpen = false
+        }
     }
 
-    // Search is the one control reachable while the selector rows are collapsed, so
-    // filtering from deep in the list would otherwise leave the results mid-scroll
-    // with the controls still hidden. Jumping to the top brings them back, and also
-    // puts the best matches where the eye already is.
+    LaunchedEffect(searchOpen) {
+        if (searchOpen) {
+            searchFocusRequester.requestFocus()
+            keyboardController?.show()
+        } else {
+            query = ""
+        }
+    }
+
+    // A query narrows the list from wherever it is scrolled, so bring the best
+    // matches to the top where the eye already is.
     LaunchedEffect(query) {
         if (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0) {
             listState.scrollToItem(0)
@@ -267,55 +310,87 @@ internal fun AppBrowserScreen(
             ),
         verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
     ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.align(Alignment.Center),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Text(
-                    text = stringResource(R.string.find_new_apps),
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (searchOpen) {
+                FindAppsSearchField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier
+                        .weight(1f)
+                        .focusRequester(searchFocusRequester)
                 )
-                // No app name here when a detail is open: the card below already
-                // headings with it, so it would read as the same name twice.
-                if (selected == null) {
-                    val fresh = freshness
+                FindAppsHeaderAction(
+                    icon = Icons.Outlined.Close,
+                    contentDescription = "Close search",
+                    onClick = { searchOpen = false }
+                )
+            } else {
+                FindAppsHeaderAction(
+                    icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                    contentDescription = stringResource(R.string.back),
+                    onClick = {
+                        if (selected != null) selected = null else onBack?.invoke()
+                    }
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
                     Text(
-                        text = buildString {
-                            append(apps?.let { "${it.size} apps with patches" } ?: "Morphe patch archive")
-                            // Age goes in the subtitle because a stale index is otherwise
-                            // indistinguishable from a current one.
-                            fresh?.let { append(" · index ${it.label}") }
-                        },
-                        color = if (fresh?.stale == true) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        style = MaterialTheme.typography.bodySmall,
+                        text = stringResource(R.string.find_new_apps),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onBackground,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    // No app name here when a detail is open: the card below already
+                    // headings with it, so it would read as the same name twice.
+                    if (selected == null) {
+                        val fresh = freshness
+                        Text(
+                            text = buildString {
+                                append(apps?.let { "${it.size} apps with patches" } ?: "Morphe patch archive")
+                                // Age goes in the subtitle because a stale index is otherwise
+                                // indistinguishable from a current one.
+                                fresh?.let { append(" · index ${it.label}") }
+                            },
+                            color = if (fresh?.stale == true) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
-            }
-            HelperHeaderIconButton(
-                icon = Icons.AutoMirrored.Outlined.ArrowBack,
-                contentDescription = stringResource(R.string.back),
-                onClick = {
-                    if (selected != null) selected = null else onBack?.invoke()
-                },
-                modifier = Modifier.align(Alignment.CenterStart)
-            )
-            if (selected == null) {
-                HelperHeaderIconButton(
-                    icon = Icons.Outlined.Refresh,
-                    contentDescription = stringResource(R.string.refresh),
-                    onClick = { loadKey++ },
-                    modifier = Modifier.align(Alignment.CenterEnd)
-                )
+                if (selected == null) {
+                    FindAppsHeaderAction(
+                        icon = Icons.Outlined.Refresh,
+                        contentDescription = stringResource(R.string.refresh),
+                        onClick = { loadKey++ }
+                    )
+                    FindAppsHeaderAction(
+                        icon = Icons.Outlined.Tune,
+                        contentDescription = "List options",
+                        onClick = { optionsOpen = !optionsOpen },
+                        selected = optionsOpen,
+                        marked = tab != AppListTab.All,
+                        enabled = apps != null
+                    )
+                    FindAppsHeaderAction(
+                        icon = Icons.Outlined.Search,
+                        contentDescription = stringResource(R.string.search_apps_or_packages),
+                        onClick = { searchOpen = true },
+                        enabled = apps != null
+                    )
+                }
             }
         }
 
@@ -327,37 +402,14 @@ internal fun AppBrowserScreen(
                 modifier = Modifier.weight(1f)
             )
         } else {
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(
-                    color = MaterialTheme.colorScheme.onSurface
-                ),
-                placeholder = {
-                    Text(
-                        stringResource(R.string.search_apps_or_packages),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Outlined.Search,
-                        contentDescription = null
-                    )
-                }
-            )
-
             val loaded = apps
             when {
                 error != null -> {
-                    InfoCard(error!!)
-                    HelperButton(
-                        text = "Retry",
-                        onClick = { loadKey++ },
-                        icon = Icons.Outlined.Refresh,
-                        modifier = Modifier.fillMaxWidth()
+                    MorpheEmptyState(
+                        message = error!!,
+                        icon = Icons.Outlined.Warning,
+                        actionLabel = "Retry",
+                        onAction = { loadKey++ }
                     )
                 }
                 loaded == null -> {
@@ -365,7 +417,7 @@ internal fun AppBrowserScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
                     ) {
-                        repeat(5) { ShimmerListRow() }
+                        repeat(5) { FindAppCardLoading(index = it) }
                     }
                 }
                 else -> {
@@ -396,12 +448,12 @@ internal fun AppBrowserScreen(
                                     .map { it.second }
                             }
                         }
-                    // The disclaimer and the two selector rows are the tallest thing on
-                    // this screen, so they step aside once the list is scrolled and come
-                    // back at the top, which the "Go to top" button reaches in one tap.
-                    // An empty result keeps them regardless: with nothing left to scroll
-                    // there would be no way back to the controls.
-                    val chromeVisible = filtered.isEmpty() || listAtTop
+                    // The disclaimer and list options are the tallest elements on this
+                    // screen, so they step aside once the list is scrolled and come back
+                    // at the top, which the "Go to top" button reaches in one tap. An
+                    // open options panel stays put, and an empty result keeps the chrome
+                    // regardless: with nothing left to scroll there would be no way back.
+                    val chromeVisible = filtered.isEmpty() || listAtTop || optionsOpen
                     AnimatedVisibility(
                         visible = chromeVisible,
                         enter = MorpheAnimations.expandFadeEnter,
@@ -411,44 +463,40 @@ internal fun AppBrowserScreen(
                             verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
                         ) {
                             AppDisclaimerBanner()
-                            // The same selector row the version-type and settings tabs use,
-                            // so the browser has no pill of its own to drift out of sync.
-                            MorpheSelectorRow(
-                                options = AppListTab.entries.map {
-                                    MorpheSelectorOption(
-                                        label = it.label,
-                                        icon = it.icon,
-                                        contentDescription = it.contentDescription
-                                    )
-                                },
-                                selectedIndex = AppListTab.entries.indexOf(tab),
-                                onSelect = { tab = AppListTab.entries[it] },
-                                // Four labels across, so use the smaller step.
-                                labelStyle = MaterialTheme.typography.labelMedium
-                            )
-                            MorpheSelectorRow(
-                                options = AppSort.entries.map {
-                                    MorpheSelectorOption(
-                                        label = it.label,
-                                        icon = it.icon,
-                                        iconRotation = it.rotation
-                                    )
-                                },
-                                selectedIndex = AppSort.entries.indexOf(sort),
-                                onSelect = { sort = AppSort.entries[it] },
-                                labelStyle = MaterialTheme.typography.labelMedium
-                            )
+                            AnimatedVisibility(
+                                visible = optionsOpen,
+                                enter = MorpheAnimations.expandFadeEnter,
+                                exit = MorpheAnimations.shrinkFadeExit
+                            ) {
+                                FindAppsOptionsPanel(
+                                    tab = tab,
+                                    sort = sort,
+                                    onTabSelect = { tab = it },
+                                    onSortSelect = { sort = it },
+                                    onReset = {
+                                        tab = AppListTab.All
+                                        sort = AppSort.AZ
+                                    },
+                                    onClose = { optionsOpen = false }
+                                )
+                            }
                         }
                     }
                     if (filtered.isEmpty()) {
-                        InfoCard(
-                            when (tab) {
+                        MorpheEmptyState(
+                            message = when (tab) {
                                 AppListTab.Favourites ->
                                     "No liked apps yet. Tap the heart on any app to pin it here."
                                 AppListTab.Installed -> "No patched apps in the index are installed."
                                 AppListTab.NotInstalled ->
                                     "Every app in the index is installed on this device."
                                 AppListTab.All -> "No apps match \"$query\"."
+                            },
+                            icon = when (tab) {
+                                AppListTab.Favourites -> Icons.Outlined.FavoriteBorder
+                                AppListTab.Installed -> Icons.Outlined.CheckCircle
+                                AppListTab.NotInstalled -> Icons.Outlined.Block
+                                AppListTab.All -> Icons.Outlined.Search
                             }
                         )
                     } else {
@@ -470,13 +518,16 @@ internal fun AppBrowserScreen(
                                     verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
                                 ) {
                                     items(filtered, key = { it.packageName }) { app ->
-                                        AppBrowserRow(
+                                        FindAppCard(
                                             app = app,
                                             favourite = app.packageName in favourites,
                                             onToggleFavourite = {
                                                 favourites = MorpheFavourites.toggle(context, app.packageName)
                                             },
-                                            onClick = { selected = app },
+                                            onClick = {
+                                                optionsOpen = false
+                                                selected = app
+                                            },
                                             // Rows settle into their new places with a spring, so
                                             // re-sorting or filtering glides instead of jumping.
                                             modifier = Modifier.animatedListItem(this)
@@ -521,137 +572,613 @@ internal fun AppBrowserScreen(
     }
 }
 
+/** Colours a glass app card draws itself in, resolved from the app's own accent. */
+private data class FindAppCardColors(
+    val gradient: List<Color>,
+    val title: Color,
+    val subtitle: Color,
+    val chipContainer: Color,
+    val chipContent: Color
+)
+
+private val FindAppFallbackColors = listOf(
+    Color(0xFF1E5AA8),
+    Color(0xFF00796B),
+    Color(0xFF6A3AB2),
+    Color(0xFFB3541E),
+    Color(0xFFB3261E),
+    Color(0xFF2E7D32)
+)
+
+private val FindAppPlaceholderGradients = listOf(
+    listOf(Color(0xFF1E5AA8), Color(0xFF00AFAE)),
+    listOf(Color(0xFF6A3AB2), Color(0xFF3D5AFE)),
+    listOf(Color(0xFFB3541E), Color(0xFFE0A030)),
+    listOf(Color(0xFF2E7D32), Color(0xFF00AFAE))
+)
+
+/**
+ * The manager's card palette: the app's accent carried through a three-stop gradient and
+ * normalised so white card text always has a dark enough middle to read against.
+ */
+private fun ArchiveApp.findAppCardColors(): FindAppCardColors {
+    val base = iconColor.toAccentColorOrNull()
+        ?: FindAppFallbackColors[(packageName.hashCode() and 0x7FFFFFFF) % FindAppFallbackColors.size]
+    val luminance = base.luminance()
+    val safe = if (luminance > 0.4f) {
+        lerp(base, Color.Black, ((luminance - 0.4f) / luminance).coerceIn(0f, 0.65f))
+    } else {
+        base
+    }
+    return FindAppCardColors(
+        gradient = listOf(
+            lerp(safe, Color.Black, 0.42f),
+            safe,
+            lerp(safe, Color.White, 0.12f)
+        ),
+        title = Color.White,
+        subtitle = Color.White.copy(alpha = 0.82f),
+        chipContainer = Color.White.copy(alpha = 0.20f),
+        chipContent = Color.White
+    )
+}
+
 @Composable
-internal fun AppBrowserRow(
+private fun FindAppIcon(app: ArchiveApp, gradient: List<Color>) {
+    val initial = app.name.firstOrNull()?.uppercaseChar() ?: '?'
+    AsyncAvatar(
+        url = app.iconUrl,
+        fallbackText = initial.toString(),
+        size = 56.dp,
+        cornerRadius = 16.dp,
+        fallbackGradient = gradient
+    )
+}
+
+/**
+ * One app in the archive, as a manager-style glass card: a tinted gradient, the app icon,
+ * name with a source-count tag, a single state line, and the favourite action at the end.
+ */
+@Composable
+private fun FindAppCard(
     app: ArchiveApp,
     favourite: Boolean,
     onToggleFavourite: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Surface(
+    val monochrome = LocalMonochromeTheme.current
+    val palette = remember(app.iconColor, app.packageName) { app.findAppCardColors() }
+    val scheme = MaterialTheme.colorScheme
+    val titleColor = if (monochrome) scheme.onSurface else palette.title
+    val subtitleColor = if (monochrome) scheme.onSurfaceVariant else palette.subtitle
+    val chipContainer = if (monochrome) scheme.onSurface.copy(alpha = 0.08f) else palette.chipContainer
+    val chipContent = if (monochrome) scheme.onSurfaceVariant else palette.chipContent
+    val shape = RoundedCornerShape(24.dp)
+    val interactionSource = remember { MutableInteractionSource() }
+    val titleStyle = MaterialTheme.typography.titleMedium.copy(
+        fontWeight = FontWeight.SemiBold,
+        shadow = if (monochrome) {
+            null
+        } else {
+            Shadow(Color.Black.copy(alpha = 0.4f), Offset(0f, 2f), 4f)
+        }
+    )
+    val subtitleStyle = MaterialTheme.typography.bodySmall.copy(
+        shadow = if (monochrome) {
+            null
+        } else {
+            Shadow(Color.Black.copy(alpha = 0.35f), Offset(0f, 1f), 2f)
+        }
+    )
+    val released = formatReleaseDate(app.newestReleaseDate())
+    val subtitle = buildString {
+        append(app.packageName)
+        released?.let {
+            append(" · Updated ")
+            append(it)
+        }
+    }
+
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(MorpheDefaults.SettingsCornerRadius))
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(MorpheDefaults.SettingsCornerRadius),
-        color = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp),
-        tonalElevation = 1.dp,
-        border = BorderStroke(
-            width = 1.dp,
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-        )
+            .height(88.dp)
+            .pressScale(interactionSource)
+            .clip(shape)
+            .drawWithCache {
+                val corner = CornerRadius(24.dp.toPx())
+                val fill: Brush = if (monochrome) {
+                    SolidColor(scheme.surfaceContainerHigh)
+                } else {
+                    Brush.linearGradient(
+                        colors = listOf(
+                            palette.gradient[0].copy(alpha = 0.88f),
+                            palette.gradient[1].copy(alpha = 0.76f),
+                            palette.gradient[2].copy(alpha = 0.82f)
+                        ),
+                        start = Offset(0f, size.height),
+                        end = Offset(size.width, 0f)
+                    )
+                }
+                val border: Brush = if (monochrome) {
+                    SolidColor(scheme.outline.copy(alpha = 0.22f))
+                } else {
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.55f),
+                            palette.gradient[1].copy(alpha = 0.25f),
+                            palette.gradient[2].copy(alpha = 0.14f),
+                            Color.White.copy(alpha = 0.18f)
+                        ),
+                        start = Offset(0f, 0f),
+                        end = Offset(size.width, size.height)
+                    )
+                }
+                onDrawWithContent {
+                    drawRoundRect(brush = fill, cornerRadius = corner)
+                    drawContent()
+                    drawRoundRect(
+                        brush = border,
+                        cornerRadius = corner,
+                        style = Stroke(1.dp.toPx())
+                    )
+                }
+            }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.CenterStart
     ) {
         Row(
-            modifier = Modifier.padding(start = MorpheDefaults.ContentPadding, end = 6.dp, top = 10.dp, bottom = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AppAvatar(
-                packageName = app.packageName,
-                initial = app.name.firstOrNull()?.uppercaseChar() ?: '?'
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = app.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = app.packageName,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                // When the sources last published patches for this app, so an index
-                // row that has fallen behind shows it before the app is opened.
-                formatReleaseDate(app.newestReleaseDate())?.let { released ->
+            FindAppIcon(app = app, gradient = palette.gradient)
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Text(
-                        text = "Updated $released",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-                        style = MaterialTheme.typography.labelSmall,
+                        text = app.name,
+                        style = titleStyle,
+                        color = titleColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    MorpheStatusBadge(
+                        text = "${app.sourceCount} " +
+                            if (app.sourceCount == 1) "source" else "sources",
+                        containerColor = chipContainer,
+                        contentColor = chipContent
+                    )
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ThemedIcon(
+                        icon = Icons.Outlined.History,
+                        size = 14.dp,
+                        tint = subtitleColor
+                    )
+                    Text(
+                        text = subtitle,
+                        style = subtitleStyle,
+                        color = subtitleColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
             }
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = app.sourceCount.toString(),
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = if (app.sourceCount == 1) "source" else "sources",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall
+
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (favourite) Color.White.copy(alpha = 0.92f) else Color.White.copy(alpha = 0.16f)
+                    )
+                    .clickable(role = Role.Button, onClick = onToggleFavourite),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (favourite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                    contentDescription = if (favourite) "Unlike" else "Like",
+                    tint = if (favourite) {
+                        Color(0xFFD32F2F)
+                    } else if (monochrome) {
+                        scheme.onSurface
+                    } else {
+                        Color.White
+                    },
+                    modifier = Modifier.size(20.dp)
                 )
             }
-            Icon(
-                imageVector = if (favourite) {
-                    Icons.Filled.Favorite
+        }
+    }
+}
+
+/** Placeholder shaped and coloured like [FindAppCard] while the archive loads. */
+@Composable
+private fun FindAppCardLoading(index: Int) {
+    val monochrome = LocalMonochromeTheme.current
+    val scheme = MaterialTheme.colorScheme
+    val palette = FindAppPlaceholderGradients[index % FindAppPlaceholderGradients.size]
+    val skeletonColor = if (monochrome) scheme.onSurface else Color.White
+    val shape = RoundedCornerShape(24.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(88.dp)
+            .clip(shape)
+            .background(
+                if (monochrome) {
+                    SolidColor(scheme.surfaceContainerHigh)
                 } else {
-                    Icons.Outlined.FavoriteBorder
-                },
-                contentDescription = if (favourite) "Unlike" else "Like",
-                tint = if (favourite) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(MorpheDefaults.PillShape)
-                    .clickable(onClick = onToggleFavourite)
-                    .padding(6.dp)
+                    Brush.linearGradient(
+                        colors = palette.map { it.copy(alpha = 0.5f) },
+                        start = Offset(0f, 0f),
+                        end = Offset(1000f, 300f)
+                    )
+                }
             )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ShimmerBox(
+                modifier = Modifier.size(56.dp),
+                shape = RoundedCornerShape(16.dp),
+                baseColor = skeletonColor.copy(alpha = 0.24f),
+                shimmerColor = skeletonColor.copy(alpha = 0.16f)
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                ShimmerLine(
+                    height = 18.dp,
+                    widthFraction = 0.58f,
+                    baseColor = skeletonColor.copy(alpha = 0.30f)
+                )
+                ShimmerLine(
+                    height = 14.dp,
+                    widthFraction = 0.82f,
+                    baseColor = skeletonColor.copy(alpha = 0.20f)
+                )
+            }
+        }
+    }
+}
+
+/** Round 40dp title action shared by the browser header and its options panel. */
+@Composable
+private fun FindAppsHeaderAction(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    marked: Boolean = false,
+    enabled: Boolean = true
+) {
+    val scheme = MaterialTheme.colorScheme
+    val contentColor = when {
+        !enabled -> scheme.onSurface.copy(alpha = 0.38f)
+        selected -> scheme.primary
+        else -> scheme.onSurface.copy(alpha = 0.9f)
+    }
+    val containerColor = if (selected) {
+        scheme.primary.copy(alpha = 0.24f)
+    } else {
+        scheme.surfaceColorAtElevation(2.dp)
+    }
+    Box(modifier = modifier.size(40.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(CircleShape)
+                .background(containerColor)
+                .border(
+                    width = 1.dp,
+                    color = scheme.primary.copy(alpha = if (selected) 0.52f else 0.22f),
+                    shape = CircleShape
+                )
+                .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
             Icon(
-                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = contentColor,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        if (marked) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 7.dp, end = 7.dp)
+                    .size(7.dp)
+                    .clip(CircleShape)
+                    .background(scheme.primary)
             )
         }
     }
 }
 
+/** Compact pill search field, the manager's list search drawn into the header. */
+@Composable
+private fun FindAppsSearchField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    val keyboardController = LocalSoftwareKeyboardController.current
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier.height(40.dp),
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(color = scheme.onSurface),
+        cursorBrush = SolidColor(scheme.primary),
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { keyboardController?.hide() }),
+        decorationBox = { innerTextField ->
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape)
+                    .background(scheme.surfaceColorAtElevation(2.dp))
+                    .border(1.dp, scheme.primary.copy(alpha = 0.28f), CircleShape)
+                    .padding(start = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Search,
+                    contentDescription = null,
+                    tint = scheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    if (value.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.search_apps_or_packages),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = scheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    innerTextField()
+                }
+                if (value.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .clickable(role = Role.Button) { onValueChange("") },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Close,
+                            contentDescription = "Clear search",
+                            tint = scheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                } else {
+                    Spacer(Modifier.width(12.dp))
+                }
+            }
+        }
+    )
+}
+
+/**
+ * The manager's docked list options: Show and Sort by as rows, each opening its own menu,
+ * with reset and close actions in the panel header.
+ */
+@Composable
+private fun FindAppsOptionsPanel(
+    tab: AppListTab,
+    sort: AppSort,
+    onTabSelect: (AppListTab) -> Unit,
+    onSortSelect: (AppSort) -> Unit,
+    onReset: () -> Unit,
+    onClose: () -> Unit
+) {
+    SurfaceCard(
+        cornerRadius = MorpheDefaults.SectionCornerRadius,
+        borderWidth = 1.dp,
+        borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "List options",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+                FindAppsHeaderAction(
+                    icon = Icons.Outlined.History,
+                    contentDescription = "Reset list options",
+                    onClick = onReset,
+                    enabled = tab != AppListTab.All || sort != AppSort.AZ
+                )
+                FindAppsHeaderAction(
+                    icon = Icons.Outlined.Close,
+                    contentDescription = "Close list options",
+                    onClick = onClose
+                )
+            }
+            MorpheDivider(fullWidth = true)
+            FindAppsOptionRow(
+                title = "Show",
+                icon = Icons.Outlined.ViewList,
+                value = tab,
+                options = AppListTab.entries,
+                optionLabel = { it.label },
+                onSelect = onTabSelect,
+                changed = tab != AppListTab.All
+            )
+            FindAppsOptionRow(
+                title = "Sort by",
+                icon = Icons.Outlined.SortByAlpha,
+                value = sort,
+                options = AppSort.entries,
+                optionLabel = { it.label },
+                onSelect = onSortSelect,
+                changed = sort != AppSort.AZ
+            )
+            Spacer(Modifier.height(4.dp))
+        }
+    }
+}
+
+@Composable
+private fun <T> FindAppsOptionRow(
+    title: String,
+    icon: ImageVector,
+    value: T,
+    options: List<T>,
+    optionLabel: (T) -> String,
+    onSelect: (T) -> Unit,
+    changed: Boolean
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(role = Role.Button) { expanded = true }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        ThemedIcon(
+            icon = icon,
+            size = 20.dp,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = optionLabel(value),
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (changed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Box {
+            Icon(
+                imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(optionLabel(option)) },
+                        onClick = {
+                            onSelect(option)
+                            expanded = false
+                        },
+                        leadingIcon = if (option == value) {
+                            {
+                                Icon(
+                                    imageVector = Icons.Outlined.Check,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        } else {
+                            null
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Decoded archive icons, kept so scrolling a list does not re-fetch every row. */
+private val archiveIconCache = ConcurrentHashMap<String, ImageBitmap>()
+
 /**
  * Small async image loader for source avatars: fetches the URL off the main
  * thread and falls back to a letter tile while loading / on failure.
+ *
+ * @param fallbackGradient When set, the letter tile is drawn over this gradient,
+ *   so an app card's missing icon still belongs to its own palette.
  */
 @Composable
 internal fun AsyncAvatar(
     url: String?,
     fallbackText: String,
     size: Dp = 20.dp,
-    cornerRadius: Dp = 6.dp
+    cornerRadius: Dp = 6.dp,
+    fallbackGradient: List<Color>? = null
 ) {
-    var bitmap by remember(url) { mutableStateOf<ImageBitmap?>(null) }
+    var bitmap by remember(url) { mutableStateOf(url?.let(archiveIconCache::get)) }
     LaunchedEffect(url) {
-        bitmap = if (url == null) {
-            null
-        } else {
-            withContext(Dispatchers.IO) {
-                runCatching {
-                    val request = Request.Builder()
-                        .url(url)
-                        .header(
-                            "User-Agent",
-                            "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Mobile Safari/537.36"
-                        )
-                        .build()
-                    MorpheArchive.http.newCall(request).execute().use { response ->
-                        if (!response.isSuccessful) return@use null
-                        response.body?.bytes()?.let { bytes ->
-                            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                        }?.asImageBitmap()
-                    }
-                }.getOrNull()
-            }
+        val iconUrl = url
+        if (iconUrl == null) {
+            bitmap = null
+            return@LaunchedEffect
         }
+        archiveIconCache[iconUrl]?.let {
+            bitmap = it
+            return@LaunchedEffect
+        }
+        bitmap = withContext(Dispatchers.IO) {
+            runCatching {
+                val request = Request.Builder()
+                    .url(iconUrl)
+                    .header(
+                        "User-Agent",
+                        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Mobile Safari/537.36"
+                    )
+                    .build()
+                MorpheArchive.http.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@use null
+                    response.body?.bytes()?.let { bytes ->
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    }?.asImageBitmap()
+                }
+            }.getOrNull()
+        }?.also { archiveIconCache[iconUrl] = it }
     }
     if (bitmap != null) {
         Image(
@@ -662,16 +1189,25 @@ internal fun AsyncAvatar(
                 .clip(RoundedCornerShape(cornerRadius))
         )
     } else {
+        val fallbackBackground = if (fallbackGradient != null) {
+            MonochromeThemeDefaults.iconBackground(fallbackGradient)
+        } else {
+            SolidColor(SemanticTone.Primary.container)
+        }
         Box(
             modifier = Modifier
                 .size(size)
                 .clip(RoundedCornerShape(cornerRadius))
-                .background(SemanticTone.Primary.container),
+                .background(fallbackBackground),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = fallbackText,
-                color = SemanticTone.Primary.content,
+                color = if (fallbackGradient != null) {
+                    MonochromeThemeDefaults.iconTint(Color.White)
+                } else {
+                    SemanticTone.Primary.content
+                },
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold
             )
