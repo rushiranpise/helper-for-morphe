@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun HomePagerScreen(
     requestResetToken: Int,
+    animatedBackground: Boolean = true,
     findAppsContent: @Composable (bottomBarHeight: Dp) -> Unit,
     homeContent: @Composable (bottomBarHeight: Dp) -> Unit,
     settingsContent: @Composable (bottomBarHeight: Dp) -> Unit,
@@ -33,6 +34,7 @@ internal fun HomePagerScreen(
 
     MainPagerScaffold(
         pagerState = pagerState,
+        animatedBackground = animatedBackground,
         navigationCovered = navigationCovered,
         swipeEnabled = !navigationCovered(),
         overlay = overlay

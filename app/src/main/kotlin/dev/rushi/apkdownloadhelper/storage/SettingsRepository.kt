@@ -104,6 +104,8 @@ internal data class HelperSettings(
     val pureBlackTheme: Boolean = false,
     /** Custom accent as `#RRGGBB`; empty keeps the style's own accent. */
     val customAccentColor: String = "",
+    /** Drifting circles behind the pager; off removes the backdrop entirely. */
+    val animatedBackground: Boolean = true,
     val adGuardDns: Boolean = true,
     val virusTotalEnabled: Boolean = false,
     val virusTotalApiKey: String = "",
@@ -382,6 +384,7 @@ internal fun Context.loadHelperSettings(): HelperSettings {
         themeStyle = themeStyle(prefs),
         pureBlackTheme = prefs.getBoolean("pure_black_theme", false),
         customAccentColor = prefs.getString("custom_accent_color", "") ?: "",
+        animatedBackground = prefs.getBoolean("animated_background", true),
         adGuardDns = prefs.getBoolean("adguard_dns", true),
         virusTotalEnabled = prefs.getBoolean("virus_total_enabled", false),
         virusTotalApiKey = prefs.getString("virus_total_api_key", "") ?: "",
@@ -466,6 +469,7 @@ internal fun Context.saveHelperSettings(settings: HelperSettings) {
         .putString("theme_style", settings.themeStyle.name)
         .putBoolean("pure_black_theme", settings.pureBlackTheme)
         .putString("custom_accent_color", settings.customAccentColor)
+        .putBoolean("animated_background", settings.animatedBackground)
         .putBoolean("adguard_dns", settings.adGuardDns)
         .putBoolean("virus_total_enabled", settings.virusTotalEnabled)
         .putString("virus_total_api_key", settings.virusTotalApiKey)

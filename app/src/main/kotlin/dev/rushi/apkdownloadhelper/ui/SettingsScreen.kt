@@ -169,6 +169,21 @@ internal fun AppearanceTabContent(
             }
         }
 
+        // BACKGROUND SECTION
+        SettingsSection(title = "Background", icon = Icons.Outlined.Wallpaper) {
+            SettingsGroup {
+                SettingsSwitchItem(
+                    icon = Icons.Outlined.Wallpaper,
+                    title = "Animated circle backdrop",
+                    subtitle = "Drift softly behind the helper. Holds still when animations are off or battery saver is on.",
+                    checked = settings.animatedBackground,
+                    onToggle = {
+                        onSettingsChange(settings.copy(animatedBackground = !settings.animatedBackground))
+                    }
+                )
+            }
+        }
+
         // APP ICON SECTION
         SettingsSection(title = "App Icon", icon = Icons.Outlined.Smartphone) {
             SettingsGroup {

@@ -1,5 +1,14 @@
 package dev.rushi.apkdownloadhelper.ui
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -10,12 +19,16 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import kotlin.math.PI
 import kotlin.math.sin
 
@@ -38,20 +51,27 @@ internal fun MorpheBackground(modifier: Modifier = Modifier) {
             BackgroundCircle(0.525f, 0.895f, 73f, secondary, 0.04f, 2.1f, 4.3f, 0.025f, 0.025f, 3f, 4f),
         )
     }
-    val transition = rememberInfiniteTransition(label = "morphe_background")
-    val progress = transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 32_000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "morphe_background_progress"
-    )
+    // Keep the circles on screen under reduced motion, but do not start an infinite
+    // transition that would keep requesting frames on a low-power device.
+    val motionAllowed = rememberMotionAllowed()
+    val progress = if (motionAllowed) {
+        val transition = rememberInfiniteTransition(label = "morphe_background")
+        transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 32_000, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "morphe_background_progress"
+        )
+    } else {
+        null
+    }
 
     Canvas(modifier = modifier.fillMaxSize()) {
         val twoPi = 2f * PI.toFloat()
-        val time = progress.value * twoPi
+        val time = (progress?.value ?: 0f) * twoPi
         circles.forEach { circle ->
             val center = Offset(
                 x = size.width * (circle.x + circle.xAmplitude * sin(time * circle.xCycles + circle.xPhase)),
@@ -65,6 +85,63 @@ internal fun MorpheBackground(modifier: Modifier = Modifier) {
         }
     }
 }
+
+@Composable
+private fun rememberMotionAllowed(): Boolean {
+    val context = LocalContext.current
+    val powerManager = remember(context) {
+        context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+    }
+    val animatorScaleEnabled = remember(context) {
+        mutableStateOf(context.animatorScaleEnabled())
+    }
+    val batterySaver = remember(powerManager) {
+        mutableStateOf(powerManager?.isPowerSaveMode == true)
+    }
+
+    DisposableEffect(context, powerManager) {
+        val scaleObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                animatorScaleEnabled.value = context.animatorScaleEnabled()
+            }
+        }
+        context.contentResolver.registerContentObserver(
+            Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE),
+            false,
+            scaleObserver
+        )
+
+        val batteryReceiver = object : BroadcastReceiver() {
+            override fun onReceive(receiverContext: Context?, intent: Intent?) {
+                batterySaver.value = powerManager?.isPowerSaveMode == true
+            }
+        }
+        if (powerManager != null) {
+            ContextCompat.registerReceiver(
+                context,
+                batteryReceiver,
+                IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED),
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+        }
+
+        onDispose {
+            context.contentResolver.unregisterContentObserver(scaleObserver)
+            if (powerManager != null) {
+                context.unregisterReceiver(batteryReceiver)
+            }
+        }
+    }
+
+    return animatorScaleEnabled.value && !batterySaver.value
+}
+
+private fun Context.animatorScaleEnabled(): Boolean =
+    Settings.Global.getFloat(
+        contentResolver,
+        Settings.Global.ANIMATOR_DURATION_SCALE,
+        1f
+    ) > 0f
 
 @Immutable
 private data class BackgroundCircle(
