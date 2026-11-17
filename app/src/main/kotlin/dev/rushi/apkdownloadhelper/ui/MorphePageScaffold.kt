@@ -104,6 +104,7 @@ fun MorpheSubpageScaffold(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScrollFade(scrollState)
                 .verticalScroll(scrollState)
                 .padding(
                     start = insets.horizontal,

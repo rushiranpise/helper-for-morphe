@@ -471,7 +471,8 @@ internal fun AppBrowserScreen(
                                     state = listState,
                                     modifier = Modifier
                                         .weight(1f)
-                                        .fillMaxHeight(),
+                                        .fillMaxHeight()
+                                        .verticalScrollFade(listState),
                                     // Keep the last row clear of the floating
                                     // "Go to top" button.
                                     contentPadding = PaddingValues(bottom = 64.dp),

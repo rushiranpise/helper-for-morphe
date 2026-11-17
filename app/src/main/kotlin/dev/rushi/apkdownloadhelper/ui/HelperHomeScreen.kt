@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material3.MaterialTheme
@@ -146,10 +147,13 @@ internal fun HelperScreen(
             exit = fadeOut(tween(MorpheDefaults.ANIMATION_DURATION))
         ) {
         Column(modifier = Modifier.fillMaxSize()) {
+            val homeListState = rememberLazyListState()
             LazyColumn(
+                state = homeListState,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
+                    .verticalScrollFade(homeListState)
                     .statusBarsPadding()
                 .navigationBarsPadding()
                 .padding(horizontal = MorpheDefaults.ContentPadding, vertical = MorpheDefaults.ContentPadding),
