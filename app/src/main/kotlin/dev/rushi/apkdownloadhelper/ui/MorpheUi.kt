@@ -668,6 +668,7 @@ internal fun SectionCard(
         elevation = MorpheDefaults.CardElevation,
         cornerRadius = MorpheDefaults.SectionCornerRadius,
         borderWidth = 1.dp,
+        borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
         modifier = modifier
     ) {
         content()
@@ -694,7 +695,7 @@ internal fun SettingsItemCard(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     borderWidth: Dp = 0.dp,
-    borderColor: Color = MaterialTheme.colorScheme.outlineVariant,
+    borderColor: Color = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
     color: Color = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp),
     content: @Composable () -> Unit
 ) {
@@ -815,7 +816,7 @@ internal fun SettingsItem(
     }
 }
 
-/** Section title with the manager's gradient circle icon. */
+/** Section title in the manager's current small-icon, muted-label style. */
 @Composable
 internal fun MorpheSectionTitle(
     text: String,
@@ -824,17 +825,26 @@ internal fun MorpheSectionTitle(
 ) {
     Row(
         modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing),
+        horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingSmall),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (icon != null) {
-            GradientCircleIcon(icon = icon, size = 36.dp, iconSize = 20.dp)
+            Box(
+                modifier = Modifier.size(MorpheDefaults.IconSize),
+                contentAlignment = Alignment.Center
+            ) {
+                ThemedIcon(
+                    icon = icon,
+                    size = MorpheDefaults.IconSizeSmall,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
         Text(
             text = text,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
