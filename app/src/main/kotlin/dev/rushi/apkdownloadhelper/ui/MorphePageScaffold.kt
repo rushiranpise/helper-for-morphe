@@ -28,12 +28,18 @@ fun MorphePinnedHeaderPage(
     header: @Composable ColumnScope.() -> Unit,
     scrollState: ScrollState,
     modifier: Modifier = Modifier,
+    backgroundColor: Color = Color.Transparent,
     content: @Composable BoxScope.(insets: PageInsets) -> Unit
 ) {
     val density = LocalDensity.current
 
     SubcomposeLayout(
-        modifier = modifier.fillMaxSize()
+        modifier = modifier
+            .fillMaxSize()
+            .then(
+                if (backgroundColor != Color.Transparent) Modifier.background(backgroundColor)
+                else Modifier
+            )
     ) { constraints ->
         // 1. Measure Header first
         val headerPlaceables = subcompose("Header") {
@@ -91,7 +97,8 @@ fun MorpheSubpageScaffold(
             MorpheHeaderBar(title = title, onBack = onBack)
         },
         scrollState = scrollState,
-        modifier = modifier
+        modifier = modifier,
+        backgroundColor = MaterialTheme.colorScheme.background
     ) { insets ->
         Column(
             modifier = Modifier
