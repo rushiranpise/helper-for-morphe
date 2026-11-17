@@ -713,8 +713,12 @@ internal fun AppDetailView(
     // set can arrive from several repos. Collapsing them keeps a mirror from
     // reading as an independent choice.
     val sourceGroups = remember(app.sources) { groupArchiveSources(app.sources) }
+    val detailListState = rememberLazyListState()
     LazyColumn(
-        modifier = modifier.fillMaxWidth(),
+        state = detailListState,
+        modifier = modifier
+            .fillMaxWidth()
+            .verticalScrollFade(detailListState),
         verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
     ) {
         item {
@@ -919,7 +923,11 @@ internal fun AppSourceCard(
                                     modifier = Modifier
                                         .fillMaxHeight()
                                         .then(
-                                            if (longList) Modifier.verticalScroll(patchesScroll) else Modifier
+                                            if (longList) {
+                                                Modifier
+                                                    .verticalScrollFade(patchesScroll)
+                                                    .verticalScroll(patchesScroll)
+                                            } else Modifier
                                         ),
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
