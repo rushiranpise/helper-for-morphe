@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -165,30 +166,32 @@ internal fun HelperScreen(
                     horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.Bottom,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
-                        Text(
-                            text = stringResource(R.string.helper),
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            // Yield space to the version label first: the version is
-                            // the last child, so without this it gets whatever the
-                            // title leaves and clips ("v1.") when the row is tight.
-                            modifier = Modifier.weight(1f, fill = false)
+                        MorpheWordmark(
+                            modifier = Modifier.height(26.dp),
+                            textColor = MaterialTheme.colorScheme.onBackground
                         )
-                        Text(
-                            text = "v${BuildConfig.VERSION_NAME}",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.titleSmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Clip
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.helper),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
+                            )
+                            Text(
+                                text = "v${BuildConfig.VERSION_NAME}",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Clip
+                            )
+                        }
                     }
                     HelperBoltButton(
                         fastMode = settings.fastMode,

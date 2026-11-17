@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright 2025 Morphe. This is copyrighted content, and not licensed under open source terms.
+     See https://github.com/MorpheApp/morphe-branding -->
+<!-- The M of the Morphe wordmark in its colors, sharing its viewport with ic_morphe_wordmark_text -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="129dp"
+    android:height="32dp"
+    android:viewportWidth="428"
+    android:viewportHeight="106">
+
+    <group
+        android:scaleX="0.27745665"
+        android:scaleY="0.27333333"
+        android:translateX="-23.028902"
+        android:translateY="-29.519999">
+        <path
+            android:fillColor="#1E5AA8"
+            android:pathData="M123,140 c-21,0 -39,17 -40,38 v192 c1,21 19,38 40,38 21,0 39,-17 40,-38 V178 c-1,-21 -19,-38 -40,-38 z" />
+        <path
+            android:fillColor="#00AFAE"
+            android:pathData="M349,285 v85 c1,21 19,38 40,38 21,0 39,-17 40,-38 V182 c-11,-14 -74,63 -80,103 z" />
+        <path android:pathData="M127,108 c-34,0 -44,25 -44,40 v54 c30,-33 75,27 80,33 28,32 44,87 93,89 48,-2 67,-56 93,-89 0,0 45,-74 80,-80 0,-28 -11,-47 -44,-47 -34,0 -58,50 -75,72 -17,22 -25,46 -54,46 -29,0 -38,-25 -54,-46 -17,-22 -41,-72 -75,-72 z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="83"
+                    android:startY="216"
+                    android:endX="429"
+                    android:endY="216">
+                    <item android:offset="0" android:color="#1E5AA8" />
+                    <item android:offset="1" android:color="#00AFAE" />
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
+</vector>
