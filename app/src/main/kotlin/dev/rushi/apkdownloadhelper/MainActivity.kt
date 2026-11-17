@@ -370,6 +370,7 @@ class MainActivity : ComponentActivity() {
     private var uiState by mutableStateOf<UiState>(UiState.Idle)
     private var helperSettings by mutableStateOf(HelperSettings())
     private var installedPackageRefreshToken by mutableIntStateOf(0)
+    private var settingsCategoryResetToken by mutableIntStateOf(0)
     private var showUpdates by mutableStateOf(false)
     private var updatePrompt by mutableStateOf<UpdateInfo?>(null)
     private var updateRefreshToken by mutableIntStateOf(0)
@@ -482,6 +483,11 @@ class MainActivity : ComponentActivity() {
             var lastActiveCategory by remember { mutableStateOf<SettingsCategory?>(null) }
             if (activeSettingsCategory != null) {
                 lastActiveCategory = activeSettingsCategory
+            }
+            LaunchedEffect(settingsCategoryResetToken) {
+                if (settingsCategoryResetToken > 0) {
+                    activeSettingsCategory = null
+                }
             }
 
             val focusManager = LocalFocusManager.current
@@ -748,6 +754,7 @@ class MainActivity : ComponentActivity() {
             resources.displayMetrics.densityDpi,
             helperSettings.preferDensitySpecificVariants
         )
+        settingsCategoryResetToken++
         startRequestLog(request)
         val activeRequest = request
         if (activeRequest != null) {
