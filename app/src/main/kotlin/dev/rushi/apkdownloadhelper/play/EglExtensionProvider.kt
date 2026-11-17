@@ -1,4 +1,4 @@
-package dev.rushi.apkdownloadhelper.play
+﻿package dev.rushi.apkdownloadhelper.play
 
 import android.opengl.GLES10
 import android.text.TextUtils
@@ -78,3 +78,4 @@ object EglExtensionProvider {
         egl10.eglDestroyContext(display, context)
     }
 }
+

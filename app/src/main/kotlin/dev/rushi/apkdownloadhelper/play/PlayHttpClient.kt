@@ -1,9 +1,9 @@
-package dev.rushi.apkdownloadhelper.play
+﻿package dev.rushi.apkdownloadhelper.play
 
 import com.aurora.gplayapi.data.models.PlayResponse
 import com.aurora.gplayapi.network.IHttpClient
-import java.io.IOException
-import java.util.concurrent.TimeUnit
+import dev.rushi.apkdownloadhelper.download.AdGuardDns
+import dev.rushi.apkdownloadhelper.download.httpLoggingInterceptor
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,6 +17,8 @@ import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import java.io.IOException
+import java.util.concurrent.TimeUnit
 
 class PlayHttpClient(cache: Cache) : IHttpClient {
     private val _responseCode = MutableStateFlow(100)
@@ -29,9 +31,9 @@ class PlayHttpClient(cache: Cache) : IHttpClient {
         .retryOnConnectionFailure(true)
         .followRedirects(true)
         .followSslRedirects(true)
-        .dns(dev.rushi.apkdownloadhelper.AdGuardDns)
+        .dns(AdGuardDns)
         .cache(cache)
-        .addInterceptor(dev.rushi.apkdownloadhelper.httpLoggingInterceptor("Play"))
+        .addInterceptor(httpLoggingInterceptor("Play"))
         .build()
 
     override fun post(
@@ -136,3 +138,5 @@ class PlayHttpClient(cache: Cache) : IHttpClient {
             }
         }
 }
+
+

@@ -1,4 +1,4 @@
-package dev.rushi.apkdownloadhelper.play
+﻿package dev.rushi.apkdownloadhelper.play
 
 import android.app.ActivityManager
 import android.content.Context
@@ -97,3 +97,4 @@ private fun isHuawei(): Boolean =
     Build.MANUFACTURER.lowercase(Locale.getDefault()).contains("huawei") ||
         Build.HARDWARE.lowercase(Locale.getDefault()).contains("kirin") ||
         Build.HARDWARE.lowercase(Locale.getDefault()).contains("hi3")
+

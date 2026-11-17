@@ -125,6 +125,7 @@ dependencies {
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
     implementation("org.jsoup:jsoup:1.22.1")
+    implementation("dev.chrisbanes.haze:haze:1.5.4")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:5.3.2")

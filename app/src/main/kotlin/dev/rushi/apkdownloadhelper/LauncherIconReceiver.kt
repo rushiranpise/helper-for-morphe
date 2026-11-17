@@ -1,8 +1,9 @@
-package dev.rushi.apkdownloadhelper
+﻿package dev.rushi.apkdownloadhelper
 
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import dev.rushi.apkdownloadhelper.storage.ensureLauncherIconState
 
 /** Re-applies the saved launcher-alias state after a reboot or app update. */
 class LauncherIconReceiver : BroadcastReceiver() {
@@ -10,3 +11,4 @@ class LauncherIconReceiver : BroadcastReceiver() {
         context.ensureLauncherIconState()
     }
 }
+

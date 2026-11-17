@@ -1,4 +1,4 @@
-package dev.rushi.apkdownloadhelper
+﻿package dev.rushi.apkdownloadhelper
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -21,13 +21,37 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.FileProvider
-import java.io.File
-import java.util.Locale
-import java.util.zip.ZipEntry
-import java.util.zip.ZipFile
-import java.util.zip.ZipOutputStream
-import kotlin.coroutines.cancellation.CancellationException
-import kotlin.math.roundToInt
+import dev.rushi.apkdownloadhelper.DownloadJobManager.start
+import dev.rushi.apkdownloadhelper.download.AdGuardDns
+import dev.rushi.apkdownloadhelper.download.ApkDownloader
+import dev.rushi.apkdownloadhelper.download.SessionCookies
+import dev.rushi.apkdownloadhelper.download.VirusTotalScanner
+import dev.rushi.apkdownloadhelper.download.compareVersionNames
+import dev.rushi.apkdownloadhelper.download.downloadFailureMessage
+import dev.rushi.apkdownloadhelper.download.httpLoggingInterceptor
+import dev.rushi.apkdownloadhelper.download.readDownloadedApkMetadata
+import dev.rushi.apkdownloadhelper.download.sanitizeFileName
+import dev.rushi.apkdownloadhelper.download.versionNameEquals
+import dev.rushi.apkdownloadhelper.download.withManualModeHint
+import dev.rushi.apkdownloadhelper.storage.AppLog
+import dev.rushi.apkdownloadhelper.storage.HelperSettings
+import dev.rushi.apkdownloadhelper.storage.LogLevel
+import dev.rushi.apkdownloadhelper.storage.PREFS_NAME
+import dev.rushi.apkdownloadhelper.storage.ScanVerdict
+import dev.rushi.apkdownloadhelper.storage.VirusTotalScanMode
+import dev.rushi.apkdownloadhelper.storage.cacheHandoff
+import dev.rushi.apkdownloadhelper.storage.downloadsCopyRelativePath
+import dev.rushi.apkdownloadhelper.storage.prepareDownloadHandoff
+import dev.rushi.apkdownloadhelper.storage.recordHandOff
+import dev.rushi.apkdownloadhelper.storage.restoreAndPersistRateLimiter
+import dev.rushi.apkdownloadhelper.storage.scheduleHandoffCleanup
+import dev.rushi.apkdownloadhelper.storage.temporaryDownloadsDir
+import dev.rushi.apkdownloadhelper.ui.CandidateDownloadFile
+import dev.rushi.apkdownloadhelper.ui.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.DownloadHelperContract
+import dev.rushi.apkdownloadhelper.ui.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.HelperRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -38,7 +62,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
-import okhttp3.Request
+import java.io.File
+import java.util.Locale
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
+import kotlin.coroutines.cancellation.CancellationException
+import kotlin.math.roundToInt
 
 internal const val ACTION_START_DOWNLOAD = "dev.rushi.apkdownloadhelper.action.START_DOWNLOAD"
 internal const val ACTION_CANCEL_DOWNLOAD = "dev.rushi.apkdownloadhelper.action.CANCEL_DOWNLOAD"
@@ -1361,5 +1390,6 @@ internal fun validateDownloadedArtifact(
         }
     }
 }
+
 
 
