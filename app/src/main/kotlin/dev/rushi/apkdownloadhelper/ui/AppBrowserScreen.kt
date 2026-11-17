@@ -644,13 +644,15 @@ private fun FindAppIcon(app: ArchiveApp, gradient: List<Color>, installed: Boole
         }
         return
     }
+    // The archive stores missing icons as empty strings, not nulls.
+    val iconUrl = app.iconUrl?.takeIf { it.isNotBlank() }
     AsyncAvatar(
-        url = app.iconUrl,
+        url = iconUrl,
         fallbackText = initial.toString(),
         size = 56.dp,
         cornerRadius = 16.dp,
         // The glass placeholder is only for an app with no icon URL at all.
-        fallbackGradient = gradient.takeIf { app.iconUrl == null }
+        fallbackGradient = gradient.takeIf { iconUrl == null }
     )
 }
 
@@ -1134,7 +1136,7 @@ private fun FindAppsOptionsPanel(
             }
             MorpheDivider(fullWidth = true)
             FindAppsOptionRow(
-                title = "Show",
+                title = "Filter",
                 icon = Icons.Outlined.ViewList,
                 value = tab,
                 options = AppListTab.entries,
@@ -1143,7 +1145,7 @@ private fun FindAppsOptionsPanel(
                 changed = tab != AppListTab.All
             )
             FindAppsOptionRow(
-                title = "Sort by",
+                title = "Sort",
                 icon = Icons.Outlined.SortByAlpha,
                 value = sort,
                 options = AppSort.entries,
@@ -1153,7 +1155,7 @@ private fun FindAppsOptionsPanel(
             )
             MorpheDivider(fullWidth = true)
             FindAppsPanelAction(
-                title = "Refresh archive",
+                title = "Refresh",
                 icon = Icons.Outlined.Refresh,
                 onClick = {
                     onRefresh()
