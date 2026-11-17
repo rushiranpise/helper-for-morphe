@@ -314,7 +314,18 @@ internal fun SystemTabContent(
                     icon = Icons.Outlined.CleaningServices,
                     title = "Storage used",
                     subtitle = "Clear cache and temporary files",
-                    onClick = { scope.launch(Dispatchers.IO) { context.clearAllDownloads() } },
+                    onClick = {
+                        scope.launch(Dispatchers.IO) {
+                            val freed = context.clearTemporaryDownloads()
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(
+                                    context,
+                                    if (freed > 0L) "Cleared ${freed.formatBytes()} of cache" else "Cache is already empty",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    },
                     trailingContent = { Text("Clear", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
                 )
                 SettingsItem(

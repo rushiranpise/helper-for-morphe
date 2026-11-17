@@ -95,6 +95,7 @@ internal fun HelperScreen(
     onFormatToggle: (String) -> Unit,
     onProceedAfterScan: () -> Unit,
     onCancelAfterScan: () -> Unit,
+    onOpenFindApps: () -> Unit,
     onSkipScan: () -> Unit
 ) {
     var showAppBrowser by remember { mutableStateOf(false) }
@@ -192,18 +193,15 @@ internal fun HelperScreen(
                             ).show()
                         }
                     )
+                    val isDark = when (settings.themeMode) {
+                        ThemeMode.DARK -> true
+                        ThemeMode.LIGHT -> false
+                        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                    }
                     HelperThemeButton(
-                        dark = when (settings.themeMode) {
-                            ThemeMode.DARK -> true
-                            ThemeMode.LIGHT -> false
-                            ThemeMode.SYSTEM -> isSystemInDarkTheme()
-                        },
+                        dark = isDark,
                         onToggle = {
-                            val target = if (settings.themeMode == ThemeMode.LIGHT) {
-                                ThemeMode.DARK
-                            } else {
-                                ThemeMode.LIGHT
-                            }
+                            val target = if (isDark) ThemeMode.LIGHT else ThemeMode.DARK
                             onSettingsChange(settings.copy(themeMode = target))
                             Toast.makeText(
                                 context,
@@ -219,7 +217,7 @@ internal fun HelperScreen(
                 item {
                     EmptyLaunchState(
                         onOpenMorphe = onOpenMorphe,
-                        onFindApps = { showAppBrowser = false }
+                        onFindApps = onOpenFindApps
                     )
                 }
                 return@LazyColumn

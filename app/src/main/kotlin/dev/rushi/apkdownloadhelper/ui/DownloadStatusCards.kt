@@ -20,6 +20,7 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material.icons.outlined.OpenInNew
@@ -125,6 +126,12 @@ internal fun CandidateCard(
                 text = "Open in app",
                 onClick = { onSolveCaptcha(candidate) },
                 icon = Icons.Outlined.OpenInBrowser,
+                modifier = Modifier.fillMaxWidth()
+            )
+            HelperOutlinedButton(
+                text = "Pick downloaded APK",
+                onClick = onPickDownloadedFile,
+                icon = Icons.Outlined.FolderOpen,
                 modifier = Modifier.fillMaxWidth()
             )
             if (showUseInstalledApp) {

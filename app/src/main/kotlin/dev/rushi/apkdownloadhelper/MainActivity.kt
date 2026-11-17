@@ -199,6 +199,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.ui.unit.dp
+import dev.rushi.apkdownloadhelper.ui.MainPage
 
 
 internal const val AURORA_AUTH_URL = "https://auroraoss.com/api/auth"
@@ -371,6 +372,7 @@ class MainActivity : ComponentActivity() {
     private var helperSettings by mutableStateOf(HelperSettings())
     private var installedPackageRefreshToken by mutableIntStateOf(0)
     private var showUpdates by mutableStateOf(false)
+    private var activeSettingsCategory by mutableStateOf<SettingsCategory?>(null)
     private var updatePrompt by mutableStateOf<UpdateInfo?>(null)
     private var updateRefreshToken by mutableIntStateOf(0)
     private val historyTimeFormat = SimpleDateFormat("MMM d, HH:mm", Locale.US)
@@ -474,8 +476,6 @@ class MainActivity : ComponentActivity() {
         if (request != null) offerExistingDownloadIfPresent(request!!)
 
         setContent {
-            var isSettingsSubpageOpen by remember { mutableStateOf(false) }
-            var activeSettingsCategory by rememberSaveable { mutableStateOf<SettingsCategory?>(null) }
             var showSourcesScreen by rememberSaveable { mutableStateOf(false) }
 
             // --- FIX: Holds the category on screen during the exit animation ---
@@ -527,7 +527,7 @@ class MainActivity : ComponentActivity() {
                                         modifier = Modifier.padding(bottom = bottomBarHeight)
                                     )
                                 },
-                                homeContent = { bottomBarHeight ->
+                                homeContent = { bottomBarHeight, onNavigateToPage ->
                                     HelperScreen(
                                         request = request,
                                         state = uiState,
@@ -577,6 +577,7 @@ class MainActivity : ComponentActivity() {
                                         onFormatToggle = ::toggleRequestedFileKind,
                                         onProceedAfterScan = ::proceedAfterScan,
                                         onCancelAfterScan = ::cancelAfterScan,
+                                        onOpenFindApps = { onNavigateToPage(MainPage.FIND_APPS) },
                                         onSkipScan = ::skipScanAndHandoff
                                     )
                                 },
@@ -743,6 +744,7 @@ class MainActivity : ComponentActivity() {
             installedPackageRefreshToken++
             return
         }
+        activeSettingsCategory = null
         request = HelperRequest.from(intent)?.withDeviceDpi(
             resources.displayMetrics.densityDpi,
             helperSettings.preferDensitySpecificVariants
