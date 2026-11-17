@@ -19,7 +19,7 @@ internal fun HomePagerScreen(
     val pagerState = rememberPagerState(initialPage = MainPage.HOME.ordinal) { MainPage.entries.size }
     val scope = rememberCoroutineScope()
 
-    BackHandler(enabled = pagerState.currentPage != MainPage.HOME.ordinal) {
+    BackHandler(enabled = pagerState.currentPage != MainPage.HOME.ordinal && !navigationCovered()) {
         scope.launch { pagerState.turnTo(MainPage.HOME) }
     }
 

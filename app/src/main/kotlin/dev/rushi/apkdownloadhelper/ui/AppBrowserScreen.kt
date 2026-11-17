@@ -5,10 +5,15 @@ import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -26,10 +32,12 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -38,6 +46,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
@@ -48,14 +57,16 @@ import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material.icons.outlined.SortByAlpha
 import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.ViewList
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
@@ -71,16 +82,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import dev.rushi.apkdownloadhelper.HelperButton
 import dev.rushi.apkdownloadhelper.MORPHE_MANAGER_PACKAGES
 import dev.rushi.apkdownloadhelper.R
@@ -113,20 +132,13 @@ internal enum class AppListTab(
     NotInstalled("Not installed", Icons.Outlined.Block, "Not installed")
 }
 
-/** How the archive list is ordered. */
 internal enum class AppSort(val label: String, val icon: ImageVector, val rotation: Float = 0f) {
     AZ("A–Z", Icons.Outlined.SortByAlpha),
-    // Same glyph flipped 180° so it reads descending (mirror of A–Z).
     ZA("Z–A", Icons.Outlined.SortByAlpha, 180f),
     Sources("Sources", Icons.Outlined.Extension),
-    // Newest first, by the most recent release any of the app's sources declares.
     Newest("Newest", Icons.Outlined.History)
 }
 
-/**
- * Persisted favourites for the "Find New Apps" browser. Survives app
- * launches so a pinned app stays pinned even as the live index grows.
- */
 internal object MorpheFavourites {
     private const val PREFS = "morphe_favourites"
     private const val KEY = "packages"
@@ -136,7 +148,6 @@ internal object MorpheFavourites {
             .getStringSet(KEY, emptySet())
             .orEmpty()
 
-    /** Toggles [packageName] and returns the new set. */
     fun toggle(context: Context, packageName: String): Set<String> {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val current = prefs.getStringSet(KEY, emptySet()).orEmpty().toMutableSet()
@@ -146,7 +157,6 @@ internal object MorpheFavourites {
     }
 }
 
-/** Sticky disclaimer pinned above the archive list. */
 @Composable
 internal fun AppDisclaimerBanner() {
     SurfaceCard(
@@ -159,8 +169,8 @@ internal fun AppDisclaimerBanner() {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.Top
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             ThemedIcon(
                 icon = Icons.Outlined.Warning,
@@ -169,52 +179,107 @@ internal fun AppDisclaimerBanner() {
             )
             Text(
                 text = stringResource(R.string.patch_index_maintained_by_the_community) +
-                    "Community bundles are maintained by their respective authors and are not " +
-                    "individually verified. Morphe and the developer of this app are not " +
-                    "responsible for third-party patches.",
+                        "Community bundles are maintained by their respective authors and are not " +
+                        "individually verified. Morphe and the developer of this app are not " +
+                        "responsible for third-party patches.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall,
-                textAlign = TextAlign.Center
+                style = MaterialTheme.typography.bodySmall
             )
         }
     }
 }
 
-/**
- * "Find New Apps" browser: fetches the Morphe archive index live on every
- * open (never cached), offers a searchable list of all patched apps, and a
- * per-app detail view with its versions, patches, and source repos.
- */
+@Composable
+private fun CompactFilterChip(
+    label: String,
+    icon: ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    iconRotation: Float = 0f
+) {
+    val bgColor = if (selected) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    }
+    val contentColor = if (selected) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val borderColor = if (selected) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+    } else {
+        MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+    }
+
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(36.dp),
+        shape = CircleShape,
+        color = bgColor,
+        contentColor = contentColor,
+        border = BorderStroke(1.dp, borderColor)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(16.dp)
+                    .rotate(iconRotation)
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                maxLines = 1
+            )
+        }
+    }
+}
+
 @Composable
 internal fun AppBrowserScreen(
     onBack: (() -> Unit)? = null,
+    onDetailStateChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var apps by remember { mutableStateOf<List<ArchiveApp>?>(null) }
-    // When the archive built the index, so a build that predates a source's own
-    // changes is visible rather than silently misleading.
     var freshness by remember { mutableStateOf<ArchiveFreshness?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
+    var searchExpanded by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<ArchiveApp?>(null) }
+
+    LaunchedEffect(selected) {
+        onDetailStateChanged(selected != null)
+    }
+
     var loadKey by remember { mutableIntStateOf(0) }
     var tab by remember { mutableStateOf(AppListTab.All) }
     var sort by remember { mutableStateOf(AppSort.AZ) }
     val context = LocalContext.current
     var favourites by remember { mutableStateOf<Set<String>>(emptySet()) }
     var installedPackages by remember { mutableStateOf<Set<String>>(emptySet()) }
-    // Hoisted above the list/detail branch so the scroll position survives
-    // opening an app's details and coming back — remember inside the list
-    // branch would be discarded when the detail view replaces the list.
     val listState = rememberLazyListState()
-    // Read as a boolean rather than the raw scroll offset, so scrolling recomposes
-    // the chrome once per crossing instead of once per scrolled pixel.
-    val listAtTop by remember(listState) {
+    val searchFocusRequester = remember { FocusRequester() }
+    val density = LocalDensity.current
+    var headerHeightDp by remember { mutableStateOf(0.dp) }
+    val headerHaze = remember { HazeState() }
+
+    val isScrolled by remember(listState) {
         derivedStateOf {
-            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0
         }
     }
     val scope = rememberCoroutineScope()
+
     LaunchedEffect(Unit) {
         favourites = MorpheFavourites.load(context)
         installedPackages = withContext(Dispatchers.IO) {
@@ -236,131 +301,84 @@ internal fun AppBrowserScreen(
         }
     }
 
-    // System back (including the TalkBack back gesture) should first leave the
-    // app detail back to the list; only from the list does it close the browser.
+    LaunchedEffect(searchExpanded) {
+        if (searchExpanded) {
+            runCatching { searchFocusRequester.requestFocus() }
+        }
+    }
+
     BackHandler(enabled = selected != null) {
         selected = null
     }
+    BackHandler(enabled = selected == null && searchExpanded) {
+        query = ""
+        searchExpanded = false
+    }
 
-    // Search is the one control reachable while the selector rows are collapsed, so
-    // filtering from deep in the list would otherwise leave the results mid-scroll
-    // with the controls still hidden. Jumping to the top brings them back, and also
-    // puts the best matches where the eye already is.
     LaunchedEffect(query) {
         if (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0) {
             listState.scrollToItem(0)
         }
     }
+//===========================================================
+// Adjust bottomStart / bottomEnd to change header roundness
+//===========================================================
+    val headerShape = RoundedCornerShape(bottomStart = 18.dp, bottomEnd = 18.dp)
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .padding(
-                horizontal = MorpheDefaults.ContentPadding,
-                vertical = MorpheDefaults.ContentPadding
-            ),
-        verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
+            .background(MaterialTheme.colorScheme.background)
     ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.align(Alignment.Center),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Text(
-                    text = stringResource(R.string.find_new_apps),
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                // No app name here when a detail is open: the card below already
-                // headings with it, so it would read as the same name twice.
-                if (selected == null) {
-                    val fresh = freshness
-                    Text(
-                        text = buildString {
-                            append(apps?.let { "${it.size} apps with patches" } ?: "Morphe patch archive")
-                            // Age goes in the subtitle because a stale index is otherwise
-                            // indistinguishable from a current one.
-                            fresh?.let { append(" · index ${it.label}") }
-                        },
-                        color = if (fresh?.stale == true) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-            HelperHeaderIconButton(
-                icon = Icons.AutoMirrored.Outlined.ArrowBack,
-                contentDescription = stringResource(R.string.back),
-                onClick = {
-                    if (selected != null) selected = null else onBack?.invoke()
-                },
-                modifier = Modifier.align(Alignment.CenterStart)
-            )
-            if (selected == null) {
-                HelperHeaderIconButton(
-                    icon = Icons.Outlined.Refresh,
-                    contentDescription = stringResource(R.string.refresh),
-                    onClick = { loadKey++ },
-                    modifier = Modifier.align(Alignment.CenterEnd)
-                )
-            }
-        }
-
         val current = selected
         if (current != null) {
             AppDetailView(
                 app = current,
                 onBack = { selected = null },
-                modifier = Modifier.weight(1f)
+                contentPadding = PaddingValues(
+                    top = 12.dp,
+                    start = MorpheDefaults.ContentPadding,
+                    end = MorpheDefaults.ContentPadding,
+                    bottom = 32.dp
+                ),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
             )
         } else {
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(
-                    color = MaterialTheme.colorScheme.onSurface
-                ),
-                placeholder = {
-                    Text(
-                        stringResource(R.string.search_apps_or_packages),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Outlined.Search,
-                        contentDescription = null
-                    )
-                }
-            )
-
             val loaded = apps
             when {
                 error != null -> {
-                    InfoCard(error!!)
-                    HelperButton(
-                        text = "Retry",
-                        onClick = { loadKey++ },
-                        icon = Icons.Outlined.Refresh,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .hazeSource(state = headerHaze)
+                            .padding(
+                                top = headerHeightDp + 12.dp,
+                                start = MorpheDefaults.ContentPadding,
+                                end = MorpheDefaults.ContentPadding,
+                                bottom = 110.dp
+                            ),
+                        verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
+                    ) {
+                        InfoCard(error!!)
+                        HelperButton(
+                            text = "Retry",
+                            onClick = { loadKey++ },
+                            icon = Icons.Outlined.Refresh,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
+
                 loaded == null -> {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .hazeSource(state = headerHaze)
+                            .padding(top = headerHeightDp + 32.dp),
                         horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.Top
                     ) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(20.dp),
@@ -373,153 +391,418 @@ internal fun AppBrowserScreen(
                         )
                     }
                 }
+
                 else -> {
-                    val filtered = loaded
-                        .filter { app ->
-                            query.isBlank() ||
-                                app.name.contains(query, ignoreCase = true) ||
-                                app.packageName.contains(query, ignoreCase = true)
+                    val filtered =
+                        remember(loaded, query, tab, sort, favourites, installedPackages) {
+                            loaded
+                                .filter { app ->
+                                    query.isBlank() ||
+                                            app.name.contains(query, ignoreCase = true) ||
+                                            app.packageName.contains(query, ignoreCase = true)
+                                }
+                                .filter { app ->
+                                    when (tab) {
+                                        AppListTab.All -> true
+                                        AppListTab.Favourites -> app.packageName in favourites
+                                        AppListTab.Installed -> app.packageName in installedPackages
+                                        AppListTab.NotInstalled -> app.packageName !in installedPackages
+                                    }
+                                }
+                                .let { matches ->
+                                    when (sort) {
+                                        AppSort.AZ -> matches.sortedBy { it.name.lowercase(Locale.US) }
+                                        AppSort.ZA -> matches.sortedByDescending {
+                                            it.name.lowercase(
+                                                Locale.US
+                                            )
+                                        }
+
+                                        AppSort.Sources -> matches.sortedByDescending { it.sourceCount }
+                                        AppSort.Newest -> matches
+                                            .map { app -> app.newestReleaseDate().orEmpty() to app }
+                                            .sortedByDescending { it.first }
+                                            .map { it.second }
+                                    }
+                                }
                         }
-                        .filter { app ->
-                            when (tab) {
-                                AppListTab.All -> true
-                                AppListTab.Favourites -> app.packageName in favourites
-                                AppListTab.Installed -> app.packageName in installedPackages
-                                AppListTab.NotInstalled -> app.packageName !in installedPackages
-                            }
-                        }
-                        .let { matches ->
-                            when (sort) {
-                                AppSort.AZ -> matches.sortedBy { it.name.lowercase(Locale.US) }
-                                AppSort.ZA -> matches.sortedByDescending { it.name.lowercase(Locale.US) }
-                                AppSort.Sources -> matches.sortedByDescending { it.sourceCount }
-                                // Keyed once per app and then sorted, rather than
-                                // recomputing the newest release on every comparison.
-                                AppSort.Newest -> matches
-                                    .map { app -> app.newestReleaseDate().orEmpty() to app }
-                                    .sortedByDescending { it.first }
-                                    .map { it.second }
-                            }
-                        }
-                    // The disclaimer and the two selector rows are the tallest thing on
-                    // this screen, so they step aside once the list is scrolled and come
-                    // back at the top, which the "Go to top" button reaches in one tap.
-                    // An empty result keeps them regardless: with nothing left to scroll
-                    // there would be no way back to the controls.
-                    val chromeVisible = filtered.isEmpty() || listAtTop
-                    AnimatedVisibility(
-                        visible = chromeVisible,
-                        enter = MorpheAnimations.expandFadeEnter,
-                        exit = MorpheAnimations.shrinkFadeExit
+
+                    // Full-width LazyColumn without scrollbar
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .hazeSource(state = headerHaze),
+                        contentPadding = PaddingValues(
+                            top = headerHeightDp + 10.dp,
+                            start = MorpheDefaults.ContentPadding,
+                            end = MorpheDefaults.ContentPadding,
+                            bottom = 110.dp
+                        )
                     ) {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
+                        item(key = "controls") {
+                            Column(
+                                modifier = Modifier.padding(bottom = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                AppDisclaimerBanner()
+
+                                var filterMenuOpen by remember { mutableStateOf(false) }
+                                var sortMenuOpen by remember { mutableStateOf(false) }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    // Filter Dropdown Button
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        CompactFilterChip(
+                                            label = "Filter: ${tab.label}",
+                                            icon = tab.icon,
+                                            selected = tab != AppListTab.All,
+                                            modifier = Modifier.fillMaxWidth().height(36.dp),
+                                            onClick = { filterMenuOpen = true }
+                                        )
+                                        DropdownMenu(
+                                            expanded = filterMenuOpen,
+                                            onDismissRequest = { filterMenuOpen = false }
+                                        ) {
+                                            AppListTab.entries.forEach { itemTab ->
+                                                DropdownMenuItem(
+                                                    text = { Text(itemTab.label) },
+                                                    leadingIcon = { Icon(itemTab.icon, contentDescription = null) },
+                                                    onClick = {
+                                                        tab = itemTab
+                                                        filterMenuOpen = false
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    // Sort Dropdown Button
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        CompactFilterChip(
+                                            label = "Sort: ${sort.label}",
+                                            icon = sort.icon,
+                                            iconRotation = sort.rotation,
+                                            selected = sort != AppSort.AZ,
+                                            modifier = Modifier.fillMaxWidth().height(36.dp),
+                                            onClick = { sortMenuOpen = true }
+                                        )
+                                        DropdownMenu(
+                                            expanded = sortMenuOpen,
+                                            onDismissRequest = { sortMenuOpen = false }
+                                        ) {
+                                            AppSort.entries.forEach { itemSort ->
+                                                DropdownMenuItem(
+                                                    text = { Text(itemSort.label) },
+                                                    leadingIcon = {
+                                                        Icon(
+                                                            itemSort.icon,
+                                                            contentDescription = null,
+                                                            modifier = Modifier.rotate(itemSort.rotation)
+                                                        )
+                                                    },
+                                                    onClick = {
+                                                        sort = itemSort
+                                                        sortMenuOpen = false
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (filtered.isEmpty()) {
+                            item(key = "empty") {
+                                InfoCard(
+                                    when (tab) {
+                                        AppListTab.Favourites ->
+                                            "No liked apps yet. Tap the heart on any app to pin it here."
+
+                                        AppListTab.Installed -> "No patched apps in the index are installed."
+                                        AppListTab.NotInstalled ->
+                                            "Every app in the index is installed on this device."
+
+                                        AppListTab.All -> "No apps match \"$query\"."
+                                    }
+                                )
+                            }
+                        } else {
+                            itemsIndexed(
+                                filtered,
+                                key = { _, app -> app.packageName }) { index, app ->
+                                val isFirst = index == 0
+                                val isLast = index == filtered.lastIndex
+
+//===================================================================================
+// outerRadius = top of first card & bottom of last card
+// innerRadius = all corners between middle cards (increase/decrease 12.dp to adjust)
+//===================================================================================
+                                val outerRadius = 22.dp
+                                val innerRadius = 5.dp
+
+                                val cardShape = RoundedCornerShape(
+                                    topStart = if (isFirst) outerRadius else innerRadius,
+                                    topEnd = if (isFirst) outerRadius else innerRadius,
+                                    bottomStart = if (isLast) outerRadius else innerRadius,
+                                    bottomEnd = if (isLast) outerRadius else innerRadius
+                                )
+
+                                Box(
+                                    modifier = Modifier
+                                        .animatedListItem(this)
+                                        .padding(bottom = if (isLast) 0.dp else 2.dp)
+                                        .clip(cardShape)
+                                        .background(
+                                            MaterialTheme.colorScheme.surfaceColorAtElevation(
+                                                2.dp
+                                            )
+                                        )
+                                ) {
+                                    AppBrowserRow(
+                                        app = app,
+                                        favourite = app.packageName in favourites,
+                                        onToggleFavourite = {
+                                            favourites =
+                                                MorpheFavourites.toggle(context, app.packageName)
+                                        },
+                                        onClick = { selected = app }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    MorpheFab(
+                        visible = listState.firstVisibleItemIndex > 0,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .navigationBarsPadding()
+                            .padding(end = 20.dp, bottom = 104.dp)
+                    ) {
+                        Surface(
+                            onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                            shape = CircleShape,
+                            color = SemanticTone.Primary.container,
+                            contentColor = SemanticTone.Primary.content
                         ) {
-                            AppDisclaimerBanner()
-                            // The same selector row the version-type and settings tabs use,
-                            // so the browser has no pill of its own to drift out of sync.
-                            MorpheSelectorRow(
-                                options = AppListTab.entries.map {
-                                    MorpheSelectorOption(
-                                        label = it.label,
-                                        icon = it.icon,
-                                        contentDescription = it.contentDescription
-                                    )
-                                },
-                                selectedIndex = AppListTab.entries.indexOf(tab),
-                                onSelect = { tab = AppListTab.entries[it] },
-                                // Four labels across, so use the smaller step.
-                                labelStyle = MaterialTheme.typography.labelMedium
-                            )
-                            MorpheSelectorRow(
-                                options = AppSort.entries.map {
-                                    MorpheSelectorOption(
-                                        label = it.label,
-                                        icon = it.icon,
-                                        iconRotation = it.rotation
-                                    )
-                                },
-                                selectedIndex = AppSort.entries.indexOf(sort),
-                                onSelect = { sort = AppSort.entries[it] },
-                                labelStyle = MaterialTheme.typography.labelMedium
+                            ThemedIcon(
+                                icon = Icons.Outlined.KeyboardArrowUp,
+                                contentDescription = stringResource(R.string.go_to_top),
+                                tint = SemanticTone.Primary.content,
+                                modifier = Modifier.padding(12.dp)
                             )
                         }
                     }
-                    if (filtered.isEmpty()) {
-                        InfoCard(
-                            when (tab) {
-                                AppListTab.Favourites ->
-                                    "No liked apps yet. Tap the heart on any app to pin it here."
-                                AppListTab.Installed -> "No patched apps in the index are installed."
-                                AppListTab.NotInstalled ->
-                                    "Every app in the index is installed on this device."
-                                AppListTab.All -> "No apps match \"$query\"."
-                            }
-                        )
-                    } else {
-                        Box(
+                }
+            }
+        }
+
+
+        // Rounded bottom header with Haze glass blur when scrolled
+    if (selected == null) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .onSizeChanged { size ->
+                    headerHeightDp = with(density) { size.height.toDp() }
+                }
+                .glassFill(
+                    glass = MorpheColors.glassContainerColor(),
+                    shape = headerShape,
+                    hazeState = if (isScrolled || searchExpanded) headerHaze else null
+                )
+                .statusBarsPadding()
+                .padding(
+                    horizontal = MorpheDefaults.ContentPadding,
+                    vertical = 12.dp
+                )
+        ) {
+            AnimatedContent(
+                targetState = searchExpanded && selected == null,
+                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                label = "header_search_transition"
+            ) { isSearchActive ->
+                if (isSearchActive) {
+                    // Expanded inline pill search bar on header (like image 4)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
                             modifier = Modifier
                                 .weight(1f)
-                                .fillMaxWidth()
+                                .height(48.dp),
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
                         ) {
-                            Row(modifier = Modifier.fillMaxSize()) {
-                                LazyColumn(
-                                    state = listState,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight(),
-                                    // Keep the last row clear of the floating
-                                    // "Go to top" button.
-                                    contentPadding = PaddingValues(bottom = 64.dp),
-                                    verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Search,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Box(
+                                    modifier = Modifier.weight(1f),
+                                    contentAlignment = Alignment.CenterStart
                                 ) {
-                                    items(filtered, key = { it.packageName }) { app ->
-                                        AppBrowserRow(
-                                            app = app,
-                                            favourite = app.packageName in favourites,
-                                            onToggleFavourite = {
-                                                favourites = MorpheFavourites.toggle(context, app.packageName)
-                                            },
-                                            onClick = { selected = app },
-                                            // Rows settle into their new places with a spring, so
-                                            // re-sorting or filtering glides instead of jumping.
-                                            modifier = Modifier.animatedListItem(this)
+                                    if (query.isEmpty()) {
+                                        Text(
+                                            text = stringResource(R.string.search_apps_or_packages),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                alpha = 0.7f
+                                            ),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
+                                    BasicTextField(
+                                        value = query,
+                                        onValueChange = { query = it },
+                                        singleLine = true,
+                                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        ),
+                                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .focusRequester(searchFocusRequester)
+                                    )
                                 }
-                                LazyListScrollbar(
-                                    listState = listState,
-                                    modifier = Modifier.fillMaxHeight()
+                                if (query.isNotEmpty()) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Close,
+                                        contentDescription = "Clear search",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .clip(CircleShape)
+                                            .clickable { query = "" }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Circular close search button on right side
+                        Surface(
+                            onClick = {
+                                query = ""
+                                searchExpanded = false
+                            },
+                            modifier = Modifier.size(48.dp),
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Outlined.SearchOff,
+                                    contentDescription = "Close search",
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
-                            // Quick jump back to the top for long catalogs; only
-                            // shown once the user has scrolled down, and it pops in
-                            // with the manager's floating-button motion. A clickable
-                            // Surface is natively exposed to TalkBack via the
-                            // icon's contentDescription.
-                            MorpheFab(
-                                visible = listState.firstVisibleItemIndex > 0,
-                                modifier = Modifier
-                                    .align(Alignment.BottomEnd)
-                                    .padding(end = 32.dp, bottom = 20.dp)
+                        }
+                    }
+                } else {
+                    // Normal left-aligned header matching Helper & Settings tabs
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 52.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (selected != null) {
+                            HelperHeaderIconButton(
+                                icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                                contentDescription = stringResource(R.string.back),
+                                onClick = { selected = null }
+                            )
+                        }
+
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.find_new_apps),
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onBackground,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (selected == null) {
+                                val fresh = freshness
+                                Text(
+                                    text = buildString {
+                                        append(apps?.let { "${it.size} apps with patches" }
+                                            ?: "Morphe patch archive")
+                                        fresh?.let { append(" · index ${it.label}") }
+                                    },
+                                    color = if (fresh?.stale == true) {
+                                        MaterialTheme.colorScheme.error
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+                        if (selected == null) {
+                            Surface(
+                                onClick = { loadKey++ },
+                                modifier = Modifier.size(48.dp),
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                             ) {
-                                Surface(
-                                    onClick = { scope.launch { listState.animateScrollToItem(0) } },
-                                    shape = CircleShape,
-                                    color = SemanticTone.Primary.container,
-                                    contentColor = SemanticTone.Primary.content
-                                ) {
-                                    ThemedIcon(
-                                        icon = Icons.Outlined.KeyboardArrowUp,
-                                        contentDescription = stringResource(R.string.go_to_top),
-                                        tint = SemanticTone.Primary.content,
-                                        modifier = Modifier.padding(12.dp)
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Refresh,
+                                        contentDescription = stringResource(R.string.refresh),
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                            Surface(
+                                onClick = { searchExpanded = true },
+                                modifier = Modifier.size(48.dp),
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Search,
+                                        contentDescription = stringResource(R.string.search_apps_or_packages),
+                                        modifier = Modifier.size(22.dp)
                                     )
                                 }
                             }
                         }
                     }
                 }
+            }
             }
         }
     }
@@ -533,95 +816,86 @@ internal fun AppBrowserRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Surface(
+    Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(MorpheDefaults.SettingsCornerRadius))
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(MorpheDefaults.SettingsCornerRadius),
-        color = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp),
-        tonalElevation = 1.dp
+            .clickable(onClick = onClick)
+            .padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.padding(start = MorpheDefaults.ContentPadding, end = 6.dp, top = 10.dp, bottom = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+        AppAvatar(
+            packageName = app.packageName,
+            initial = app.name.firstOrNull()?.uppercaseChar() ?: '?'
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            AppAvatar(
-                packageName = app.packageName,
-                initial = app.name.firstOrNull()?.uppercaseChar() ?: '?'
+            Text(
+                text = app.name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = app.packageName,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            formatReleaseDate(app.newestReleaseDate())?.let { released ->
                 Text(
-                    text = app.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    text = "Updated $released",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                    style = MaterialTheme.typography.labelSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    text = app.packageName,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                // When the sources last published patches for this app, so an index
-                // row that has fallen behind shows it before the app is opened.
-                formatReleaseDate(app.newestReleaseDate())?.let { released ->
-                    Text(
-                        text = "Updated $released",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-                        style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
             }
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = app.sourceCount.toString(),
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = if (app.sourceCount == 1) "source" else "sources",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-            Icon(
-                imageVector = if (favourite) {
-                    Icons.Filled.Favorite
-                } else {
-                    Icons.Outlined.FavoriteBorder
-                },
-                contentDescription = if (favourite) "Unlike" else "Like",
-                tint = if (favourite) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(MorpheDefaults.PillShape)
-                    .clickable(onClick = onToggleFavourite)
-                    .padding(6.dp)
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = app.sourceCount.toString(),
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary
             )
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            Text(
+                text = if (app.sourceCount == 1) "source" else "sources",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall
             )
         }
+        Icon(
+            imageVector = if (favourite) {
+                Icons.Filled.Favorite
+            } else {
+                Icons.Outlined.FavoriteBorder
+            },
+            contentDescription = if (favourite) "Unlike" else "Like",
+            tint = if (favourite) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            modifier = Modifier
+                .size(36.dp)
+                .clip(MorpheDefaults.PillShape)
+                .clickable(onClick = onToggleFavourite)
+                .padding(6.dp)
+        )
+        Icon(
+            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
-/**
- * Small async image loader for source avatars: fetches the URL off the main
- * thread and falls back to a letter tile while loading / on failure.
- */
 @Composable
 internal fun AsyncAvatar(
     url: String?,
@@ -679,12 +953,6 @@ internal fun AsyncAvatar(
     }
 }
 
-/**
- * Opens a Morphe "add-source" deep link. The manager's intent filter for
- * https://morphe.software/add-source has no autoVerify, and on Android 12+
- * unverified https apps are hidden from the implicit resolver (so the browser
- * would win). Pinning the package restores the direct handoff to Morphe.
- */
 internal fun openAddSource(context: Context, addUrl: String) {
     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(addUrl))
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -701,6 +969,7 @@ internal fun openAddSource(context: Context, addUrl: String) {
 internal fun AppDetailView(
     app: ArchiveApp,
     onBack: (() -> Unit)? = null,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -709,12 +978,10 @@ internal fun AppDetailView(
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         }
     }
-    // Forks re-release their upstream's patches under their own name, so the same
-    // set can arrive from several repos. Collapsing them keeps a mirror from
-    // reading as an independent choice.
     val sourceGroups = remember(app.sources) { groupArchiveSources(app.sources) }
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
+        contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
     ) {
         item {
@@ -739,8 +1006,6 @@ internal fun AppDetailView(
                     },
                     titleStyle = MaterialTheme.typography.titleLarge,
                     titleWeight = FontWeight.Bold,
-                    // Open the Play Store listing, same as the Play source's action, so
-                    // users can see the official page for the app.
                     trailingContent = {
                         HelperIconButton(
                             icon = Icons.Outlined.Storefront,
@@ -781,16 +1046,6 @@ internal fun AppDetailView(
     }
 }
 
-/**
- * One patch set, led by the repo that ships it, with its own collapsible patch
- * list (collapsed by default) so patches are clearly attributed to the repo that
- * provides them. The Add-to-Morphe / Open-repo actions stay visible whether or
- * not it's expanded.
- *
- * [mirrors] are the other repos offering the identical set. They stay reachable
- * with their own actions, but folded away, since listing them as equals would
- * present a fork as its own choice.
- */
 @Composable
 internal fun AppSourceCard(
     source: ArchiveSource,
@@ -831,8 +1086,6 @@ internal fun AppSourceCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    // The release is what ranks this card against the mirrors, so it
-                    // is shown rather than left for the user to infer from the order.
                     Text(
                         text = buildString {
                             append("${source.patches.size} ")
@@ -850,7 +1103,7 @@ internal fun AppSourceCard(
                     if (mirrors.isNotEmpty()) {
                         Text(
                             text = "Same patches in ${mirrors.size} other " +
-                                (if (mirrors.size == 1) "repo" else "repos"),
+                                    (if (mirrors.size == 1) "repo" else "repos"),
                             color = colors.onSurfaceVariant.copy(alpha = 0.75f),
                             style = MaterialTheme.typography.bodySmall,
                             maxLines = 1,
@@ -964,8 +1217,6 @@ internal fun AppSourceCard(
                             color = colors.onSurfaceVariant,
                             style = MaterialTheme.typography.labelMedium
                         )
-                        // Each keeps its own Add / Open actions, so folding the
-                        // mirrors away costs the ability to see them, not to use them.
                         mirrors.forEach { mirror ->
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -990,9 +1241,6 @@ internal fun AppSourceCard(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
-                                    // The lead is chosen by release date, so a mirror has to
-                                    // show its own for the order to be checkable rather than
-                                    // taken on faith.
                                     formatBundleRelease(mirror.latestChanges)?.let { release ->
                                         Text(
                                             text = release,
@@ -1025,8 +1273,3 @@ internal fun AppSourceCard(
         }
     }
 }
-
-
-
-
-

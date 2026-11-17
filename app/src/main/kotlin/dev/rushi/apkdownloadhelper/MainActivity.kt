@@ -477,6 +477,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             var showSourcesScreen by rememberSaveable { mutableStateOf(false) }
+            var isAppDetailOpen by remember { mutableStateOf(false) }
 
             // --- FIX: Holds the category on screen during the exit animation ---
             var lastActiveCategory by remember { mutableStateOf<SettingsCategory?>(null) }
@@ -521,10 +522,10 @@ class MainActivity : ComponentActivity() {
                                 .then(backgroundModifier)
                         ) {
                             HomePagerScreen(
-                                findAppsContent = { bottomBarHeight ->
+                                findAppsContent = { _ ->
                                     AppBrowserScreen(
                                         onBack = null,
-                                        modifier = Modifier.padding(bottom = bottomBarHeight)
+                                        onDetailStateChanged = { isAppDetailOpen = it }
                                     )
                                 },
                                 homeContent = { bottomBarHeight, onNavigateToPage ->
@@ -591,6 +592,7 @@ class MainActivity : ComponentActivity() {
                                     showUpdates ||
                                             activeSettingsCategory != null ||
                                             showSourcesScreen ||
+                                            isAppDetailOpen ||
                                             uiState is UiState.Downloading ||
                                             uiState is UiState.FastMode ||
                                             uiState is UiState.ScanAsk ||
