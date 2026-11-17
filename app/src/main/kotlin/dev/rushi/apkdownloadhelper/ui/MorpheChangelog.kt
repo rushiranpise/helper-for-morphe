@@ -37,11 +37,14 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -282,10 +285,16 @@ private fun inlineNote(text: String): AnnotatedString {
                             append(text[index])
                             index++
                         } else {
-                            withStyle(
-                                SpanStyle(
-                                    color = colors.primary,
-                                    textDecoration = TextDecoration.Underline
+                            val url = text.substring(openUrl + 1, end)
+                            withLink(
+                                LinkAnnotation.Url(
+                                    url = url,
+                                    styles = TextLinkStyles(
+                                        style = SpanStyle(
+                                            color = colors.primary,
+                                            textDecoration = TextDecoration.Underline
+                                        )
+                                    )
                                 )
                             ) {
                                 append(text.substring(index + 1, close))
@@ -323,6 +332,13 @@ private fun String.changelogIcon(): ImageVector {
  * a section, bullets become its entries, and loose paragraphs become entries of their own so no
  * text is lost.
  */
+/** The trailing GitHub footer, plain or bold, with or without its link. */
+private fun String.isFullChangelogFooter(): Boolean {
+    val stripped = trim().trim('*').trim()
+    return stripped.startsWith("Full Changelog", ignoreCase = true) ||
+        stripped.startsWith("[Full Changelog]", ignoreCase = true)
+}
+
 private fun parseReleaseNotes(value: String): List<NoteGroup> {
     val groups = mutableListOf<MutableList<String>>()
     val titles = mutableListOf<String?>()
@@ -348,7 +364,7 @@ private fun parseReleaseNotes(value: String): List<NoteGroup> {
         when {
             line.isBlank() -> flushParagraph()
             line.startsWith("<!--") || line.startsWith("![") && line.endsWith(")") -> Unit
-            line == "---" || line.startsWith("Full Changelog:") -> Unit
+            line == "---" || line.isFullChangelogFooter() -> Unit
             HeadingPattern.matches(line) -> {
                 flushParagraph()
                 val heading = HeadingPattern.matchEntire(line)?.groupValues?.get(1)
