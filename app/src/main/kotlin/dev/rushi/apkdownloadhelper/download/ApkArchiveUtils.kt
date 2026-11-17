@@ -118,6 +118,19 @@ internal fun validateApkLikeStream(
     return SequenceInputStream(ByteArrayInputStream(header, 0, headerSize), input)
 }
 
+/**
+ * True when the file is a ZIP with at least one nested APK. A split container
+ * can be served under an `.apk` name, so scanning must inspect the bytes, not
+ * only the extension.
+ */
+internal fun File.isSplitApkContainer(): Boolean = runCatching {
+    ZipFile(this).use { zip ->
+        zip.entries().asSequence().any { entry ->
+            !entry.isDirectory && entry.name.endsWith(".apk", ignoreCase = true)
+        }
+    }
+}.getOrDefault(false)
+
 internal fun Context.readDownloadedApkMetadata(
     file: File,
     expectedPackage: String? = null,

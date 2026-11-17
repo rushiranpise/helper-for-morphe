@@ -386,9 +386,10 @@ internal object VirusTotalScanner {
     }
 
     /**
-     * Scan a downloaded file. XAPK/APKS/APKM bundles are split into their
-     * inner APKs and each one is scanned individually — engines often skip
-     * large container files — while plain APKs are scanned directly.
+     * Scan a downloaded file. XAPK/APKS/APKM bundles, and containers served
+     * under an `.apk` name, are split into their inner APKs and each one is
+     * scanned individually - engines often skip large container files - while
+     * plain APKs are scanned directly.
      */
     suspend fun scanDownloadedFile(
         file: File,
@@ -398,7 +399,10 @@ internal object VirusTotalScanner {
         checkCancelled: () -> Boolean = { false }
     ): ScanResult {
         val lower = file.name.lowercase()
-        val isBundle = lower.endsWith(".xapk") || lower.endsWith(".apks") || lower.endsWith(".apkm")
+        val bundleExtension = lower.endsWith(".xapk") ||
+            lower.endsWith(".apks") ||
+            lower.endsWith(".apkm")
+        val isBundle = bundleExtension || file.isSplitApkContainer()
         return if (isBundle) {
             scanBundle(file, apiKey, onProgress, onPercent, checkCancelled)
         } else {
