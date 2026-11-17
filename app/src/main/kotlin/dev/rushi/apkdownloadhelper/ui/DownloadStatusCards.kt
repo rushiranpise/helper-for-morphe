@@ -549,16 +549,13 @@ internal fun FastModeCard(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = formatTransferStats(
-                                connections = progress.connections,
-                                speedBytesPerSec = progress.speedBytesPerSec,
-                                etaMs = progress.etaMs,
-                                paused = progress.paused,
-                                includeConnections = !isScan && percent < 100
-                            ).ifBlank { if (progress.paused) "Paused" else "Downloading" },
-                            modifier = Modifier.weight(1f),
-                            fontWeight = FontWeight.Medium
+                        TransferStats(
+                            connections = progress.connections,
+                            speedBytesPerSec = progress.speedBytesPerSec,
+                            etaMs = progress.etaMs,
+                            paused = progress.paused,
+                            includeConnections = !isScan && percent < 100,
+                            modifier = Modifier.weight(1f)
                         )
                         HelperIconButton(
                             icon = Icons.Outlined.Close,
@@ -808,20 +805,13 @@ internal fun DownloadingState(
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
-                    val stats = formatTransferStats(
+                    TransferStats(
                         connections = state.connections,
                         speedBytesPerSec = state.speedBytesPerSec,
                         etaMs = state.etaMs,
                         paused = state.paused,
                         includeConnections = !isScan && state.percent < 100
                     )
-                    if (stats.isNotBlank()) {
-                        Text(
-                            text = stats,
-                            fontWeight = FontWeight.Medium,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
                 }
             }
             if (!isScan && state.percent < 100) {
@@ -902,30 +892,66 @@ private fun DownloadProgressGauge(
     }
 }
 
-private fun formatTransferStats(
+@Composable
+private fun TransferStats(
+    connections: Int,
+    speedBytesPerSec: Double,
+    etaMs: Long?,
+    paused: Boolean,
+    includeConnections: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val lines = transferStatLines(
+        connections = connections,
+        speedBytesPerSec = speedBytesPerSec,
+        etaMs = etaMs,
+        paused = paused,
+        includeConnections = includeConnections
+    )
+    if (lines.isEmpty()) {
+        Text(
+            text = if (paused) "Paused" else "Downloading",
+            modifier = modifier,
+            fontWeight = FontWeight.Medium
+        )
+        return
+    }
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(1.dp)
+    ) {
+        lines.forEach { line ->
+            Text(
+                text = line,
+                fontWeight = FontWeight.Medium,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+private fun transferStatLines(
     connections: Int,
     speedBytesPerSec: Double,
     etaMs: Long?,
     paused: Boolean,
     includeConnections: Boolean
-): String {
-    val parts = buildList {
-        if (includeConnections) {
-            add(
-                "$connections " +
-                    if (connections == 1) "connection" else "connections"
-            )
-        }
-        if (!paused) {
-            formatTransferSpeed(speedBytesPerSec)
-                .takeIf { it.isNotEmpty() }
-                ?.let(::add)
-            if (etaMs != null && etaMs > 0L) {
-                add("${formatTransferEta(etaMs)} left")
-            }
+): List<String> = buildList {
+    if (includeConnections) {
+        add(
+            "$connections " +
+                if (connections == 1) "connection" else "connections"
+        )
+    }
+    if (!paused) {
+        formatTransferSpeed(speedBytesPerSec)
+            .takeIf { it.isNotEmpty() }
+            ?.let(::add)
+        if (etaMs != null && etaMs > 0L) {
+            add("${formatTransferEta(etaMs)} left")
         }
     }
-    return parts.joinToString("  ·  ")
 }
 
 @Composable
