@@ -228,7 +228,7 @@ internal fun morpheLinkSourceOf(url: String): DownloadSource? {
         host == "apkpure.com" || host.endsWith(".apkpure.com") -> DownloadSource.APK_PURE
         host == "aptoide.com" || host.endsWith(".aptoide.com") -> DownloadSource.APTOIDE
         host == "apkcube.com" || host.endsWith(".apkcube.com") -> DownloadSource.APK_CUBE
-        host == "evozi.com" || host.endsWith(".evozi.com") -> DownloadSource.EVOZI
+        // Evozi now redirects to APKCube, so it is no longer a separate source.
         else -> null
     }
 }

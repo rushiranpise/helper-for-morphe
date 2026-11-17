@@ -54,9 +54,14 @@ private const val SETTINGS_VERSION = 6
 
 internal val DEFAULT_DISABLED_SOURCES: Set<DownloadSource> = setOf(
     DownloadSource.APTOIDE,
-    DownloadSource.EVOZI,
     DownloadSource.PLAY
 )
+
+/** Old source names that now point at the source serving the same catalogue. */
+private val LEGACY_SOURCE_NAMES = mapOf("EVOZI" to DownloadSource.APK_CUBE)
+
+private fun sourceFromStoredName(name: String): DownloadSource? =
+    DownloadSource.entries.firstOrNull { it.name == name } ?: LEGACY_SOURCE_NAMES[name]
 
 /**
  * Morphe Link is the resolver-backed fallback, so try it before walking the
@@ -366,7 +371,7 @@ internal fun Context.loadHelperSettings(): HelperSettings {
             .toSet(),
         sourceOrder = prefs.getString("source_order", null)
             ?.split(',')
-            ?.mapNotNull { name -> DownloadSource.entries.firstOrNull { it.name == name } }
+            ?.mapNotNull(::sourceFromStoredName)
             ?.distinct()
             ?.takeIf { it.isNotEmpty() }
             ?: DEFAULT_SOURCE_ORDER,
@@ -386,7 +391,7 @@ internal fun Context.loadHelperSettings(): HelperSettings {
             VirusTotalScanMode.ASK
         ),
         preferredSource = prefs.getString("preferred_source", null)
-            ?.let { name -> DownloadSource.entries.firstOrNull { it.name == name } },
+            ?.let(::sourceFromStoredName),
         checkUpdates = prefs.getBoolean("check_updates", true),
         updateChannel = enumValueOrDefault(
             prefs.getString("update_channel", null),

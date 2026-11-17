@@ -1402,7 +1402,6 @@ internal fun DownloadSource.brand(): SourceBrand = when (this) {
     DownloadSource.UPTODOWN -> SourceBrand(resId = R.drawable.ic_src_uptodown)
     DownloadSource.AURORA -> SourceBrand(resId = R.drawable.ic_src_aurora)
     DownloadSource.APTOIDE -> SourceBrand(resId = R.drawable.ic_src_aptoide)
-    DownloadSource.EVOZI -> SourceBrand(resId = R.drawable.ic_src_evozi)
     DownloadSource.MORPHE_LINK -> SourceBrand(resId = R.drawable.ic_src_morphe)
 }
 
@@ -1580,10 +1579,9 @@ internal val DownloadSource.supportsRecommended: Boolean
 /** Sources that expose a version history list. */
 internal val DownloadSource.supportsHistory: Boolean
     get() = when (this) {
-        // Evozi has an old-versions page but no history list. Aurora/Play never
+        // APKCube has an old-versions page but no history list. Aurora/Play never
         // offer originals.
         DownloadSource.APK_CUBE,
-        DownloadSource.EVOZI,
         DownloadSource.AURORA,
         DownloadSource.PLAY -> false
         else -> true

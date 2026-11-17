@@ -64,11 +64,11 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
 
 ### Sources
 
-- Nine sources: **APKMirror, Uptodown, APKPure, APKCube, Aptoide, Evozi, Morphe Link, Aurora, Play**.
+- Eight sources: **APKMirror, Uptodown, APKPure, APKCube, Aptoide, Morphe Link, Aurora, Play**.
 - Every source can be individually **enabled/disabled** from Settings → Sources; disabled sources disappear from the picker, manual links, Fast Mode, and the default-source dropdown. If you disable *everything*, Play Store remains as the fallback.
 
 - **Six start enabled**: APKMirror, Uptodown, APKPure, APKCube, Morphe Link and Aurora.
-  Aptoide, Evozi and Play are available but off until you turn them on.
+  Aptoide and Play are available but off until you turn them on.
 
 - **Morphe's resolver first**: before walking a site, the helper asks Morphe's own resolver
   (`api.morphe.software`) where its download dialog would go, and opens that page

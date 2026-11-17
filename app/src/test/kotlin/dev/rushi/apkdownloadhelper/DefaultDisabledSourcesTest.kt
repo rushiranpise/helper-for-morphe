@@ -34,7 +34,6 @@ class DefaultDisabledSourcesTest {
     fun `the remaining sources start disabled`() {
         listOf(
             DownloadSource.APTOIDE,
-            DownloadSource.EVOZI,
             DownloadSource.PLAY
         ).forEach { source ->
             assertTrue("$source should start disabled", source in DEFAULT_DISABLED_SOURCES)

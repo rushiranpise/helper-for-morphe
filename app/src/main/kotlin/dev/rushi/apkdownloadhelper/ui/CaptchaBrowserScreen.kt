@@ -1050,9 +1050,9 @@ internal fun String?.browserBuildMismatchMessage(expected: String?): String =
     "Download page is build ${this?.takeIf(String::isNotBlank) ?: "unknown"}, " +
         "expected ${expected?.takeIf(String::isNotBlank) ?: "the requested build"}."
 
-/** APKCube and Evozi share the APKCube catalogue and its browser flow. */
+/** APKCube uses its own catalogue and browser flow. */
 internal fun DownloadSource.isApkCubeBrowserFlow(): Boolean =
-    this == DownloadSource.APK_CUBE || this == DownloadSource.EVOZI
+    this == DownloadSource.APK_CUBE
 
 /**
  * APKCube's download flow stays on its own site. Off-site links on the download

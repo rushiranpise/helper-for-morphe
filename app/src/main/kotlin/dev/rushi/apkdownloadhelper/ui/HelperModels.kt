@@ -247,7 +247,6 @@ internal data class HelperRequest(
             DownloadSource.APK_PURE -> listOf("apkpure.com")
             DownloadSource.UPTODOWN -> listOf("uptodown.com")
             DownloadSource.APK_CUBE -> listOf("apkcube.com")
-            DownloadSource.EVOZI -> listOf("apkcube.com", "evozi.com")
             DownloadSource.MORPHE_LINK -> listOf("morphe.software")
         }
 
@@ -670,10 +669,9 @@ internal enum class DownloadSource(
     APK_PURE("APKPure", 2),
     APK_CUBE("APKCube", 3),
     APTOIDE("Aptoide", 4),
-    EVOZI("Evozi", 5),
-    MORPHE_LINK("Morphe Link", 6, supportsManualArtifactPicker = false),
-    AURORA("Aurora", 7, supportsManualArtifactPicker = false),
-    PLAY("Play", 8, supportsManualArtifactPicker = false)
+    MORPHE_LINK("Morphe Link", 5, supportsManualArtifactPicker = false),
+    AURORA("Aurora", 6, supportsManualArtifactPicker = false),
+    PLAY("Play", 7, supportsManualArtifactPicker = false)
 }
 
 internal fun DownloadSource.searchDomain(): String? = when (this) {
@@ -682,7 +680,6 @@ internal fun DownloadSource.searchDomain(): String? = when (this) {
     DownloadSource.APK_PURE -> "apkpure.com"
     DownloadSource.APK_CUBE -> "apkcube.com"
     DownloadSource.APTOIDE -> "aptoide.com"
-    DownloadSource.EVOZI -> "apkcube.com"
     DownloadSource.MORPHE_LINK -> null
     DownloadSource.PLAY -> "play.google.com"
     DownloadSource.AURORA -> null

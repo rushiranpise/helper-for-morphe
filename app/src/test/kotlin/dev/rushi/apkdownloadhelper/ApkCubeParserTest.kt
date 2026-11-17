@@ -12,7 +12,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class EvoziParserTest {
+class ApkCubeParserTest {
 
     private val packageName = "com.paget96.batteryguru"
 
@@ -35,7 +35,7 @@ class EvoziParserTest {
     """.trimIndent()
 
     private fun parser(pages: Map<String, String>) =
-        EvoziParser(testParserContext(pages))
+        ApkCubeParser(testParserContext(pages))
 
     private val downloaderUrl = "https://apkcube.com/apk-downloader?url=$packageName"
     private val downloadUrl = "https://apkcube.com/battery-guru-battery-health/$packageName/download"

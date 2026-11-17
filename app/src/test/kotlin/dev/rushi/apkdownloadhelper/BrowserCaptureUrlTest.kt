@@ -65,9 +65,8 @@ class BrowserCaptureUrlTest {
     }
 
     @Test
-    fun `only APKCube and Evozi use the APKCube browser guard`() {
+    fun `only APKCube uses the APKCube browser guard`() {
         assertTrue(DownloadSource.APK_CUBE.isApkCubeBrowserFlow())
-        assertTrue(DownloadSource.EVOZI.isApkCubeBrowserFlow())
         assertFalse(DownloadSource.APK_MIRROR.isApkCubeBrowserFlow())
         assertFalse(DownloadSource.UPTODOWN.isApkCubeBrowserFlow())
     }

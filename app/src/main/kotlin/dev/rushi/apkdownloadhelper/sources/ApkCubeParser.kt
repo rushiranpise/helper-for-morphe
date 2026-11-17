@@ -10,22 +10,13 @@ import dev.rushi.apkdownloadhelper.ui.VersionStatus
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
-/** APKCube's own catalogue, entered directly instead of through Evozi. */
+/** APKCube's catalogue parser. */
 internal class ApkCubeParser(
     ctx: SourceParserContext
 ) : ApkCubeSourceParser(
     ctx = ctx,
     source = DownloadSource.APK_CUBE,
     captchaNote = APKCUBE_CAPTCHA_NOTE
-)
-
-/** Evozi's APK Downloader, which hands off to the same APKCube catalogue. */
-internal class EvoziParser(
-    ctx: SourceParserContext
-) : ApkCubeSourceParser(
-    ctx = ctx,
-    source = DownloadSource.EVOZI,
-    captchaNote = EVOZI_CAPTCHA_NOTE
 )
 
 /**
@@ -204,9 +195,6 @@ internal abstract class ApkCubeSourceParser(
         )
     }
 }
-
-private const val EVOZI_CAPTCHA_NOTE =
-    "APKCube (via Evozi) gates downloads behind a Cloudflare captcha. Solve it in the in-app browser or open the page manually."
 
 private const val APKCUBE_CAPTCHA_NOTE =
     "APKCube gates downloads behind a Cloudflare captcha. Solve it in the in-app browser or open the page manually."

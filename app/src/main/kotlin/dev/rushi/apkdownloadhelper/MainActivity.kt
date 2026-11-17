@@ -84,7 +84,6 @@ import dev.rushi.apkdownloadhelper.sources.ApkSourceParser
 import dev.rushi.apkdownloadhelper.sources.AptoideApi
 import dev.rushi.apkdownloadhelper.sources.AptoideParser
 import dev.rushi.apkdownloadhelper.sources.AuroraParser
-import dev.rushi.apkdownloadhelper.sources.EvoziParser
 import dev.rushi.apkdownloadhelper.sources.MorpheLinkParser
 import dev.rushi.apkdownloadhelper.sources.MorpheResolver
 import dev.rushi.apkdownloadhelper.sources.OkHttpSourceTextFetcher
@@ -343,14 +342,12 @@ class MainActivity : ComponentActivity() {
         val apkPureParser = ApkPureParser(parserContext)
         val apkCubeParser = ApkCubeParser(parserContext)
         val aptoideParser = AptoideParser(parserContext)
-        val evoziParser = EvoziParser(parserContext)
         listOf(
             apkMirrorParser,
             uptodownParser,
             apkPureParser,
             apkCubeParser,
             aptoideParser,
-            evoziParser,
             MorpheLinkParser(
                 ctx = parserContext,
                 delegates = listOf(
@@ -358,8 +355,7 @@ class MainActivity : ComponentActivity() {
                     uptodownParser,
                     apkPureParser,
                     apkCubeParser,
-                    aptoideParser,
-                    evoziParser
+                    aptoideParser
                 )
             ),
             AuroraParser(parserContext)
@@ -1451,7 +1447,7 @@ class MainActivity : ComponentActivity() {
             DownloadSource.APK_PURE -> request.sourceHintUrlsFor(source)
                 .firstOrNull { it.contains("apkpure.com", ignoreCase = true) }
                 ?: parsers[source]?.searchUrl(request.packageName)
-            DownloadSource.APK_CUBE, DownloadSource.EVOZI -> {
+            DownloadSource.APK_CUBE -> {
                 val parser = parsers[source]
                 if (option == CandidateOption.REQUESTED) {
                     parser?.requestedFallbackCandidate(request)?.url
