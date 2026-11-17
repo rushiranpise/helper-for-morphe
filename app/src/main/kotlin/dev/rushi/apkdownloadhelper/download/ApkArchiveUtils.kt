@@ -131,6 +131,21 @@ internal fun File.isSplitApkContainer(): Boolean = runCatching {
     }
 }.getOrDefault(false)
 
+/**
+ * True when this file is a standalone APK, whatever its extension says.
+ *
+ * Some sources hand a single APK out of a bundle-looking URL, so the bytes, not
+ * the `.apkm`/`.xapk` suffix, decide how the file must be named for Morphe.
+ */
+internal fun File.isStandaloneApkArchive(): Boolean = runCatching {
+    ZipFile(this).use { zip ->
+        zip.getEntry("AndroidManifest.xml") != null &&
+            zip.entries().asSequence().none { entry ->
+                !entry.isDirectory && entry.name.endsWith(".apk", ignoreCase = true)
+            }
+    }
+}.getOrDefault(false)
+
 internal fun Context.readDownloadedApkMetadata(
     file: File,
     expectedPackage: String? = null,

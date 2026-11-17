@@ -57,4 +57,31 @@ class SplitArchiveScanTest {
             file.delete()
         }
     }
+
+    @Test
+    fun `a plain apk is standalone whatever its extension says`() {
+        val file = File.createTempFile("split-scan", ".apkm")
+        try {
+            ZipOutputStream(file.outputStream()).use { zip ->
+                listOf("AndroidManifest.xml", "classes.dex").forEach { name ->
+                    zip.putNextEntry(ZipEntry(name))
+                    zip.write("placeholder".toByteArray())
+                    zip.closeEntry()
+                }
+            }
+            assertTrue(file.isStandaloneApkArchive())
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun `a split container is not a standalone apk`() {
+        val file = zipWithEntries(listOf("base.apk", "split_config.arm64_v8a.apk"))
+        try {
+            assertFalse(file.isStandaloneApkArchive())
+        } finally {
+            file.delete()
+        }
+    }
 }

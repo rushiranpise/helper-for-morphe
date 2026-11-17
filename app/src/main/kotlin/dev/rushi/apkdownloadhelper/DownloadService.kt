@@ -29,6 +29,7 @@ import dev.rushi.apkdownloadhelper.download.VirusTotalScanner
 import dev.rushi.apkdownloadhelper.download.compareVersionNames
 import dev.rushi.apkdownloadhelper.download.downloadFailureMessage
 import dev.rushi.apkdownloadhelper.download.httpLoggingInterceptor
+import dev.rushi.apkdownloadhelper.download.isStandaloneApkArchive
 import dev.rushi.apkdownloadhelper.download.readDownloadedApkMetadata
 import dev.rushi.apkdownloadhelper.download.sanitizeFileName
 import dev.rushi.apkdownloadhelper.download.versionNameEquals
@@ -611,7 +612,25 @@ internal class DownloadService : Service() {
             file,
             checkVersionCode = job.fastMode
         )
-        return file
+        return normalizeDownloadedFile(file)
+    }
+
+    /**
+     * A bundle-looking URL can still lead to a plain APK. The file's bytes decide
+     * the name Morphe receives, otherwise a valid APK is handed over as `.apkm`
+     * and the manager's bundle parser rejects it.
+     */
+    private fun normalizeDownloadedFile(file: File): File {
+        if (file.extension.equals("apk", ignoreCase = true) || !file.isStandaloneApkArchive()) {
+            return file
+        }
+        val target = file.parentFile?.uniqueChild("${file.nameWithoutExtension}.apk") ?: return file
+        if (!file.renameTo(target)) return file
+        AppLog.record(
+            LogLevel.Info,
+            "Downloaded file is a standalone APK; renamed ${file.name} to ${target.name}."
+        )
+        return target
     }
 
     private fun handleSuccess(job: DownloadJobManager.DownloadJob, file: File) {
