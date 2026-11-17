@@ -575,9 +575,10 @@ internal fun SourcesSettingsScreen(
     val haptics = LocalHapticFeedback.current
     val view = LocalView.current
 
-    var localOrder by remember(settings.sourceOrder) {
+    val localOrderState = remember(settings.sourceOrder) {
         mutableStateOf(settings.orderedSources)
     }
+    var localOrder by localOrderState
     var draggingSource by remember { mutableStateOf<DownloadSource?>(null) }
     var startIndex by remember { mutableIntStateOf(-1) }
     var targetIndex by remember { mutableIntStateOf(-1) }
@@ -803,7 +804,7 @@ internal fun SourcesSettingsScreen(
                                                 .onGloballyPositioned { coords ->
                                                     handleRootY = coords.positionInRoot().y + coords.size.height / 2f
                                                 }
-                                                .pointerInput(source) {
+                                                .pointerInput(source, localOrderState) {
                                                     detectDragGesturesAfterLongPress(
                                                         onDragStart = {
                                                             val idx = localOrder.indexOf(source)
@@ -1024,18 +1025,13 @@ internal fun VirusTotalQuotaCard(apiKey: String) {
     var minuteUsed by remember { mutableIntStateOf(0) }
     var rollingUsed by remember { mutableIntStateOf(0) }
     var secsToRollover by remember { mutableIntStateOf(60) }
-    val scope = rememberCoroutineScope()
-    val load: () -> Unit = {
-        scope.launch {
-            loading = true
-            failed = false
-            quota = withContext(Dispatchers.IO) { VirusTotalScanner.fetchQuotaUsage(apiKey) }
-            if (quota == null) failed = true
-            loading = false
-        }
-    }
-    LaunchedEffect(apiKey) {
-        load()
+    var refreshKey by remember { mutableIntStateOf(0) }
+    LaunchedEffect(apiKey, refreshKey) {
+        loading = true
+        failed = false
+        quota = withContext(Dispatchers.IO) { VirusTotalScanner.fetchQuotaUsage(apiKey) }
+        if (quota == null) failed = true
+        loading = false
         while (true) {
             minuteUsed = VirusTotalScanner.rateLimiter.callsInCurrentMinute()
             rollingUsed = VirusTotalScanner.rateLimiter.callsInLastMinute()
@@ -1054,7 +1050,7 @@ internal fun VirusTotalQuotaCard(apiKey: String) {
                 Icon(Icons.Outlined.Shield, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(22.dp))
                 Column(modifier = Modifier.weight(1f)) { Text(stringResource(R.string.virustotal_quota), fontWeight = FontWeight.Bold, color = colors.onSurface) }
                 if (loading) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                else Icon(Icons.Outlined.Refresh, contentDescription = "Refresh", tint = colors.primary, modifier = Modifier.size(20.dp).clip(MorpheDefaults.PillShape).clickable { load() }.padding(2.dp))
+                else Icon(Icons.Outlined.Refresh, contentDescription = "Refresh", tint = colors.primary, modifier = Modifier.size(20.dp).clip(MorpheDefaults.PillShape).clickable { refreshKey++ }.padding(2.dp))
             }
             QuotaBar("Per minute", minuteUsed, VirusTotalScanner.MINUTE_LOOKUP_LIMIT, flash = maxOf(minuteUsed, rollingUsed) >= VirusTotalScanner.MINUTE_LOOKUP_LIMIT - 1, caption = "rolling 60s: $rollingUsed / ${VirusTotalScanner.MINUTE_LOOKUP_LIMIT} · resets in ${secsToRollover}s")
             val current = quota

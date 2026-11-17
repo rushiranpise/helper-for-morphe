@@ -77,7 +77,7 @@ internal fun SettingsPageDetail(
     content: @Composable ColumnScope.() -> Unit
 ) {
     BackHandler { onBack() }
-    MorpheSubpageScaffold(title = title, onBack = onBack) {
+    MorpheSubpageScaffold(title = title, onBack = onBack, scrollState = scrollState) {
         content()
     }
 }

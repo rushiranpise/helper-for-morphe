@@ -91,7 +91,6 @@ fun MorpheSubpageScaffold(
     scrollState: ScrollState = rememberScrollState(),
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val scrollState = rememberScrollState()
     val navigationBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     MorphePinnedHeaderPage(
