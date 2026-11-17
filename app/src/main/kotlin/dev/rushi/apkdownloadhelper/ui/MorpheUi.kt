@@ -47,6 +47,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -95,6 +96,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -683,7 +685,12 @@ internal fun SettingsGroup(
 ) {
     CompositionLocalProvider(LocalSettingsGrouped provides true) {
         SectionCard(modifier = modifier) {
-            Column(content = content)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(MorpheDefaults.SectionCornerRadius)),
+                content = content
+            )
         }
     }
 }
@@ -703,6 +710,8 @@ internal fun SettingsItemCard(
         Box(
             modifier = modifier
                 .fillMaxWidth()
+                .defaultMinSize(minHeight = MorpheDefaults.MinTouchTarget)
+                .clipToBounds()
                 .then(
                     if (onClick != null) Modifier.clickable(enabled = enabled, onClick = onClick)
                     else Modifier

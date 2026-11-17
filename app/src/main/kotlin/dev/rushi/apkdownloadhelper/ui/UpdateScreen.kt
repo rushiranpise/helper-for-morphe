@@ -231,6 +231,9 @@ internal fun UpdateScreen(
                         )
                     }
                     if (info.releaseUrl.isNotBlank()) {
+                        MorpheDivider(
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
                         SettingsItem(
                             icon = Icons.Outlined.OpenInNew,
                             title = "Open release page",
