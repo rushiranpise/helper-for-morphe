@@ -366,7 +366,7 @@ class MainActivity : ComponentActivity() {
     private var uiState by mutableStateOf<UiState>(UiState.Idle)
     private var helperSettings by mutableStateOf(HelperSettings())
     private var installedPackageRefreshToken by mutableIntStateOf(0)
-    private var settingsCategoryResetToken by mutableIntStateOf(0)
+    private var requestResetToken by mutableIntStateOf(0)
     private var showUpdates by mutableStateOf(false)
     private var updatePrompt by mutableStateOf<UpdateInfo?>(null)
     private var updateRefreshToken by mutableIntStateOf(0)
@@ -480,8 +480,8 @@ class MainActivity : ComponentActivity() {
             if (activeSettingsCategory != null) {
                 lastActiveCategory = activeSettingsCategory
             }
-            LaunchedEffect(settingsCategoryResetToken) {
-                if (settingsCategoryResetToken > 0) {
+            LaunchedEffect(requestResetToken) {
+                if (requestResetToken > 0) {
                     activeSettingsCategory = null
                 }
             }
@@ -523,6 +523,7 @@ class MainActivity : ComponentActivity() {
                                 .then(backgroundModifier)
                         ) {
                             HomePagerScreen(
+                                requestResetToken = requestResetToken,
                                 findAppsContent = { bottomBarHeight ->
                                     AppBrowserScreen(
                                         onBack = null,
@@ -749,7 +750,7 @@ class MainActivity : ComponentActivity() {
             resources.displayMetrics.densityDpi,
             helperSettings.preferDensitySpecificVariants
         )
-        settingsCategoryResetToken++
+        requestResetToken++
         startRequestLog(request)
         val activeRequest = request
         if (activeRequest != null) {
