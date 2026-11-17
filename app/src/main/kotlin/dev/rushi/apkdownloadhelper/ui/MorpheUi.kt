@@ -677,18 +677,25 @@ internal fun SectionCard(
     }
 }
 
-/** Grouped-settings container: one bordered card with flat rows inside. */
+/** Grouped-settings container: one bordered card with 2 dp segmented rows inside. */
 @Composable
 internal fun SettingsGroup(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val outlineVariant = MaterialTheme.colorScheme.outlineVariant
+    val surfaceTint = MaterialTheme.colorScheme.surfaceTint
+    val gapColor = remember(outlineVariant, surfaceTint) {
+        lerp(outlineVariant, surfaceTint, 0.18f).copy(alpha = 0.55f)
+    }
     CompositionLocalProvider(LocalSettingsGrouped provides true) {
         SectionCard(modifier = modifier) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(MorpheDefaults.SectionCornerRadius)),
+                    .clip(RoundedCornerShape(MorpheDefaults.SectionCornerRadius))
+                    .background(gapColor),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
                 content = content
             )
         }
@@ -710,6 +717,7 @@ internal fun SettingsItemCard(
         Box(
             modifier = modifier
                 .fillMaxWidth()
+                .background(color)
                 .defaultMinSize(minHeight = MorpheDefaults.MinTouchTarget)
                 .clipToBounds()
                 .then(

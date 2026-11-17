@@ -35,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
@@ -458,7 +459,10 @@ private fun Color.toHsv(): HsvColor {
 @Composable
 internal fun AccentGridSection(content: @Composable () -> Unit) {
     Column(
-        modifier = Modifier.padding(MorpheDefaults.ContentPadding),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp))
+            .padding(MorpheDefaults.ContentPadding),
         verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
     ) {
         content()

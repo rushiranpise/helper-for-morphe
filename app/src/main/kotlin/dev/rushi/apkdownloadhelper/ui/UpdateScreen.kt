@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,6 +28,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -220,7 +222,11 @@ internal fun UpdateScreen(
         latest?.let { info ->
             SettingsSection(title = "Changelog", icon = Icons.Outlined.History) {
                 SettingsGroup {
-                    SelectionContainer {
+                    SelectionContainer(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp))
+                    ) {
                         Text(
                             text = cleanReleaseNotes(info.notes).ifBlank { "No release notes for this version." },
                             modifier = Modifier
@@ -231,9 +237,6 @@ internal fun UpdateScreen(
                         )
                     }
                     if (info.releaseUrl.isNotBlank()) {
-                        MorpheDivider(
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        )
                         SettingsItem(
                             icon = Icons.Outlined.OpenInNew,
                             title = "Open release page",

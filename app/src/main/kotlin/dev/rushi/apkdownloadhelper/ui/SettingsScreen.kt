@@ -155,9 +155,6 @@ internal fun AppearanceTabContent(
                             onCustomClick = { showAccentPicker = true }
                         )
                     }
-                    MorpheDivider(
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    )
                     SettingsItem(
                         icon = Icons.Outlined.Refresh,
                         title = "Reset to default",
