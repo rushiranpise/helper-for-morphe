@@ -558,6 +558,8 @@ internal fun FastModeCard(
                                 includeConnections = percent < 100,
                                 modifier = Modifier.weight(1f)
                             )
+                        } else {
+                            Spacer(Modifier.weight(1f))
                         }
                         HelperIconButton(
                             icon = Icons.Outlined.Close,
