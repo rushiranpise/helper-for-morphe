@@ -1045,7 +1045,8 @@ internal fun MorpheSelectorRow(
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    labelStyle: TextStyle = MaterialTheme.typography.bodyMedium
+    labelStyle: TextStyle = MaterialTheme.typography.bodyMedium,
+    compact: Boolean = false
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -1076,38 +1077,62 @@ internal fun MorpheSelectorRow(
                     }
                 )
             ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    ThemedIcon(
-                        icon = option.icon,
-                        tint = if (isSelected) {
-                            MaterialTheme.colorScheme.onSurface
-                        } else {
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                        },
-                        contentDescription = option.contentDescription
-                            ?.takeIf { option.label.isBlank() },
-                        modifier = Modifier.rotate(option.iconRotation)
-                    )
-                    // Rendered even when the label is blank here so an icon-only option keeps
-                    // the same height as its siblings.
-                    Text(
-                        text = option.label,
-                        style = labelStyle,
-                        autoSize = fittedTextAutoSize(labelStyle.fontSize),
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (isSelected) {
-                            MaterialTheme.colorScheme.onSurface
-                        } else {
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                        },
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center
-                    )
+                val contentColor = if (isSelected) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                }
+                if (compact) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        ThemedIcon(
+                            icon = option.icon,
+                            tint = contentColor,
+                            contentDescription = option.contentDescription
+                                ?.takeIf { option.label.isBlank() },
+                            modifier = Modifier.rotate(option.iconRotation),
+                            size = 18.dp
+                        )
+                        Text(
+                            text = option.label,
+                            style = labelStyle,
+                            autoSize = fittedTextAutoSize(labelStyle.fontSize),
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = contentColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ThemedIcon(
+                            icon = option.icon,
+                            tint = contentColor,
+                            contentDescription = option.contentDescription
+                                ?.takeIf { option.label.isBlank() },
+                            modifier = Modifier.rotate(option.iconRotation)
+                        )
+                        // Rendered even when the label is blank here so an icon-only option keeps
+                        // the same height as its siblings.
+                        Text(
+                            text = option.label,
+                            style = labelStyle,
+                            autoSize = fittedTextAutoSize(labelStyle.fontSize),
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = contentColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
         }

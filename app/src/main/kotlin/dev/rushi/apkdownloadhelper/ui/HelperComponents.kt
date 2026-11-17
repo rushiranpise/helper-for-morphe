@@ -1577,7 +1577,9 @@ internal fun VersionTypeRow(
         selectedIndex = tabs.indexOf(selected),
         onSelect = { onSelect(tabs[it]) },
         // labelLarge keeps four-in-a-row tab labels on one line at phone widths.
-        labelStyle = MaterialTheme.typography.labelLarge
+        labelStyle = MaterialTheme.typography.labelLarge,
+        // Version type is a two-way choice, so horizontal tabs are enough.
+        compact = true
     )
 }
 
@@ -1646,12 +1648,19 @@ internal fun AboutModeCard(tab: SourceSubTab) {
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(MorpheDefaults.CompactCornerRadius))
                     .clickable { expanded = !expanded }
-                    .padding(horizontal = MorpheDefaults.ContentPadding, vertical = 14.dp),
+                    .padding(horizontal = MorpheDefaults.ContentPadding, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                ThemedIcon(
+                    icon = Icons.Outlined.HelpOutline,
+                    size = 18.dp,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 Text(
                     text = title,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
                 Icon(
