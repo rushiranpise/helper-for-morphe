@@ -549,14 +549,16 @@ internal fun FastModeCard(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        TransferStats(
-                            connections = progress.connections,
-                            speedBytesPerSec = progress.speedBytesPerSec,
-                            etaMs = progress.etaMs,
-                            paused = progress.paused,
-                            includeConnections = !isScan && percent < 100,
-                            modifier = Modifier.weight(1f)
-                        )
+                        if (!isScan) {
+                            TransferStats(
+                                connections = progress.connections,
+                                speedBytesPerSec = progress.speedBytesPerSec,
+                                etaMs = progress.etaMs,
+                                paused = progress.paused,
+                                includeConnections = percent < 100,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                         HelperIconButton(
                             icon = Icons.Outlined.Close,
                             contentDescription = "Cancel download",
@@ -805,13 +807,15 @@ internal fun DownloadingState(
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
-                    TransferStats(
-                        connections = state.connections,
-                        speedBytesPerSec = state.speedBytesPerSec,
-                        etaMs = state.etaMs,
-                        paused = state.paused,
-                        includeConnections = !isScan && state.percent < 100
-                    )
+                    if (!isScan) {
+                        TransferStats(
+                            connections = state.connections,
+                            speedBytesPerSec = state.speedBytesPerSec,
+                            etaMs = state.etaMs,
+                            paused = state.paused,
+                            includeConnections = state.percent < 100
+                        )
+                    }
                 }
             }
             if (!isScan && state.percent < 100) {
