@@ -95,6 +95,7 @@ import dev.rushi.apkdownloadhelper.updater.formatBundleRelease
 import dev.rushi.apkdownloadhelper.updater.formatReleaseDate
 import dev.rushi.apkdownloadhelper.updater.groupArchiveSources
 import dev.rushi.apkdownloadhelper.updater.newestReleaseDate
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -231,6 +232,8 @@ internal fun AppBrowserScreen(
             val index = MorpheArchive.fetchIndex()
             apps = index.apps.sortedBy { it.name.lowercase(Locale.US) }
             freshness = archiveFreshness(index.generatedAt)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             error = e.message ?: "Failed to load the app index"
         }
@@ -769,7 +772,12 @@ internal fun AppDetailView(
             item {
                 MorpheSectionTitle(text = "Sources", icon = Icons.Outlined.Dns)
             }
-            items(sourceGroups, key = { it.primary.repo }) { group ->
+            items(
+                items = sourceGroups,
+                key = { group ->
+                    group.primary.patches.map { it.name }.sorted().joinToString("\u0000")
+                }
+            ) { group ->
                 AppSourceCard(
                     source = group.primary,
                     mirrors = group.mirrors,
