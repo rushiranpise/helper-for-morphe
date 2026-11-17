@@ -48,7 +48,7 @@ internal fun MainPagerScaffold(
                 .fillMaxSize()
                 .hazeSource(state = barHaze),
         ) { pageIndex ->
-            content(MainPage.entries[pageIndex], barHeight)
+            content(MainPage.entries[pageIndex], if (covered) 0.dp else barHeight)
         }
 
         // Pass barHaze into MorpheNavigationBar so glassFill blurs the pager behind it.

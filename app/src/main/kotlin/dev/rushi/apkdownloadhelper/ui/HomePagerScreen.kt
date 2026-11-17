@@ -26,6 +26,7 @@ internal fun HomePagerScreen(
     MainPagerScaffold(
         pagerState = pagerState,
         navigationCovered = navigationCovered,
+        swipeEnabled = !navigationCovered(),
         overlay = overlay
     ) { page, bottomBarHeight ->
         when (page) {
