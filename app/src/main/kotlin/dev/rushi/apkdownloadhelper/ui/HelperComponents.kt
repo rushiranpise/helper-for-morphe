@@ -1637,7 +1637,8 @@ internal fun AboutModeCard(tab: SourceSubTab) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(MorpheDefaults.CompactCornerRadius)),
         shape = RoundedCornerShape(MorpheDefaults.CompactCornerRadius),
-        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.05f)
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.05f),
+        contentColor = MaterialTheme.colorScheme.onSurface
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
