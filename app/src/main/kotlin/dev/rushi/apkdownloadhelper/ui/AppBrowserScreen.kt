@@ -628,6 +628,57 @@ private fun FindAppIcon(app: ArchiveApp, gradient: List<Color>) {
 }
 
 /**
+ * The manager's glass placeholder for an app with no icon: a frosted sweep of the app's
+ * own palette and a lit edge, rather than a letter tile. Most apps in the archive have no
+ * icon URL, so this is what an uninstalled app normally shows.
+ */
+@Composable
+private fun FindAppIconPlaceholder(
+    gradient: List<Color>,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    val monochrome = LocalMonochromeTheme.current
+    val base = if (monochrome) scheme.surfaceContainerHighest else gradient.getOrElse(0) { scheme.primary }
+    val mid = if (monochrome) scheme.surfaceContainerHighest else gradient.getOrElse(1) { base }
+    val end = if (monochrome) scheme.surfaceContainerHigh else gradient.lastOrNull() ?: base
+    val highlight = if (monochrome) scheme.onSurface.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.50f)
+    val borderHighlight = if (monochrome) scheme.outline.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.55f)
+
+    Box(
+        modifier = modifier.drawWithCache {
+            val corner = CornerRadius(16.dp.toPx())
+            val glass = Brush.linearGradient(
+                colors = listOf(
+                    highlight,
+                    base.copy(alpha = 0.22f),
+                    end.copy(alpha = 0.20f)
+                ),
+                start = Offset(0f, 0f),
+                end = Offset(size.width, size.height)
+            )
+            val border = Brush.linearGradient(
+                colors = listOf(
+                    borderHighlight,
+                    mid.copy(alpha = 0.30f),
+                    borderHighlight
+                ),
+                start = Offset(0f, 0f),
+                end = Offset(size.width, size.height)
+            )
+            onDrawBehind {
+                drawRoundRect(brush = glass, cornerRadius = corner)
+                drawRoundRect(
+                    brush = border,
+                    cornerRadius = corner,
+                    style = Stroke(1.dp.toPx())
+                )
+            }
+        }
+    )
+}
+
+/**
  * One app in the archive, as a manager-style glass card: a tinted gradient, the app icon,
  * name with a source-count tag, a single state line, and the favourite action at the end.
  */
@@ -1222,26 +1273,22 @@ internal fun AsyncAvatar(
                 .size(size)
                 .clip(RoundedCornerShape(cornerRadius))
         )
+    } else if (fallbackGradient != null) {
+        FindAppIconPlaceholder(
+            gradient = fallbackGradient,
+            modifier = Modifier.size(size)
+        )
     } else {
-        val fallbackBackground = if (fallbackGradient != null) {
-            MonochromeThemeDefaults.iconBackground(fallbackGradient)
-        } else {
-            SolidColor(SemanticTone.Primary.container)
-        }
         Box(
             modifier = Modifier
                 .size(size)
                 .clip(RoundedCornerShape(cornerRadius))
-                .background(fallbackBackground),
+                .background(SemanticTone.Primary.container),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = fallbackText,
-                color = if (fallbackGradient != null) {
-                    MonochromeThemeDefaults.iconTint(Color.White)
-                } else {
-                    SemanticTone.Primary.content
-                },
+                color = SemanticTone.Primary.content,
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold
             )
