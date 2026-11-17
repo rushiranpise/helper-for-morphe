@@ -91,6 +91,7 @@ internal fun HelperScreen(
     onSkipFastModeMismatch: () -> Unit,
     onChooseVersion: (FastModePolicy) -> Unit,
     onOpenMorphe: () -> Unit,
+    onFindApps: () -> Unit,
     onSolveCaptcha: (DownloadCandidate) -> Unit,
     onFormatToggle: (String) -> Unit,
     onProceedAfterScan: () -> Unit,
@@ -219,7 +220,7 @@ internal fun HelperScreen(
                 item {
                     EmptyLaunchState(
                         onOpenMorphe = onOpenMorphe,
-                        onFindApps = { showAppBrowser = false }
+                        onFindApps = onFindApps
                     )
                 }
                 return@LazyColumn
