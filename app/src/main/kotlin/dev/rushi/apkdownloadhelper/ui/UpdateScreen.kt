@@ -80,6 +80,10 @@ internal fun UpdateScreen(
     val updateAvailable = latest?.isNewerThan(BuildConfig.VERSION_NAME) == true
 
     fun checkNow(channel: UpdateChannel = settings.updateChannel) {
+        if (installing) {
+            checkMessage = "Finish the current install first."
+            return
+        }
         if (checking && channel == settings.updateChannel) return
         val token = checkToken + 1
         checkToken = token
@@ -101,12 +105,16 @@ internal fun UpdateScreen(
     fun install(useShizuku: Boolean) {
         val info = latest ?: return
         if (installing) return
+        if (checking) {
+            installMessage = "Wait for the update check to finish."
+            return
+        }
         if (info.assetUrl.isBlank()) {
             installMessage = "This release has no APK asset."
             return
         }
+        installing = true
         scope.launch {
-            installing = true
             installMessage = "Downloading v${info.version}…"
             try {
                 val file = UpdateManager.download(context, info)
