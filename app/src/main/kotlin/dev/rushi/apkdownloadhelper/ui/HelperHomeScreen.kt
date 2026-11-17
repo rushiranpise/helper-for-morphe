@@ -103,6 +103,11 @@ internal fun HelperScreen(
     var pendingFilePick by remember { mutableStateOf<DownloadCandidate?>(null) }
     var primaryAction by remember { mutableStateOf<PrimaryAction?>(null) }
     val context = LocalContext.current
+    val effectiveDarkTheme = when (settings.themeMode) {
+        ThemeMode.DARK -> true
+        ThemeMode.LIGHT -> false
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    }
     var historyEntries by remember { mutableStateOf<List<DownloadHistoryEntry>>(emptyList()) }
     val refreshHistory = {
         historyEntries = DownloadHistoryStore.entries(context)
@@ -194,16 +199,12 @@ internal fun HelperScreen(
                         }
                     )
                     HelperThemeButton(
-                        dark = when (settings.themeMode) {
-                            ThemeMode.DARK -> true
-                            ThemeMode.LIGHT -> false
-                            ThemeMode.SYSTEM -> isSystemInDarkTheme()
-                        },
+                        dark = effectiveDarkTheme,
                         onToggle = {
-                            val target = if (settings.themeMode == ThemeMode.LIGHT) {
-                                ThemeMode.DARK
-                            } else {
+                            val target = if (effectiveDarkTheme) {
                                 ThemeMode.LIGHT
+                            } else {
+                                ThemeMode.DARK
                             }
                             onSettingsChange(settings.copy(themeMode = target))
                             Toast.makeText(
