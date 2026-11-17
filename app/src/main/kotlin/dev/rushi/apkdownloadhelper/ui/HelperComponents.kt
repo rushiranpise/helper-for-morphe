@@ -53,7 +53,6 @@ import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.LightMode
@@ -2134,8 +2133,7 @@ internal fun RequestLogsCard(
 
 @Composable
 internal fun EmptyLaunchState(
-    onOpenMorphe: () -> Unit,
-    onFindApps: () -> Unit
+    onOpenMorphe: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)) {
         MorpheEmptyState(
@@ -2147,12 +2145,6 @@ internal fun EmptyLaunchState(
             text = "Open Morphe Manager",
             onClick = onOpenMorphe,
             icon = Icons.Outlined.OpenInNew,
-            modifier = Modifier.fillMaxWidth()
-        )
-        HelperOutlinedButton(
-            text = "Find New Apps",
-            onClick = onFindApps,
-            icon = Icons.Outlined.Explore,
             modifier = Modifier.fillMaxWidth()
         )
     }

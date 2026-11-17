@@ -529,7 +529,7 @@ class MainActivity : ComponentActivity() {
                                         modifier = Modifier.padding(bottom = bottomBarHeight)
                                     )
                                 },
-                                homeContent = { bottomBarHeight, onFindApps ->
+                                homeContent = { bottomBarHeight ->
                                     HelperScreen(
                                         request = request,
                                         state = uiState,
@@ -544,7 +544,6 @@ class MainActivity : ComponentActivity() {
                                         selectedPagerPage = selectedPagerPage,
                                         onPagerPageChanged = { selectedPagerPage = it },
                                         onSettingsChange = ::updateHelperSettings,
-                                        onFindApps = onFindApps,
                                         onOpenUpdates = { showUpdates = true },
                                         onRefresh = ::loadCandidates,
                                         canRetryFailedSources = failedAttempts.isNotEmpty(),

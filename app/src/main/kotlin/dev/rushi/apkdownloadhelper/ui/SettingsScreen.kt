@@ -551,7 +551,7 @@ internal fun AboutTabContent() {
                     title = "GitHub Repository",
                     subtitle = "View source code and report issues",
                     onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/darkbyteprojects/helper-for-morphe"))
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/rushiranpise/helper-for-morphe"))
                         context.startActivity(intent)
                     }
                 )

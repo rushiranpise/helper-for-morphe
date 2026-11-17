@@ -11,7 +11,7 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun HomePagerScreen(
     findAppsContent: @Composable (bottomBarHeight: Dp) -> Unit,
-    homeContent: @Composable (bottomBarHeight: Dp, onFindApps: () -> Unit) -> Unit,
+    homeContent: @Composable (bottomBarHeight: Dp) -> Unit,
     settingsContent: @Composable (bottomBarHeight: Dp) -> Unit,
     navigationCovered: () -> Boolean,
     overlay: @Composable BoxScope.() -> Unit = {}
@@ -30,9 +30,7 @@ internal fun HomePagerScreen(
     ) { page, bottomBarHeight ->
         when (page) {
             MainPage.FIND_APPS -> findAppsContent(bottomBarHeight)
-            MainPage.HOME -> homeContent(bottomBarHeight) {
-                scope.launch { pagerState.animateScrollToPage(MainPage.FIND_APPS.ordinal) }
-            }
+            MainPage.HOME -> homeContent(bottomBarHeight)
             MainPage.SETTINGS -> settingsContent(bottomBarHeight)
         }
     }
