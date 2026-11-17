@@ -23,23 +23,25 @@ import androidx.compose.ui.unit.dp
 
 data class PageInsets(val top: Dp, val bottom: Dp, val horizontal: Dp)
 
+/**
+ * Pinned-header page. Opaque by default so pushed screens cannot show the page
+ * underneath. Only top-level pager pages should opt into a transparent background.
+ */
 @Composable
 fun MorphePinnedHeaderPage(
     header: @Composable ColumnScope.() -> Unit,
     scrollState: ScrollState,
     modifier: Modifier = Modifier,
-    backgroundColor: Color = Color.Transparent,
+    backgroundColor: Color? = null,
     content: @Composable BoxScope.(insets: PageInsets) -> Unit
 ) {
     val density = LocalDensity.current
+    val resolvedBackground = backgroundColor ?: MaterialTheme.colorScheme.background
 
     SubcomposeLayout(
         modifier = modifier
             .fillMaxSize()
-            .then(
-                if (backgroundColor != Color.Transparent) Modifier.background(backgroundColor)
-                else Modifier
-            )
+            .background(resolvedBackground)
     ) { constraints ->
         // 1. Measure Header first
         val headerPlaceables = subcompose("Header") {
@@ -97,8 +99,7 @@ fun MorpheSubpageScaffold(
             MorpheHeaderBar(title = title, onBack = onBack)
         },
         scrollState = scrollState,
-        modifier = modifier,
-        backgroundColor = MaterialTheme.colorScheme.background
+        modifier = modifier
     ) { insets ->
         Column(
             modifier = Modifier
@@ -164,14 +165,13 @@ fun BoxScope.HeaderBand(
     shape: Shape,
     scrollState: ScrollState
 ) {
-    val density = LocalDensity.current
     Box(
         modifier = Modifier
             .matchParentSize()
             .graphicsLayer {
-                // Fade in the solid background as soon as you scroll
-                val fadeDistance = with(density) { 16.dp.toPx() }
-                alpha = (scrollState.value.toFloat() / fadeDistance).coerceIn(0f, 1f)
+                // Once content starts moving under the header it must be covered
+                // completely; a partial fade would leave text visible through it.
+                alpha = if (scrollState.value > 0) 1f else 0f
             }
             // Using solid background instead of haze to guarantee text is hidden
             .background(glass, shape)

@@ -10,6 +10,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.ScrollState
@@ -39,7 +40,8 @@ internal fun SettingsPage(
         header = {
             MorpheHeaderBar(title = "Settings")
         },
-        scrollState = scrollState
+        scrollState = scrollState,
+        backgroundColor = Color.Transparent
     ) { insets ->
         CompositionLocalProvider(LocalSettingsSearch provides search) {
             Column(
