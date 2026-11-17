@@ -579,7 +579,8 @@ internal fun String?.versionNameEquals(
 internal fun PendingDownloadResult.belongsTo(request: HelperRequest?): Boolean {
     if (request == null) return false
     if (requestPackage != request.packageName) return false
-    val requestedName = request.requestedVersionName ?: return true
+    val requestedName = request.requestedVersionName
+        ?: return request.requestedVersionCodes.isEmpty()
     val candidateName = versionName ?: return true
     return candidateName.versionNameEquals(requestedName)
 }

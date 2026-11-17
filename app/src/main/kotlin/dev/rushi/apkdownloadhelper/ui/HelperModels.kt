@@ -221,12 +221,11 @@ internal data class HelperRequest(
                 requestedVersionName,
                 ignoreVariantMarker = requestsVariantBuild
             )
-        val codeRequired = requestedVersionCodes.isNotEmpty() && candidateVersionCode != null
-        val codeMatches = requestedVersionCodes.isEmpty() ||
-            candidateVersionCode == null ||
-            (candidateVersionCode > 0L && candidateVersionCode in requestedVersionCodes)
+        if (nameRequired && !nameMatches) return false
 
-        return (!nameRequired || nameMatches) && (!codeRequired || codeMatches)
+        if (requestedVersionCodes.isEmpty()) return true
+        val candidateCode = candidateVersionCode ?: return nameMatches
+        return candidateCode > 0L && candidateCode in requestedVersionCodes
     }
 
     /**
@@ -538,8 +537,12 @@ internal fun sourceSwitchVersionMatches(
     candidate: DownloadCandidate
 ): Boolean {
     if (target.option == CandidateOption.LATEST) return true
-    val targetVersion = target.versionName ?: return true
-    return candidate.versionName?.versionNameEquals(targetVersion) == true
+    val targetVersion = target.versionName
+    if (targetVersion != null) {
+        return candidate.versionName?.versionNameEquals(targetVersion) == true
+    }
+    val targetCode = target.versionCode ?: return true
+    return candidate.versionCode == targetCode
 }
 
 internal fun sourceSwitchVariantMatches(

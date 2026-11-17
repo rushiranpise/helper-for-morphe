@@ -105,6 +105,35 @@ class SourceSwitchMatchTest {
     }
 
     @Test
+    fun requestedSwitchKeepsACodeOnlyTarget() {
+        val codeOnlyRequest = testRequest(versionName = null, versionCode = 100)
+        val target = candidate(
+            option = CandidateOption.REQUESTED,
+            versionName = null,
+            versionCode = 100
+        )
+        val candidates = listOf(
+            candidate(
+                source = DownloadSource.APK_PURE,
+                option = CandidateOption.REQUESTED,
+                versionName = null,
+                versionCode = 100
+            ),
+            candidate(
+                source = DownloadSource.APK_PURE,
+                option = CandidateOption.REQUESTED,
+                versionName = null,
+                versionCode = 200
+            )
+        )
+
+        val matches = matchingSourceSwitchCandidates(candidates, target, codeOnlyRequest)
+
+        assertEquals(1, matches.size)
+        assertEquals(100L, matches.single().versionCode)
+    }
+
+    @Test
     fun sameSourceMatchesTheExactVariantNumber() {
         val target = candidate(variantLabel = "arm64-v8a", variantNumber = 2)
         val candidates = listOf(
