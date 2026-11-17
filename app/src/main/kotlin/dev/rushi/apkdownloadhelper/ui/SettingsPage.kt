@@ -24,8 +24,8 @@ internal enum class SettingsCategory(
     APPEARANCE("Appearance", "Theme, colors, and app icon", Icons.Outlined.Palette),
     DOWNLOADS("Downloads", "Save location, storage & Fast Mode", Icons.Outlined.SdStorage),
     SECURITY_NETWORK("Security & Network", "Network policy, DNS & VirusTotal", Icons.Outlined.Security),
-    SYSTEM_LOGS("System & Logs", "Updates, history & diagnostics", Icons.AutoMirrored.Outlined.ViewList),
-    ABOUT("About", "Version, licenses & GitHub", Icons.Outlined.Info)
+    SYSTEM_LOGS("System & Logs", "History, logs & diagnostics", Icons.AutoMirrored.Outlined.ViewList),
+    ABOUT("About", "Version, updates & GitHub", Icons.Outlined.Info)
 }
 
 @Composable

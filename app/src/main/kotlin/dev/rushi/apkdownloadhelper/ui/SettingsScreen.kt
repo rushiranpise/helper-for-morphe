@@ -492,8 +492,7 @@ internal fun LogsTabContent(
     historyEntries: List<DownloadHistoryEntry>,
     onOpenHistoryEntry: (DownloadHistoryEntry) -> Unit,
     onShareHistoryEntry: (DownloadHistoryEntry) -> Unit,
-    onClearHistory: () -> Unit,
-    onOpenUpdates: () -> Unit
+    onClearHistory: () -> Unit
 ) {
     var subTab by rememberSaveable { mutableStateOf(LogsSubTab.HISTORY) }
 
@@ -501,24 +500,6 @@ internal fun LogsTabContent(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        SettingsSection(title = "Updates", icon = Icons.Outlined.Refresh) {
-            SettingsGroup {
-                SettingsItem(
-                    icon = Icons.Outlined.SystemUpdate,
-                    title = "Check for updates & changelog",
-                    subtitle = "View latest release and install",
-                    onClick = onOpenUpdates
-                )
-                SettingsSwitchItem(
-                    icon = Icons.Outlined.Refresh,
-                    title = "Check automatically",
-                    subtitle = "Look for a newer release when the helper starts.",
-                    checked = settings.checkUpdates,
-                    onToggle = { onSettingsChange(settings.copy(checkUpdates = !settings.checkUpdates)) }
-                )
-            }
-        }
-
         SettingsSection(title = "Logs & History", icon = Icons.AutoMirrored.Outlined.ViewList) {
             MorpheSelectorRow(
                 options = LogsSubTab.entries.map { MorpheSelectorOption(label = it.label, icon = it.icon) },
@@ -549,7 +530,11 @@ internal fun LogsTabContent(
 // 5. ABOUT TAB
 // ==========================================
 @Composable
-internal fun AboutTabContent() {
+internal fun AboutTabContent(
+    settings: HelperSettings,
+    onSettingsChange: (HelperSettings) -> Unit,
+    onOpenUpdates: () -> Unit
+) {
     val context = LocalContext.current
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -571,6 +556,24 @@ internal fun AboutTabContent() {
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/rushiranpise/helper-for-morphe"))
                         context.startActivity(intent)
                     }
+                )
+            }
+        }
+
+        SettingsSection(title = "Updates", icon = Icons.Outlined.Refresh) {
+            SettingsGroup {
+                SettingsItem(
+                    icon = Icons.Outlined.SystemUpdate,
+                    title = "Check for updates & changelog",
+                    subtitle = "View latest release and install",
+                    onClick = onOpenUpdates
+                )
+                SettingsSwitchItem(
+                    icon = Icons.Outlined.Refresh,
+                    title = "Check automatically",
+                    subtitle = "Look for a newer release when the helper starts.",
+                    checked = settings.checkUpdates,
+                    onToggle = { onSettingsChange(settings.copy(checkUpdates = !settings.checkUpdates)) }
                 )
             }
         }

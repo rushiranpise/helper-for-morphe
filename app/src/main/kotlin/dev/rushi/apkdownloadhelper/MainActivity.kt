@@ -657,10 +657,13 @@ class MainActivity : ComponentActivity() {
                                         historyEntries = DownloadHistoryStore.entries(applicationContext),
                                         onOpenHistoryEntry = ::openHistoryEntry,
                                         onShareHistoryEntry = ::shareHistoryEntry,
-                                        onClearHistory = { DownloadHistoryStore.clear(applicationContext) },
+                                        onClearHistory = { DownloadHistoryStore.clear(applicationContext) }
+                                    )
+                                    SettingsCategory.ABOUT -> AboutTabContent(
+                                        settings = helperSettings,
+                                        onSettingsChange = ::updateHelperSettings,
                                         onOpenUpdates = { showUpdates = true }
                                     )
-                                    SettingsCategory.ABOUT -> AboutTabContent()
                                 }
                             }
                         }
