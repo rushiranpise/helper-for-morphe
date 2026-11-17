@@ -313,8 +313,8 @@ internal fun SystemTabContent(
                 SettingsItem(
                     icon = Icons.Outlined.CleaningServices,
                     title = "Storage used",
-                    subtitle = "Clear cache and temporary files",
-                    onClick = { scope.launch(Dispatchers.IO) { context.clearAllDownloads() } },
+                    subtitle = "Clear temporary files",
+                    onClick = { scope.launch(Dispatchers.IO) { context.clearTemporaryDownloads() } },
                     trailingContent = { Text("Clear", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
                 )
                 SettingsItem(
