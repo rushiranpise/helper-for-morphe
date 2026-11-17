@@ -104,6 +104,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.drawable.toBitmap
 import dev.rushi.apkdownloadhelper.MORPHE_MANAGER_PACKAGES
 import dev.rushi.apkdownloadhelper.R
 import dev.rushi.apkdownloadhelper.download.openPlayStoreListing
@@ -354,10 +355,10 @@ internal fun AppBrowserScreen(
                         val fresh = freshness
                         Text(
                             text = buildString {
-                                append(apps?.let { "${it.size} apps with patches" } ?: "Morphe patch archive")
+                                append(apps?.let { "${it.size} Apps" } ?: "Loading ...")
                                 // Age goes in the subtitle because a stale index is otherwise
                                 // indistinguishable from a current one.
-                                fresh?.let { append(" · index ${it.label}") }
+                                fresh?.let { append(" - updated ${it.label}") }
                             },
                             color = if (fresh?.stale == true) {
                                 MaterialTheme.colorScheme.error
@@ -516,6 +517,7 @@ internal fun AppBrowserScreen(
                                     items(filtered, key = { it.packageName }) { app ->
                                         FindAppCard(
                                             app = app,
+                                            installed = app.packageName in installedPackages,
                                             favourite = app.packageName in favourites,
                                             onToggleFavourite = {
                                                 favourites = MorpheFavourites.toggle(context, app.packageName)
@@ -615,16 +617,61 @@ private fun ArchiveApp.findAppCardColors(): FindAppCardColors {
     )
 }
 
+/** Launcher icons for installed apps, kept so scrolling does not reload them. */
+private val installedAppIconCache = ConcurrentHashMap<String, ImageBitmap>()
+
 @Composable
-private fun FindAppIcon(app: ArchiveApp, gradient: List<Color>) {
+private fun FindAppIcon(app: ArchiveApp, gradient: List<Color>, installed: Boolean) {
     val initial = app.name.firstOrNull()?.uppercaseChar() ?: '?'
+    if (installed) {
+        val icon = rememberInstalledAppIcon(app.packageName)
+        if (icon != null) {
+            Image(
+                bitmap = icon,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(16.dp))
+            )
+        } else {
+            // An installed app must never fall back to the bundle placeholder.
+            AsyncAvatar(
+                url = null,
+                fallbackText = initial.toString(),
+                size = 56.dp,
+                cornerRadius = 16.dp
+            )
+        }
+        return
+    }
     AsyncAvatar(
         url = app.iconUrl,
         fallbackText = initial.toString(),
         size = 56.dp,
         cornerRadius = 16.dp,
-        fallbackGradient = gradient
+        // The glass placeholder is only for an app with no icon URL at all.
+        fallbackGradient = gradient.takeIf { app.iconUrl == null }
     )
+}
+
+@Composable
+private fun rememberInstalledAppIcon(packageName: String): ImageBitmap? {
+    val context = LocalContext.current
+    var icon by remember(packageName) { mutableStateOf(installedAppIconCache[packageName]) }
+    LaunchedEffect(packageName) {
+        installedAppIconCache[packageName]?.let {
+            icon = it
+            return@LaunchedEffect
+        }
+        icon = withContext(Dispatchers.IO) {
+            runCatching {
+                context.packageManager.getApplicationIcon(packageName)
+                    .toBitmap(width = 176, height = 176)
+                    .asImageBitmap()
+            }.getOrNull()
+        }?.also { installedAppIconCache[packageName] = it }
+    }
+    return icon
 }
 
 /**
@@ -685,6 +732,7 @@ private fun FindAppIconPlaceholder(
 @Composable
 private fun FindAppCard(
     app: ArchiveApp,
+    installed: Boolean,
     favourite: Boolean,
     onToggleFavourite: () -> Unit,
     onClick: () -> Unit,
@@ -773,7 +821,7 @@ private fun FindAppCard(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            FindAppIcon(app = app, gradient = palette.gradient)
+            FindAppIcon(app = app, gradient = palette.gradient, installed = installed)
 
             Column(
                 modifier = Modifier.weight(1f),
