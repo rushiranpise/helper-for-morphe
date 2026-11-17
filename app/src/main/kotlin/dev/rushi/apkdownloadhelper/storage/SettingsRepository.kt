@@ -241,8 +241,8 @@ internal enum class DownloadLocation(
         description = "Save a copy in the app's external files folder."
     ),
     DOWNLOADS(
-        title = "Downloads/Morphe Helper",
-        description = "Save a visible copy in Downloads/Morphe Helper."
+        title = "Downloads",
+        description = "Save a visible copy in your Downloads folder."
     ),
     CUSTOM(
         title = "Custom folder",
