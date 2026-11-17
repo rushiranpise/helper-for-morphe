@@ -40,6 +40,8 @@ internal fun MainPagerScaffold(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
+        MorpheBackground(modifier = Modifier.matchParentSize())
+
         // Mark the pager as the haze source so scrolling content blurs under the pill.
         HorizontalPager(
             state = pagerState,

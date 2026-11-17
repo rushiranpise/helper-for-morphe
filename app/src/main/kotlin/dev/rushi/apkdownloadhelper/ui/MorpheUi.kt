@@ -130,8 +130,8 @@ internal object MorpheDefaults {
     val CardElevation = 2.dp
     val CardCornerRadius = 16.dp
     val CompactCornerRadius = 12.dp
-    val SettingsCornerRadius = 14.dp
-    val SectionCornerRadius = 18.dp
+    val SettingsCornerRadius = 16.dp
+    val SectionCornerRadius = 20.dp
     val IconSize = 24.dp
     val IconSizeSmall = 20.dp
 
@@ -172,6 +172,9 @@ internal object MorpheDefaults {
 
 /** Text colour inside Morphe-style dialogs (the manager resolves this per dialog surface). */
 internal val LocalDialogTextColor = compositionLocalOf { Color.Unspecified }
+
+/** True inside a [SettingsGroup], where rows share the group's single card surface. */
+internal val LocalSettingsGrouped = staticCompositionLocalOf { false }
 
 // ---------------------------------------------------------------------------
 // Motion  ported from morphe-manager's ui/screen/shared/Animations.kt
@@ -318,6 +321,13 @@ internal fun morpheDarkColorScheme() = darkColorScheme(
     surfaceTint = Color(0xFFA4C9FF),
     outlineVariant = Color(0xFF43474E),
     scrim = Color(0xFF000000),
+    surfaceContainerLowest = Color(0xFF0C0E11),
+    surfaceContainerLow = Color(0xFF1A1C1E),
+    surfaceContainer = Color(0xFF1E2022),
+    surfaceContainerHigh = Color(0xFF282A2C),
+    surfaceContainerHighest = Color(0xFF333537),
+    surfaceBright = Color(0xFF37393C),
+    surfaceDim = Color(0xFF111416),
 )
 
 internal fun morpheLightColorScheme() = lightColorScheme(
@@ -350,6 +360,13 @@ internal fun morpheLightColorScheme() = lightColorScheme(
     surfaceTint = Color(0xFF005FAC),
     outlineVariant = Color(0xFFC3C6CF),
     scrim = Color(0xFF000000),
+    surfaceContainerLowest = Color(0xFFFFFFFF),
+    surfaceContainerLow = Color(0xFFF4F3F7),
+    surfaceContainer = Color(0xFFEEEDF1),
+    surfaceContainerHigh = Color(0xFFE9E8EC),
+    surfaceContainerHighest = Color(0xFFE3E2E6),
+    surfaceBright = Color(0xFFFAF9FD),
+    surfaceDim = Color(0xFFDAD9DD),
 )
 
 /**
@@ -657,14 +674,16 @@ internal fun SectionCard(
     }
 }
 
-/** Grouped-settings container. */
+/** Grouped-settings container: one bordered card with flat rows inside. */
 @Composable
 internal fun SettingsGroup(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    SectionCard(modifier = modifier) {
-        Column(content = content)
+    CompositionLocalProvider(LocalSettingsGrouped provides true) {
+        SectionCard(modifier = modifier) {
+            Column(content = content)
+        }
     }
 }
 
@@ -679,17 +698,30 @@ internal fun SettingsItemCard(
     color: Color = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp),
     content: @Composable () -> Unit
 ) {
-    SurfaceCard(
-        onClick = onClick,
-        enabled = enabled,
-        elevation = 1.dp,
-        cornerRadius = MorpheDefaults.SettingsCornerRadius,
-        borderWidth = borderWidth,
-        borderColor = borderColor,
-        color = color,
-        modifier = modifier
-    ) {
-        content()
+    if (LocalSettingsGrouped.current) {
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .then(
+                    if (onClick != null) Modifier.clickable(enabled = enabled, onClick = onClick)
+                    else Modifier
+                )
+        ) {
+            content()
+        }
+    } else {
+        SurfaceCard(
+            onClick = onClick,
+            enabled = enabled,
+            elevation = 1.dp,
+            cornerRadius = MorpheDefaults.SettingsCornerRadius,
+            borderWidth = borderWidth,
+            borderColor = borderColor,
+            color = color,
+            modifier = modifier
+        ) {
+            content()
+        }
     }
 }
 
@@ -778,20 +810,7 @@ internal fun SettingsItem(
             leadingContent = leadingContent ?: icon?.let { { ThemedIcon(icon = it) } },
             title = title,
             description = subtitle,
-            trailingContent = when (statusContent) {
-                null -> trailingContent
-                else -> {
-                    {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingSmall),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            statusContent()
-                            trailingContent?.invoke()
-                        }
-                    }
-                }
-            }
+            trailingContent = statusContent ?: trailingContent
         )
     }
 }

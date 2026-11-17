@@ -32,11 +32,8 @@ fun MorphePinnedHeaderPage(
 ) {
     val density = LocalDensity.current
 
-    // Added .background here so the page is never transparent
     SubcomposeLayout(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+        modifier = modifier.fillMaxSize()
     ) { constraints ->
         // 1. Measure Header first
         val headerPlaceables = subcompose("Header") {
@@ -66,11 +63,7 @@ fun MorphePinnedHeaderPage(
         )
 
         val contentPlaceables = subcompose("Content") {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
-            ) {
+            Box(modifier = Modifier.fillMaxSize()) {
                 content(insets)
             }
         }.map { it.measure(constraints) }
@@ -144,12 +137,13 @@ fun MorpheHeaderBar(
             Text(
                 text = title,
                 style = MaterialTheme.typography.headlineSmall,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             if (subtitle != null) {
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
