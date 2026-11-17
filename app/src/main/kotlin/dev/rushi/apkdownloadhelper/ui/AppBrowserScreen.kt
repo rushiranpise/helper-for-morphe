@@ -312,7 +312,7 @@ internal fun AppBrowserScreen(
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (searchOpen) {
@@ -371,11 +371,6 @@ internal fun AppBrowserScreen(
                     }
                 }
                 if (selected == null) {
-                    FindAppsHeaderAction(
-                        icon = Icons.Outlined.Refresh,
-                        contentDescription = stringResource(R.string.refresh),
-                        onClick = { loadKey++ }
-                    )
                     FindAppsHeaderAction(
                         icon = Icons.Outlined.Tune,
                         contentDescription = "List options",
@@ -477,6 +472,7 @@ internal fun AppBrowserScreen(
                                         tab = AppListTab.All
                                         sort = AppSort.AZ
                                     },
+                                    onRefresh = { loadKey++ },
                                     onClose = { optionsOpen = false }
                                 )
                             }
@@ -576,9 +572,7 @@ internal fun AppBrowserScreen(
 private data class FindAppCardColors(
     val gradient: List<Color>,
     val title: Color,
-    val subtitle: Color,
-    val chipContainer: Color,
-    val chipContent: Color
+    val subtitle: Color
 )
 
 private val FindAppFallbackColors = listOf(
@@ -617,9 +611,7 @@ private fun ArchiveApp.findAppCardColors(): FindAppCardColors {
             lerp(safe, Color.White, 0.12f)
         ),
         title = Color.White,
-        subtitle = Color.White.copy(alpha = 0.82f),
-        chipContainer = Color.White.copy(alpha = 0.20f),
-        chipContent = Color.White
+        subtitle = Color.White.copy(alpha = 0.82f)
     )
 }
 
@@ -652,8 +644,6 @@ private fun FindAppCard(
     val scheme = MaterialTheme.colorScheme
     val titleColor = if (monochrome) scheme.onSurface else palette.title
     val subtitleColor = if (monochrome) scheme.onSurfaceVariant else palette.subtitle
-    val chipContainer = if (monochrome) scheme.onSurface.copy(alpha = 0.08f) else palette.chipContainer
-    val chipContent = if (monochrome) scheme.onSurfaceVariant else palette.chipContent
     val shape = RoundedCornerShape(24.dp)
     val interactionSource = remember { MutableInteractionSource() }
     val titleStyle = MaterialTheme.typography.titleMedium.copy(
@@ -672,18 +662,11 @@ private fun FindAppCard(
         }
     )
     val released = formatReleaseDate(app.newestReleaseDate())
-    val subtitle = buildString {
-        append(app.packageName)
-        released?.let {
-            append(" · Updated ")
-            append(it)
-        }
-    }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(88.dp)
+            .heightIn(min = 88.dp)
             .pressScale(interactionSource)
             .clip(shape)
             .drawWithCache {
@@ -734,8 +717,8 @@ private fun FindAppCard(
     ) {
         Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp),
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -743,42 +726,55 @@ private fun FindAppCard(
 
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
+                // The name gets the whole column. The source count is metadata below it,
+                // so a long app name never gives way to a tag on a narrow screen.
+                Text(
+                    text = app.name,
+                    style = titleStyle,
+                    color = titleColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = app.packageName,
+                    style = subtitleStyle,
+                    color = subtitleColor.copy(alpha = 0.82f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = app.name,
-                        style = titleStyle,
-                        color = titleColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    MorpheStatusBadge(
-                        text = "${app.sourceCount} " +
-                            if (app.sourceCount == 1) "source" else "sources",
-                        containerColor = chipContainer,
-                        contentColor = chipContent
-                    )
-                }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    ThemedIcon(
-                        icon = Icons.Outlined.History,
-                        size = 14.dp,
-                        tint = subtitleColor
-                    )
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (released != null) {
+                            ThemedIcon(
+                                icon = Icons.Outlined.History,
+                                size = 12.dp,
+                                tint = subtitleColor.copy(alpha = 0.75f)
+                            )
+                            Text(
+                                text = "Updated $released",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = subtitleColor.copy(alpha = 0.75f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                     Text(
-                        text = subtitle,
-                        style = subtitleStyle,
-                        color = subtitleColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        text = "${app.sourceCount} " +
+                            if (app.sourceCount == 1) "source" else "sources",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = subtitleColor.copy(alpha = 0.9f),
+                        maxLines = 1
                     )
                 }
             }
@@ -1004,6 +1000,7 @@ private fun FindAppsOptionsPanel(
     onTabSelect: (AppListTab) -> Unit,
     onSortSelect: (AppSort) -> Unit,
     onReset: () -> Unit,
+    onRefresh: () -> Unit,
     onClose: () -> Unit
 ) {
     SurfaceCard(
@@ -1055,8 +1052,45 @@ private fun FindAppsOptionsPanel(
                 onSelect = onSortSelect,
                 changed = sort != AppSort.AZ
             )
+            MorpheDivider(fullWidth = true)
+            FindAppsPanelAction(
+                title = "Refresh archive",
+                icon = Icons.Outlined.Refresh,
+                onClick = {
+                    onRefresh()
+                    onClose()
+                }
+            )
             Spacer(Modifier.height(4.dp))
         }
+    }
+}
+
+@Composable
+private fun FindAppsPanelAction(
+    title: String,
+    icon: ImageVector,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        ThemedIcon(
+            icon = icon,
+            size = 20.dp,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 
