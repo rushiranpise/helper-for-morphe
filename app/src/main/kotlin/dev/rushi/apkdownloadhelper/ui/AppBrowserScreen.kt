@@ -247,7 +247,7 @@ private fun CompactFilterChip(
 @Composable
 internal fun AppBrowserScreen(
     onBack: (() -> Unit)? = null,
-    onDetailStateChanged: (Boolean) -> Unit = {},
+    onOpenApp: (ArchiveApp) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var apps by remember { mutableStateOf<List<ArchiveApp>?>(null) }
@@ -255,12 +255,6 @@ internal fun AppBrowserScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
     var searchExpanded by remember { mutableStateOf(false) }
-    var selected by remember { mutableStateOf<ArchiveApp?>(null) }
-
-    LaunchedEffect(selected) {
-        onDetailStateChanged(selected != null)
-    }
-
     var loadKey by remember { mutableIntStateOf(0) }
     var tab by remember { mutableStateOf(AppListTab.All) }
     var sort by remember { mutableStateOf(AppSort.AZ) }
@@ -307,10 +301,7 @@ internal fun AppBrowserScreen(
         }
     }
 
-    BackHandler(enabled = selected != null) {
-        selected = null
-    }
-    BackHandler(enabled = selected == null && searchExpanded) {
+    BackHandler(enabled = searchExpanded) {
         query = ""
         searchExpanded = false
     }
@@ -320,6 +311,7 @@ internal fun AppBrowserScreen(
             listState.scrollToItem(0)
         }
     }
+
 //===========================================================
 // Adjust bottomStart / bottomEnd to change header roundness
 //===========================================================
@@ -330,273 +322,256 @@ internal fun AppBrowserScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        val current = selected
-        if (current != null) {
-            AppDetailView(
-                app = current,
-                onBack = { selected = null },
-                contentPadding = PaddingValues(
-                    top = 12.dp,
-                    start = MorpheDefaults.ContentPadding,
-                    end = MorpheDefaults.ContentPadding,
-                    bottom = 32.dp
-                ),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .statusBarsPadding()
-            )
-        } else {
-            val loaded = apps
-            when {
-                error != null -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .hazeSource(state = headerHaze)
-                            .padding(
-                                top = headerHeightDp + 12.dp,
-                                start = MorpheDefaults.ContentPadding,
-                                end = MorpheDefaults.ContentPadding,
-                                bottom = 110.dp
-                            ),
-                        verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
-                    ) {
-                        InfoCard(error!!)
-                        HelperButton(
-                            text = "Retry",
-                            onClick = { loadKey++ },
-                            icon = Icons.Outlined.Refresh,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-
-                loaded == null -> {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .hazeSource(state = headerHaze)
-                            .padding(top = headerHeightDp + 32.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(Modifier.width(MorpheDefaults.ContentPaddingSmall))
-                        Text(
-                            stringResource(R.string.loading_app_index),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                else -> {
-                    val filtered =
-                        remember(loaded, query, tab, sort, favourites, installedPackages) {
-                            loaded
-                                .filter { app ->
-                                    query.isBlank() ||
-                                            app.name.contains(query, ignoreCase = true) ||
-                                            app.packageName.contains(query, ignoreCase = true)
-                                }
-                                .filter { app ->
-                                    when (tab) {
-                                        AppListTab.All -> true
-                                        AppListTab.Favourites -> app.packageName in favourites
-                                        AppListTab.Installed -> app.packageName in installedPackages
-                                        AppListTab.NotInstalled -> app.packageName !in installedPackages
-                                    }
-                                }
-                                .let { matches ->
-                                    when (sort) {
-                                        AppSort.AZ -> matches.sortedBy { it.name.lowercase(Locale.US) }
-                                        AppSort.ZA -> matches.sortedByDescending {
-                                            it.name.lowercase(
-                                                Locale.US
-                                            )
-                                        }
-
-                                        AppSort.Sources -> matches.sortedByDescending { it.sourceCount }
-                                        AppSort.Newest -> matches
-                                            .map { app -> app.newestReleaseDate().orEmpty() to app }
-                                            .sortedByDescending { it.first }
-                                            .map { it.second }
-                                    }
-                                }
-                        }
-
-                    // Full-width LazyColumn without scrollbar
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .hazeSource(state = headerHaze),
-                        contentPadding = PaddingValues(
-                            top = headerHeightDp + 10.dp,
+        val loaded = apps
+        when {
+            error != null -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .hazeSource(state = headerHaze)
+                        .padding(
+                            top = headerHeightDp + 12.dp,
                             start = MorpheDefaults.ContentPadding,
                             end = MorpheDefaults.ContentPadding,
                             bottom = 110.dp
-                        )
-                    ) {
-                        item(key = "controls") {
-                            Column(
-                                modifier = Modifier.padding(bottom = 12.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                AppDisclaimerBanner()
+                        ),
+                    verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
+                ) {
+                    InfoCard(error!!)
+                    HelperButton(
+                        text = "Retry",
+                        onClick = { loadKey++ },
+                        icon = Icons.Outlined.Refresh,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
 
-                                var filterMenuOpen by remember { mutableStateOf(false) }
-                                var sortMenuOpen by remember { mutableStateOf(false) }
+            loaded == null -> {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .hazeSource(state = headerHaze)
+                        .padding(top = headerHeightDp + 32.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(Modifier.width(MorpheDefaults.ContentPaddingSmall))
+                    Text(
+                        stringResource(R.string.loading_app_index),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
 
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    // Filter Dropdown Button
-                                    Box(modifier = Modifier.weight(1f)) {
-                                        CompactFilterChip(
-                                            label = "Filter: ${tab.label}",
-                                            icon = tab.icon,
-                                            selected = tab != AppListTab.All,
-                                            modifier = Modifier.fillMaxWidth().height(36.dp),
-                                            onClick = { filterMenuOpen = true }
+            else -> {
+                val filtered =
+                    remember(loaded, query, tab, sort, favourites, installedPackages) {
+                        loaded
+                            .filter { app ->
+                                query.isBlank() ||
+                                        app.name.contains(query, ignoreCase = true) ||
+                                        app.packageName.contains(query, ignoreCase = true)
+                            }
+                            .filter { app ->
+                                when (tab) {
+                                    AppListTab.All -> true
+                                    AppListTab.Favourites -> app.packageName in favourites
+                                    AppListTab.Installed -> app.packageName in installedPackages
+                                    AppListTab.NotInstalled -> app.packageName !in installedPackages
+                                }
+                            }
+                            .let { matches ->
+                                when (sort) {
+                                    AppSort.AZ -> matches.sortedBy { it.name.lowercase(Locale.US) }
+                                    AppSort.ZA -> matches.sortedByDescending {
+                                        it.name.lowercase(
+                                            Locale.US
                                         )
-                                        DropdownMenu(
-                                            expanded = filterMenuOpen,
-                                            onDismissRequest = { filterMenuOpen = false }
-                                        ) {
-                                            AppListTab.entries.forEach { itemTab ->
-                                                DropdownMenuItem(
-                                                    text = { Text(itemTab.label) },
-                                                    leadingIcon = { Icon(itemTab.icon, contentDescription = null) },
-                                                    onClick = {
-                                                        tab = itemTab
-                                                        filterMenuOpen = false
-                                                    }
-                                                )
-                                            }
-                                        }
                                     }
 
-                                    // Sort Dropdown Button
-                                    Box(modifier = Modifier.weight(1f)) {
-                                        CompactFilterChip(
-                                            label = "Sort: ${sort.label}",
-                                            icon = sort.icon,
-                                            iconRotation = sort.rotation,
-                                            selected = sort != AppSort.AZ,
-                                            modifier = Modifier.fillMaxWidth().height(36.dp),
-                                            onClick = { sortMenuOpen = true }
-                                        )
-                                        DropdownMenu(
-                                            expanded = sortMenuOpen,
-                                            onDismissRequest = { sortMenuOpen = false }
-                                        ) {
-                                            AppSort.entries.forEach { itemSort ->
-                                                DropdownMenuItem(
-                                                    text = { Text(itemSort.label) },
-                                                    leadingIcon = {
-                                                        Icon(
-                                                            itemSort.icon,
-                                                            contentDescription = null,
-                                                            modifier = Modifier.rotate(itemSort.rotation)
-                                                        )
-                                                    },
-                                                    onClick = {
-                                                        sort = itemSort
-                                                        sortMenuOpen = false
-                                                    }
-                                                )
-                                            }
+                                    AppSort.Sources -> matches.sortedByDescending { it.sourceCount }
+                                    AppSort.Newest -> matches
+                                        .map { app -> app.newestReleaseDate().orEmpty() to app }
+                                        .sortedByDescending { it.first }
+                                        .map { it.second }
+                                }
+                            }
+                    }
+
+                // Full-width LazyColumn without scrollbar
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .hazeSource(state = headerHaze),
+                    contentPadding = PaddingValues(
+                        top = headerHeightDp + 10.dp,
+                        start = MorpheDefaults.ContentPadding,
+                        end = MorpheDefaults.ContentPadding,
+                        bottom = 110.dp
+                    )
+                ) {
+                    item(key = "controls") {
+                        Column(
+                            modifier = Modifier.padding(bottom = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            AppDisclaimerBanner()
+
+                            var filterMenuOpen by remember { mutableStateOf(false) }
+                            var sortMenuOpen by remember { mutableStateOf(false) }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                // Filter Dropdown Button
+                                Box(modifier = Modifier.weight(1f)) {
+                                    CompactFilterChip(
+                                        label = "Filter: ${tab.label}",
+                                        icon = tab.icon,
+                                        selected = tab != AppListTab.All,
+                                        modifier = Modifier.fillMaxWidth().height(36.dp),
+                                        onClick = { filterMenuOpen = true }
+                                    )
+                                    DropdownMenu(
+                                        expanded = filterMenuOpen,
+                                        onDismissRequest = { filterMenuOpen = false }
+                                    ) {
+                                        AppListTab.entries.forEach { itemTab ->
+                                            DropdownMenuItem(
+                                                text = { Text(itemTab.label) },
+                                                leadingIcon = { Icon(itemTab.icon, contentDescription = null) },
+                                                onClick = {
+                                                    tab = itemTab
+                                                    filterMenuOpen = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Sort Dropdown Button
+                                Box(modifier = Modifier.weight(1f)) {
+                                    CompactFilterChip(
+                                        label = "Sort: ${sort.label}",
+                                        icon = sort.icon,
+                                        iconRotation = sort.rotation,
+                                        selected = sort != AppSort.AZ,
+                                        modifier = Modifier.fillMaxWidth().height(36.dp),
+                                        onClick = { sortMenuOpen = true }
+                                    )
+                                    DropdownMenu(
+                                        expanded = sortMenuOpen,
+                                        onDismissRequest = { sortMenuOpen = false }
+                                    ) {
+                                        AppSort.entries.forEach { itemSort ->
+                                            DropdownMenuItem(
+                                                text = { Text(itemSort.label) },
+                                                leadingIcon = {
+                                                    Icon(
+                                                        itemSort.icon,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.rotate(itemSort.rotation)
+                                                    )
+                                                },
+                                                onClick = {
+                                                    sort = itemSort
+                                                    sortMenuOpen = false
+                                                }
+                                            )
                                         }
                                     }
                                 }
                             }
                         }
+                    }
 
-                        if (filtered.isEmpty()) {
-                            item(key = "empty") {
-                                InfoCard(
-                                    when (tab) {
-                                        AppListTab.Favourites ->
-                                            "No liked apps yet. Tap the heart on any app to pin it here."
+                    if (filtered.isEmpty()) {
+                        item(key = "empty") {
+                            InfoCard(
+                                when (tab) {
+                                    AppListTab.Favourites ->
+                                        "No liked apps yet. Tap the heart on any app to pin it here."
 
-                                        AppListTab.Installed -> "No patched apps in the index are installed."
-                                        AppListTab.NotInstalled ->
-                                            "Every app in the index is installed on this device."
+                                    AppListTab.Installed -> "No patched apps in the index are installed."
+                                    AppListTab.NotInstalled ->
+                                        "Every app in the index is installed on this device."
 
-                                        AppListTab.All -> "No apps match \"$query\"."
-                                    }
-                                )
-                            }
-                        } else {
-                            itemsIndexed(
-                                filtered,
-                                key = { _, app -> app.packageName }) { index, app ->
-                                val isFirst = index == 0
-                                val isLast = index == filtered.lastIndex
+                                    AppListTab.All -> "No apps match \"$query\"."
+                                }
+                            )
+                        }
+                    } else {
+                        itemsIndexed(
+                            filtered,
+                            key = { _, app -> app.packageName }) { index, app ->
+                            val isFirst = index == 0
+                            val isLast = index == filtered.lastIndex
 
 //===================================================================================
 // outerRadius = top of first card & bottom of last card
 // innerRadius = all corners between middle cards (increase/decrease 12.dp to adjust)
 //===================================================================================
-                                val outerRadius = 22.dp
-                                val innerRadius = 5.dp
+                            val outerRadius = 22.dp
+                            val innerRadius = 5.dp
 
-                                val cardShape = RoundedCornerShape(
-                                    topStart = if (isFirst) outerRadius else innerRadius,
-                                    topEnd = if (isFirst) outerRadius else innerRadius,
-                                    bottomStart = if (isLast) outerRadius else innerRadius,
-                                    bottomEnd = if (isLast) outerRadius else innerRadius
-                                )
+                            val cardShape = RoundedCornerShape(
+                                topStart = if (isFirst) outerRadius else innerRadius,
+                                topEnd = if (isFirst) outerRadius else innerRadius,
+                                bottomStart = if (isLast) outerRadius else innerRadius,
+                                bottomEnd = if (isLast) outerRadius else innerRadius
+                            )
 
-                                Box(
-                                    modifier = Modifier
-                                        .animatedListItem(this)
-                                        .padding(bottom = if (isLast) 0.dp else 2.dp)
-                                        .clip(cardShape)
-                                        .background(
-                                            MaterialTheme.colorScheme.surfaceColorAtElevation(
-                                                2.dp
-                                            )
+                            Box(
+                                modifier = Modifier
+                                    .animatedListItem(this)
+                                    .padding(bottom = if (isLast) 0.dp else 2.dp)
+                                    .clip(cardShape)
+                                    .background(
+                                        MaterialTheme.colorScheme.surfaceColorAtElevation(
+                                            2.dp
                                         )
-                                ) {
-                                    AppBrowserRow(
-                                        app = app,
-                                        favourite = app.packageName in favourites,
-                                        onToggleFavourite = {
-                                            favourites =
-                                                MorpheFavourites.toggle(context, app.packageName)
-                                        },
-                                        onClick = { selected = app }
                                     )
-                                }
+                            ) {
+                                AppBrowserRow(
+                                    app = app,
+                                    favourite = app.packageName in favourites,
+                                    onToggleFavourite = {
+                                        favourites =
+                                            MorpheFavourites.toggle(context, app.packageName)
+                                    },
+                                    onClick = { onOpenApp(app) }
+                                )
                             }
                         }
                     }
+                }
 
-                    MorpheFab(
-                        visible = listState.firstVisibleItemIndex > 0,
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .navigationBarsPadding()
-                            .padding(end = 20.dp, bottom = 104.dp)
+                MorpheFab(
+                    visible = listState.firstVisibleItemIndex > 0,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .navigationBarsPadding()
+                        .padding(end = 20.dp, bottom = 104.dp)
+                ) {
+                    Surface(
+                        onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                        shape = CircleShape,
+                        color = SemanticTone.Primary.container,
+                        contentColor = SemanticTone.Primary.content
                     ) {
-                        Surface(
-                            onClick = { scope.launch { listState.animateScrollToItem(0) } },
-                            shape = CircleShape,
-                            color = SemanticTone.Primary.container,
-                            contentColor = SemanticTone.Primary.content
-                        ) {
-                            ThemedIcon(
-                                icon = Icons.Outlined.KeyboardArrowUp,
-                                contentDescription = stringResource(R.string.go_to_top),
-                                tint = SemanticTone.Primary.content,
-                                modifier = Modifier.padding(12.dp)
-                            )
-                        }
+                        ThemedIcon(
+                            icon = Icons.Outlined.KeyboardArrowUp,
+                            contentDescription = stringResource(R.string.go_to_top),
+                            tint = SemanticTone.Primary.content,
+                            modifier = Modifier.padding(12.dp)
+                        )
                     }
                 }
             }
@@ -604,156 +579,156 @@ internal fun AppBrowserScreen(
 
 
         // Rounded bottom header with Haze glass blur when scrolled
-    if (selected == null) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .onSizeChanged { size ->
-                    headerHeightDp = with(density) { size.height.toDp() }
-                }
-                .glassFill(
-                    glass = MorpheColors.glassContainerColor(),
-                    shape = headerShape,
-                    hazeState = if (isScrolled || searchExpanded) headerHaze else null
-                )
-                .statusBarsPadding()
-                .padding(
-                    horizontal = MorpheDefaults.ContentPadding,
-                    vertical = 12.dp
-                )
-        ) {
-            AnimatedContent(
-                targetState = searchExpanded && selected == null,
-                transitionSpec = { fadeIn() togetherWith fadeOut() },
-                label = "header_search_transition"
-            ) { isSearchActive ->
-                if (isSearchActive) {
-                    // Expanded inline pill search bar on header (like image 4)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .onSizeChanged { size ->
+                        headerHeightDp = with(density) { size.height.toDp() }
+                    }
+                    .glassFill(
+                        glass = MorpheColors.glassContainerColor(),
+                        shape = headerShape,
+                        hazeState = if (isScrolled || searchExpanded) headerHaze else null
+                    )
+                    .statusBarsPadding()
+                    .padding(
+                        horizontal = MorpheDefaults.ContentPadding,
+                        vertical = 12.dp
+                    )
+            ) {
+                AnimatedContent(
+                    targetState = searchExpanded,
+                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    label = "header_search_transition"
+                ) { isSearchActive ->
+                    if (isSearchActive) {
+                        // Expanded inline pill search bar on header (like image 4)
+                        Row(
                             modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp),
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
+                                .fillMaxWidth()
+                                .height(52.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
+                            Surface(
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(horizontal = 16.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    .weight(1f)
+                                    .height(48.dp),
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Search,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Box(
-                                    modifier = Modifier.weight(1f),
-                                    contentAlignment = Alignment.CenterStart
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 16.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    if (query.isEmpty()) {
-                                        Text(
-                                            text = stringResource(R.string.search_apps_or_packages),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                                alpha = 0.7f
+                                    Icon(
+                                        imageVector = Icons.Outlined.Search,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Box(
+                                        modifier = Modifier.weight(1f),
+                                        contentAlignment = Alignment.CenterStart
+                                    ) {
+                                        if (query.isEmpty()) {
+                                            Text(
+                                                text = stringResource(R.string.search_apps_or_packages),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                    alpha = 0.7f
+                                                ),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                        BasicTextField(
+                                            value = query,
+                                            onValueChange = { query = it },
+                                            singleLine = true,
+                                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                                color = MaterialTheme.colorScheme.onSurface
                                             ),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
+                                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .focusRequester(searchFocusRequester)
                                         )
                                     }
-                                    BasicTextField(
-                                        value = query,
-                                        onValueChange = { query = it },
-                                        singleLine = true,
-                                        textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        ),
-                                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .focusRequester(searchFocusRequester)
-                                    )
+                                    if (query.isNotEmpty()) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Close,
+                                            contentDescription = "Clear search",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier
+                                                .size(20.dp)
+                                                .clip(CircleShape)
+                                                .clickable { query = "" }
+                                        )
+                                    }
                                 }
-                                if (query.isNotEmpty()) {
+                            }
+
+                            // Circular close search button on right side
+                            Surface(
+                                onClick = {
+                                    query = ""
+                                    searchExpanded = false
+                                },
+                                modifier = Modifier.size(48.dp),
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        imageVector = Icons.Outlined.Close,
-                                        contentDescription = "Clear search",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier
-                                            .size(20.dp)
-                                            .clip(CircleShape)
-                                            .clickable { query = "" }
+                                        imageVector = Icons.Outlined.SearchOff,
+                                        contentDescription = "Close search",
+                                        modifier = Modifier.size(22.dp)
                                     )
                                 }
                             }
                         }
-
-                        // Circular close search button on right side
-                        Surface(
-                            onClick = {
-                                query = ""
-                                searchExpanded = false
-                            },
-                            modifier = Modifier.size(48.dp),
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        // Normal left-aligned header matching Helper & Settings tabs
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 52.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Outlined.SearchOff,
-                                    contentDescription = "Close search",
-                                    modifier = Modifier.size(22.dp)
+                            if (onBack != null) {
+                                HelperHeaderIconButton(
+                                    icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                                    contentDescription = stringResource(R.string.back),
+                                    onClick = onBack
                                 )
                             }
-                        }
-                    }
-                } else {
-                    // Normal left-aligned header matching Helper & Settings tabs
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 52.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (selected != null) {
-                            HelperHeaderIconButton(
-                                icon = Icons.AutoMirrored.Outlined.ArrowBack,
-                                contentDescription = stringResource(R.string.back),
-                                onClick = { selected = null }
-                            )
-                        }
 
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            Text(
-                                text = stringResource(R.string.find_new_apps),
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            if (selected == null) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.find_new_apps),
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                                 val fresh = freshness
                                 Text(
                                     text = buildString {
-                                        append(apps?.let { "${it.size} apps with patches" }
-                                            ?: "Morphe patch archive")
+                                        append(
+                                            apps?.let { "${it.size} apps with patches" }
+                                                ?: "Morphe patch archive"
+                                        )
                                         fresh?.let { append(" · index ${it.label}") }
                                     },
                                     color = if (fresh?.stale == true) {
@@ -766,9 +741,7 @@ internal fun AppBrowserScreen(
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
-                        }
 
-                        if (selected == null) {
                             Surface(
                                 onClick = { loadKey++ },
                                 modifier = Modifier.size(48.dp),
@@ -784,6 +757,7 @@ internal fun AppBrowserScreen(
                                     )
                                 }
                             }
+
                             Surface(
                                 onClick = { searchExpanded = true },
                                 modifier = Modifier.size(48.dp),
@@ -803,8 +777,6 @@ internal fun AppBrowserScreen(
                     }
                 }
             }
-            }
-        }
     }
 }
 
@@ -972,6 +944,9 @@ internal fun AppDetailView(
     contentPadding: PaddingValues = PaddingValues(0.dp),
     modifier: Modifier = Modifier
 ) {
+    BackHandler(enabled = onBack != null) {
+        onBack?.invoke()
+    }
     val context = LocalContext.current
     val openUrl: (String) -> Unit = { url ->
         runCatching {
@@ -1091,7 +1066,7 @@ internal fun AppSourceCard(
                             append("${source.patches.size} ")
                             append(if (source.patches.size == 1) "patch" else "patches")
                             formatBundleRelease(source.latestChanges)?.let { release ->
-                                append(" \u00b7 ")
+                                append(" · ")
                                 append(release)
                             }
                         },

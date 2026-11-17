@@ -200,6 +200,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.ui.unit.dp
 import dev.rushi.apkdownloadhelper.ui.MainPage
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.statusBarsPadding
+import dev.rushi.apkdownloadhelper.ui.AppDetailView
+import dev.rushi.apkdownloadhelper.updater.ArchiveApp
 
 
 internal const val AURORA_AUTH_URL = "https://auroraoss.com/api/auth"
@@ -477,6 +481,11 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             var showSourcesScreen by rememberSaveable { mutableStateOf(false) }
+            var selectedArchiveApp by remember { mutableStateOf<dev.rushi.apkdownloadhelper.updater.ArchiveApp?>(null) }
+            var lastSelectedArchiveApp by remember { mutableStateOf<dev.rushi.apkdownloadhelper.updater.ArchiveApp?>(null) }
+            if (selectedArchiveApp != null) {
+                lastSelectedArchiveApp = selectedArchiveApp
+            }
             var isAppDetailOpen by remember { mutableStateOf(false) }
 
             // --- FIX: Holds the category on screen during the exit animation ---
@@ -509,7 +518,7 @@ class MainActivity : ComponentActivity() {
                             onChallengeTimeout = ::onBrowserChallengeTimeout
                         )
                     } else {
-                        val backgroundModifier = if (showUpdates || activeSettingsCategory != null || showSourcesScreen) {
+                        val backgroundModifier = if (showUpdates || activeSettingsCategory != null || showSourcesScreen || selectedArchiveApp != null) {
                             Modifier
                                 .focusProperties { canFocus = false }
                                 .clearAndSetSemantics {}
@@ -525,7 +534,7 @@ class MainActivity : ComponentActivity() {
                                 findAppsContent = { _ ->
                                     AppBrowserScreen(
                                         onBack = null,
-                                        onDetailStateChanged = { isAppDetailOpen = it }
+                                        onOpenApp = { selectedArchiveApp = it }
                                     )
                                 },
                                 homeContent = { bottomBarHeight, onNavigateToPage ->
@@ -592,7 +601,7 @@ class MainActivity : ComponentActivity() {
                                     showUpdates ||
                                             activeSettingsCategory != null ||
                                             showSourcesScreen ||
-                                            isAppDetailOpen ||
+                                            selectedArchiveApp != null ||
                                             uiState is UiState.Downloading ||
                                             uiState is UiState.FastMode ||
                                             uiState is UiState.ScanAsk ||
@@ -613,6 +622,32 @@ class MainActivity : ComponentActivity() {
                                 request?.let(::startFastModeIfEnabled)
                             }
                         )
+                    }
+
+                    // --- OVERLAY FOR FIND APPS DETAIL ---
+                    AnimatedVisibility(
+                        visible = selectedArchiveApp != null,
+                        enter = MorpheAnimations.pushEnter,
+                        exit = MorpheAnimations.pushExit
+                    ) {
+                        val appDetail = lastSelectedArchiveApp
+                        if (appDetail != null) {
+                            MorphePushedScreen {
+                                dev.rushi.apkdownloadhelper.ui.AppDetailView(
+                                    app = appDetail,
+                                    onBack = { selectedArchiveApp = null },
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                        top = 12.dp,
+                                        start = MorpheDefaults.ContentPadding,
+                                        end = MorpheDefaults.ContentPadding,
+                                        bottom = 32.dp
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .statusBarsPadding()
+                                )
+                            }
+                        }
                     }
 
                     // --- OVERLAY FOR SETTINGS CATEGORIES ---
