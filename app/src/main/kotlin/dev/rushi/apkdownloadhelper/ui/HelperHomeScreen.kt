@@ -9,7 +9,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,7 +48,6 @@ import dev.rushi.apkdownloadhelper.storage.DownloadHistoryStore
 import dev.rushi.apkdownloadhelper.storage.FastModePolicy
 import dev.rushi.apkdownloadhelper.storage.HelperSettings
 import dev.rushi.apkdownloadhelper.storage.RequestLogEntry
-import dev.rushi.apkdownloadhelper.storage.ThemeMode
 import dev.rushi.apkdownloadhelper.storage.orderedSources
 
 
@@ -105,11 +103,6 @@ internal fun HelperScreen(
     var pendingFilePick by remember { mutableStateOf<DownloadCandidate?>(null) }
     var primaryAction by remember { mutableStateOf<PrimaryAction?>(null) }
     val context = LocalContext.current
-    val effectiveDarkTheme = when (settings.themeMode) {
-        ThemeMode.DARK -> true
-        ThemeMode.LIGHT -> false
-        ThemeMode.SYSTEM -> isSystemInDarkTheme()
-    }
     var historyEntries by remember { mutableStateOf<List<DownloadHistoryEntry>>(emptyList()) }
     val refreshHistory = {
         historyEntries = DownloadHistoryStore.entries(context)
@@ -201,22 +194,6 @@ internal fun HelperScreen(
                             Toast.makeText(
                                 context,
                                 if (enabled) "Fast Mode on" else "Fast Mode off",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    )
-                    HelperThemeButton(
-                        dark = effectiveDarkTheme,
-                        onToggle = {
-                            val target = if (effectiveDarkTheme) {
-                                ThemeMode.LIGHT
-                            } else {
-                                ThemeMode.DARK
-                            }
-                            onSettingsChange(settings.copy(themeMode = target))
-                            Toast.makeText(
-                                context,
-                                if (target == ThemeMode.LIGHT) "Light theme" else "Dark theme",
                                 Toast.LENGTH_SHORT
                             ).show()
                         }
