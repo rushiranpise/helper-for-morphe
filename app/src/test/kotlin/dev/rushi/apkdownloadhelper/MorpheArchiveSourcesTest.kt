@@ -1,5 +1,9 @@
 package dev.rushi.apkdownloadhelper
 
+import dev.rushi.apkdownloadhelper.updater.ArchiveChanges
+import dev.rushi.apkdownloadhelper.updater.ArchivePatch
+import dev.rushi.apkdownloadhelper.updater.ArchiveSource
+import dev.rushi.apkdownloadhelper.updater.groupArchiveSources
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

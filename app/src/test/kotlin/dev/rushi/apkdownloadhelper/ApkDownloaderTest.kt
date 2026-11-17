@@ -1,5 +1,6 @@
 package dev.rushi.apkdownloadhelper
 
+import dev.rushi.apkdownloadhelper.download.ApkDownloader
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.runBlocking
@@ -13,6 +14,8 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import dev.rushi.apkdownloadhelper.download.segmentedConnectionCount
+import dev.rushi.apkdownloadhelper.ui.CandidateDownloadFile
 
 class ApkDownloaderTest {
 

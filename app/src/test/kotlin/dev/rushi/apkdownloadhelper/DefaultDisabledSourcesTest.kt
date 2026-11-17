@@ -1,5 +1,7 @@
 package dev.rushi.apkdownloadhelper
 
+import dev.rushi.apkdownloadhelper.storage.DEFAULT_DISABLED_SOURCES
+import dev.rushi.apkdownloadhelper.ui.DownloadSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

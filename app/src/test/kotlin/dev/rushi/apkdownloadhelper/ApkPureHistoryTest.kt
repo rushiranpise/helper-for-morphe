@@ -1,5 +1,10 @@
 package dev.rushi.apkdownloadhelper
 
+import dev.rushi.apkdownloadhelper.sources.ApkPureParser
+import dev.rushi.apkdownloadhelper.ui.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.VersionStatus
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -32,7 +37,7 @@ class ApkPureHistoryTest {
             testParserContext(
                 pages = mapOf(
                     infoUrl to
-                        """<html><head><link rel="canonical" href="$appPageUrl"></head><body></body></html>""",
+                            """<html><head><link rel="canonical" href="$appPageUrl"></head><body></body></html>""",
                     versionsUrl to versionsHtml
                 )
             )

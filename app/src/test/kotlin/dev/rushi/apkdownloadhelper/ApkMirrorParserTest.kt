@@ -1,5 +1,18 @@
 package dev.rushi.apkdownloadhelper
 
+import dev.rushi.apkdownloadhelper.download.compareVersionNames
+import dev.rushi.apkdownloadhelper.sources.ApkMirrorAppExistsApk
+import dev.rushi.apkdownloadhelper.sources.ApkMirrorAppExistsData
+import dev.rushi.apkdownloadhelper.sources.ApkMirrorAppExistsRelease
+import dev.rushi.apkdownloadhelper.sources.ApkMirrorAppExistsResponse
+import dev.rushi.apkdownloadhelper.sources.ApkMirrorParser
+import dev.rushi.apkdownloadhelper.sources.SourceAppNotFoundException
+import dev.rushi.apkdownloadhelper.sources.SourceParserContext
+import dev.rushi.apkdownloadhelper.sources.SourceTextFetcher
+import dev.rushi.apkdownloadhelper.ui.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.VersionStatus
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -38,17 +51,17 @@ class ApkMirrorParserTest {
             testParserContext(
                 pages = mapOf(
                     searchUrl to
-                        """<html><body><a href="/apk/example-org/example-app/">Example App</a></body></html>""",
+                            """<html><body><a href="/apk/example-org/example-app/">Example App</a></body></html>""",
                     appPageUrl to
-                        """<html><body><span id="$packageName">Example App</span></body></html>""",
+                            """<html><body><span id="$packageName">Example App</span></body></html>""",
                     uploadsUrl to
-                        """<html><body>
+                            """<html><body>
                            <a href="/apk/example-org/example-app/2-0-0-release/">2.0.0</a>
                            <a href="/apk/example-org/example-app/1-0-0-release/">1.0.0</a>
                            <a href="/apk/other-dev/other-app/9-9-9-release/">Sidebar Trending</a>
                          </body></html>""",
                     uploadsUrl2 to
-                        """<html><body>
+                            """<html><body>
                            <a href="/apk/example-org/example-app/0-9-0-release/">0.9.0</a>
                          </body></html>"""
                 )

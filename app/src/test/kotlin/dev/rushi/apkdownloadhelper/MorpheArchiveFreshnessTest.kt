@@ -1,5 +1,6 @@
 package dev.rushi.apkdownloadhelper
 
+import dev.rushi.apkdownloadhelper.updater.archiveFreshness
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull

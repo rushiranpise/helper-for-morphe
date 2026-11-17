@@ -1,5 +1,8 @@
 package dev.rushi.apkdownloadhelper
 
+import dev.rushi.apkdownloadhelper.sources.ARCH_RANK_MISMATCH
+import dev.rushi.apkdownloadhelper.sources.ARCH_RANK_UNIVERSAL
+import dev.rushi.apkdownloadhelper.sources.archMatchRank
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

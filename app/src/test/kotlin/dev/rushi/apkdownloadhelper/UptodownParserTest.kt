@@ -1,5 +1,10 @@
 package dev.rushi.apkdownloadhelper
 
+import dev.rushi.apkdownloadhelper.sources.UptodownParser
+import dev.rushi.apkdownloadhelper.ui.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.VersionStatus
 import java.net.URLEncoder
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -54,7 +59,7 @@ class UptodownParserTest {
             testParserContext(
                 pages = mapOf(
                     searchUrl to
-                        """<html><body><a href="$detailUrl">Example App</a></body></html>""",
+                            """<html><body><a href="$detailUrl">Example App</a></body></html>""",
                     "$detailUrl/download" to downloadPageHtml,
                     "$detailUrl/apps/12345/versions/1" to versionsJson
                 )
