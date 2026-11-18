@@ -107,6 +107,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import dev.rushi.apkdownloadhelper.MORPHE_MANAGER_PACKAGES
 import dev.rushi.apkdownloadhelper.R
@@ -1880,6 +1881,7 @@ internal fun AppSourceCard(
                     } else {
                         val longList = source.patches.size > 5
                         val patchesScroll = rememberScrollState()
+                        MorpheDivider(fullWidth = true)
                         Row(modifier = Modifier.fillMaxWidth()) {
                             Box(
                                 modifier = Modifier
@@ -1895,35 +1897,55 @@ internal fun AppSourceCard(
                                                     .verticalScrollFade(patchesScroll)
                                                     .verticalScroll(patchesScroll)
                                             } else Modifier
-                                        ),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        )
                                 ) {
-                                    source.patches.forEach { patch ->
-                                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                            Row(
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                verticalAlignment = Alignment.CenterVertically
+                                    source.patches.forEachIndexed { index, patch ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 9.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                            verticalAlignment = Alignment.Top
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(24.dp)
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(accentColor.copy(alpha = 0.14f)),
+                                                contentAlignment = Alignment.Center
                                             ) {
-                                                Icon(
-                                                    imageVector = Icons.Outlined.Extension,
-                                                    contentDescription = null,
-                                                    tint = colors.primary,
-                                                    modifier = Modifier.size(16.dp)
+                                                Text(
+                                                    text = (index + 1).toString(),
+                                                    color = accentColor,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold
                                                 )
+                                            }
+                                            Column(
+                                                modifier = Modifier.weight(1f),
+                                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                                            ) {
                                                 Text(
                                                     text = patch.name,
-                                                    fontWeight = FontWeight.Bold,
+                                                    fontWeight = FontWeight.SemiBold,
                                                     color = colors.onSurface,
-                                                    style = MaterialTheme.typography.bodySmall
+                                                    style = MaterialTheme.typography.bodyMedium
                                                 )
+                                                patch.description?.takeIf { it.isNotBlank() }?.let { desc ->
+                                                    Text(
+                                                        text = desc,
+                                                        color = colors.onSurfaceVariant.copy(alpha = 0.92f),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        lineHeight = 17.sp
+                                                    )
+                                                }
                                             }
-                                            patch.description?.takeIf { it.isNotBlank() }?.let { desc ->
-                                                Text(
-                                                    text = desc,
-                                                    color = colors.onSurfaceVariant,
-                                                    style = MaterialTheme.typography.bodySmall
-                                                )
-                                            }
+                                        }
+                                        if (index < source.patches.lastIndex) {
+                                            MorpheDivider(
+                                                modifier = Modifier.padding(start = 34.dp),
+                                                fullWidth = true
+                                            )
                                         }
                                     }
                                 }
