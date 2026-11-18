@@ -78,6 +78,9 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
   release and its variant links in one request, then fetches only the variant and download
   pages. If the API is unavailable, it scrapes as before. APKMirror requests identify as
   Helper rather than a browser, which avoids its Cloudflare challenge.
+- **Faster source lookups**: Uptodown uses its mobile API first, APKPure resolves exact
+  versions without walking every HTML release page, source probes run up front,
+  definitive misses are cached, and APKMirror retries a rate limit once.
 - **Density-specific APKMirror variants are opt-in** in Settings -> Downloads and storage.
   `nodpi` stays the safe default because density rows can be split APKs.
 - A **default source** can be set so the picker opens on your preferred provider instead of the first one.
@@ -121,14 +124,14 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
 - **Game data (OBB) is reported, never installed.** Android serves expansion files only from `Android/obb/<package>/`, which no other app may write on Android 11 and later, so no helper can place them for you. When the file handed over carries them, the history entry says `Includes game data (2 files · 1.2 GB)` and the request log records it. Copy those files into `Android/obb/<package>/` if a patched game closes on launch. A bare `APK` never contains expansion data, so pick a container format (`XAPK`, `APKS`) for games that need it.
 ### Find New Apps
 
-- A **live community patch index** (fetched fresh from the morphe-archive JSON on every open — never cached) listing every app with available patches, shown when the request does not come from Morphe.
-- Searchable app list with real installed-app icons (Android default when not installed), per-app **source count**, install-state filters (All / Installed / Not installed), **favourites** that survive refreshes, and sort options (A–Z, Z–A, recently added, recently updated, most sources).
-- Each app's detail groups patches **per source** in collapsible lists, with "Add to Morphe" actions that deep-link into the manager and an Open in Play Store shortcut.
+- A **live community patch index** (fetched fresh from the morphe-archive JSON on every open) with an archive dashboard showing app and patch totals.
+- Searchable app list with real installed-app icons (Android default when not installed), per-app **source count**, install-state filters (All / Installed / Not installed), **favourites** that survive refreshes, and sort options (A-Z, Z-A, recently added, recently updated, most sources).
+- Each app opens a redesigned detail screen with a compact version picker, patches grouped **per source** in collapsible lists, "Add to Morphe" actions that deep-link into the manager, and an Open in Play Store shortcut.
 - Includes the community disclaimer: the index is community-maintained, bundles are not individually verified, and neither Morphe nor this app's developer is responsible for third-party patches.
 
 ### Appearance, DNS & logs
 
-- **Themes**: dark, light, or follow-the-system, plus optional **Material You** wallpaper-tinted accents and surfaces (Android 12+). A quick theme toggle lives in the home header.
+- **Themes**: dark, light, or follow-the-system, plus optional **Material You** wallpaper-tinted accents and surfaces (Android 12+).
 - **AdGuard DNS**: resolve app traffic through AdGuard DNS to block ads/trackers on download pages and in the captcha browser, with automatic fallback to the system resolver on failure. On by default.
 - **Tabs in Settings** (Appearance / System / Advanced / Logs), with the Logs tab split into **History**, **Logging** and **Request logs** sub-tabs. History records every past hand-off (with scan verdicts), and Request logs show the full in-app request + HTTP log - every URL, status code, redirect, and timing - with a **Share** button exporting it for bug reports (app version and device info included). Logcat mirroring is optional.
 
@@ -138,7 +141,7 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
 - **Connection**: Wi-Fi only, mobile data only, or both.
 - **Sources**: enable, disable, reorder or set a **default source**.
 - **Fast Mode**: enable auto-resolve and choose the version policy (Requested / Latest / Always ask).
-- **Updates**: stable or beta channel, notify or automatic install through Shizuku.
+- **About**: update channel (stable or beta), update notifications, and optional automatic install through Shizuku.
 - **Downloads and storage**: choose the folder, retention, and APKMirror density preference.
 - **Security**: VirusTotal scanning with API key and scan mode.
 - **AdGuard DNS**: on by default; can be turned off.
