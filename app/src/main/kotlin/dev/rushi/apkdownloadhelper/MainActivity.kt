@@ -230,9 +230,9 @@ internal val APK_PICKER_MIME_TYPES = arrayOf(
 )
 
 class MainActivity : ComponentActivity() {
-    /** APKMirror declares `Crawl-delay: 3`; stay below ~1 request/2.5s. */
+    /** Use the normal source pace for APKMirror; a 429 gets one retry. */
     companion object {
-        const val APKMIRROR_REQUEST_GAP_MS = 2500L
+        const val APKMIRROR_REQUEST_GAP_MS = 800L
     }
 
     private val browserUserAgent =
@@ -326,8 +326,9 @@ class MainActivity : ComponentActivity() {
 
     private val sourceTextFetcher = OkHttpSourceTextFetcher(
         client,
-        // APKMirror declares `Crawl-delay: 3` and answers 429 to denser probe
-        // runs, so give it a slower pace than the app-wide default.
+        // APKMirror used to get a 2.5s gap after each request, which dominated
+        // its page walks. Keep the normal 800ms pace and let the fetcher retry
+        // a 429 once instead.
         hostGapsMillis = mapOf("www.apkmirror.com" to APKMIRROR_REQUEST_GAP_MS)
     )
 

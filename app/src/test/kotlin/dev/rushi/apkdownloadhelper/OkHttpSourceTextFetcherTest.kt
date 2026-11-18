@@ -36,9 +36,25 @@ class OkHttpSourceTextFetcherTest {
     }
 
     @Test
+    fun retriesRateLimitOnce() {
+        val server = MockWebServer()
+        server.start()
+        server.enqueue(MockResponse().setResponseCode(429))
+        server.enqueue(MockResponse().setBody("ok"))
+        val fetcher = OkHttpSourceTextFetcher(OkHttpClient(), minRequestGapMillis = 0)
+        val url = server.url("/").toString()
+
+        val result = fetcher.fetchText(url, null)
+        server.shutdown()
+
+        assertTrue(result == "ok")
+    }
+
+    @Test
     fun surfacesHttp429AsRateLimitedException() {
         val server = MockWebServer()
         server.start()
+        server.enqueue(MockResponse().setResponseCode(429))
         server.enqueue(MockResponse().setResponseCode(429))
         val fetcher = OkHttpSourceTextFetcher(OkHttpClient(), minRequestGapMillis = 0)
         val url = server.url("/").toString()
