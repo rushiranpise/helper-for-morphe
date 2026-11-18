@@ -6,9 +6,13 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -149,6 +153,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.isSystemInDarkTheme
 
 
 internal enum class AppListTab(
@@ -191,8 +198,6 @@ internal object MorpheFavourites {
 internal fun AppDisclaimerBanner() {
     SurfaceCard(
         cornerRadius = MorpheDefaults.CompactCornerRadius,
-        borderWidth = 1.dp,
-        borderColor = SemanticTone.Warning.accent.copy(alpha = 0.35f),
         color = SemanticTone.Warning.container.copy(alpha = 0.6f)
     ) {
         Row(
@@ -228,32 +233,41 @@ private fun CompactFilterChip(
     modifier: Modifier = Modifier,
     iconRotation: Float = 0f
 ) {
-    val bgColor = if (selected) {
-        MaterialTheme.colorScheme.primaryContainer
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.05f
+    val targetContainer = if (selected) {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = if (isDark) 0.55f else 0.72f)
     } else {
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (isDark) 0.35f else 0.6f)
     }
-    val contentColor = if (selected) {
-        MaterialTheme.colorScheme.onPrimaryContainer
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    val borderColor = if (selected) {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
-    } else {
-        MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
-    }
+    val bgColor by animateColorAsState(
+        targetValue = targetContainer,
+        animationSpec = tween(200),
+        label = "chip_container"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+        else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = tween(200),
+        label = "chip_content"
+    )
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.95f else 1f,
+        animationSpec = tween(200),
+        label = "chip_scale"
+    )
 
     Surface(
         onClick = onClick,
-        modifier = modifier.height(36.dp),
+        modifier = modifier.graphicsLayer { scaleX = scale; scaleY = scale },
         shape = CircleShape,
         color = bgColor,
         contentColor = contentColor,
-        border = BorderStroke(1.dp, borderColor)
+        interactionSource = interactionSource
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp),
+            modifier = Modifier.padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
@@ -318,6 +332,7 @@ internal fun AppBrowserScreen(
     LaunchedEffect(loadKey) {
         apps = null
         error = null
+        if (loadKey > 0) MorpheArchive.invalidatePatchListCache()
         try {
             val index = MorpheArchive.fetchIndex()
             apps = index.apps.sortedBy { it.name.lowercase(Locale.US) }
@@ -336,6 +351,8 @@ internal fun AppBrowserScreen(
     BackHandler(enabled = searchExpanded) {
         query = ""
         searchExpanded = false
+        focusManager.clearFocus(force = true)
+        keyboardController?.hide()
     }
 
     LaunchedEffect(query) {
@@ -352,7 +369,6 @@ internal fun AppBrowserScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
     ) {
         val loaded = apps
         val filtered = remember(loaded, query, tab, sort, favourites, installedPackages) {
@@ -392,7 +408,7 @@ internal fun AppBrowserScreen(
                 top = headerHeightDp + 10.dp,
                 start = MorpheDefaults.ContentPadding,
                 end = MorpheDefaults.ContentPadding,
-                bottom = 110.dp
+                bottom = 160.dp
             )
         ) {
             // Always show Disclaimer, Filter, and Sort immediately
@@ -424,7 +440,7 @@ internal fun AppBrowserScreen(
                                 selected = tab != AppListTab.All,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(36.dp)
+                                    .height(40.dp)
                                     .onSizeChanged { filterWidthPx = it.width },
                                 onClick = { filterMenuOpen = true }
                             )
@@ -475,7 +491,7 @@ internal fun AppBrowserScreen(
                                 selected = sort != AppSort.AZ,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(36.dp)
+                                    .height(40.dp)
                                     .onSizeChanged { sortWidthPx = it.width },
                                 onClick = { sortMenuOpen = true }
                             )
@@ -616,6 +632,15 @@ internal fun AppBrowserScreen(
             }
         }
 
+        LazyListScrollbar(
+            listState = listState,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .fillMaxHeight()
+                .padding(top = headerHeightDp)
+                .navigationBarsPadding()
+        )
+
         MorpheFab(
             visible = loaded != null && listState.firstVisibleItemIndex > 0,
             modifier = Modifier
@@ -668,31 +693,49 @@ internal fun AppBrowserScreen(
         ) {
             AnimatedContent(
                 targetState = searchExpanded,
-                transitionSpec = { fadeIn() togetherWith fadeOut() },
-                label = "header_search_transition"
+                transitionSpec = {
+                    val exitDuration = 100
+                    val enterDuration = 200
+                    (fadeIn(tween(enterDuration, delayMillis = exitDuration, easing = LinearOutSlowInEasing)) +
+                            expandHorizontally(tween(enterDuration, delayMillis = exitDuration, easing = LinearOutSlowInEasing)))
+                        .togetherWith(
+                            fadeOut(tween(exitDuration, easing = FastOutLinearInEasing)) +
+                                    shrinkHorizontally(tween(exitDuration, easing = FastOutLinearInEasing))
+                        )
+                },
+                label = "header_search_transition",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(40.dp)
             ) { isSearchActive ->
                 if (isSearchActive) {
-                    // Expanded inline pill search bar on header (like image 4)
+                    // Search bar matching HeaderControlDefaults.Size = 40.dp
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        val isDark = MaterialTheme.colorScheme.background.luminance() < 0.05f
+                        val fieldContainer by animateColorAsState(
+                            targetValue = MaterialTheme.colorScheme.surfaceVariant.copy(
+                                alpha = if (isDark) 0.35f else 0.6f
+                            ),
+                            animationSpec = tween(200),
+                            label = "search_field_container"
+                        )
                         Surface(
                             modifier = Modifier
                                 .weight(1f)
-                                .height(48.dp),
+                                .height(40.dp),
                             shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
+                            color = fieldContainer
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(horizontal = 16.dp),
+                                    .padding(horizontal = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Outlined.Search,
@@ -742,32 +785,21 @@ internal fun AppBrowserScreen(
                             }
                         }
 
-                        // Circular close search button on right side
-                        Surface(
+                        // Close search — active/selected glass style (primaryContainer tinted)
+                        GlassHeaderButton(
+                            icon = Icons.Outlined.SearchOff,
+                            contentDescription = "Close search",
+                            active = true,
                             onClick = {
                                 query = ""
                                 searchExpanded = false
-                            },
-                            modifier = Modifier.size(48.dp),
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Outlined.SearchOff,
-                                    contentDescription = "Close search",
-                                    modifier = Modifier.size(22.dp)
-                                )
                             }
-                        }
+                        )
                     }
                 } else {
-                    // Normal left-aligned header matching Helper & Settings tabs
+                    // Normal left-aligned header — glass controls matching HeaderControlDefaults
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 52.dp),
+                        modifier = Modifier.fillMaxSize(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -811,40 +843,100 @@ internal fun AppBrowserScreen(
                             )
                         }
 
-                        Surface(
-                            onClick = { loadKey++ },
-                            modifier = Modifier.size(48.dp),
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Refresh,
-                                    contentDescription = stringResource(R.string.refresh),
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                        }
+                        GlassHeaderButton(
+                            icon = Icons.Outlined.Refresh,
+                            contentDescription = stringResource(R.string.refresh),
+                            onClick = { loadKey++ }
+                        )
 
-                        Surface(
-                            onClick = { searchExpanded = true },
-                            modifier = Modifier.size(48.dp),
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Search,
-                                    contentDescription = stringResource(R.string.search_apps_or_packages),
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                        }
+                        GlassHeaderButton(
+                            icon = Icons.Outlined.Search,
+                            contentDescription = stringResource(R.string.search_apps_or_packages),
+                            onClick = { searchExpanded = true }
+                        )
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * A single circular icon button matching Morphe's HeaderControlDefaults:
+ * 40 dp, animated glass fill, animated border on [active] state.
+ */
+@Composable
+private fun GlassHeaderButton(
+    icon: ImageVector,
+    contentDescription: String?,
+    onClick: () -> Unit,
+    active: Boolean = false
+) {
+    val isDark = isSystemInDarkTheme()
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+
+    // Container: idle = surfaceVariant glass; active = primaryContainer glass
+    val idleAlpha = if (isDark) 0.35f else 0.6f
+    val activeAlpha = if (isDark) 0.55f else 0.72f
+    val baseContainer = if (active) {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = activeAlpha)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = idleAlpha)
+    }
+    val containerColor by animateColorAsState(
+        targetValue = if (pressed) baseContainer.copy(alpha = (baseContainer.alpha * 0.75f).coerceAtLeast(0.18f)) else baseContainer,
+        animationSpec = tween(200),
+        label = "glass_header_btn_container"
+    )
+
+    // Border: none when idle, primary-tinted when active
+    val idleBorderAlpha = if (isDark) 0.4f else 0.6f
+    val activeBorderAlpha = if (isDark) 0.55f else 0.45f
+    val borderColor by animateColorAsState(
+        targetValue = if (active) {
+            MaterialTheme.colorScheme.primary.copy(alpha = activeBorderAlpha)
+        } else {
+            MaterialTheme.colorScheme.outline.copy(alpha = idleBorderAlpha)
+        },
+        animationSpec = tween(200),
+        label = "glass_header_btn_border"
+    )
+
+    // Content
+    val contentColor by animateColorAsState(
+        targetValue = if (active) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        animationSpec = tween(200),
+        label = "glass_header_btn_content"
+    )
+
+    // Scale down on press like Morphe's rememberPressShape
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.92f else 1f,
+        animationSpec = tween(200),
+        label = "glass_header_btn_scale"
+    )
+
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .size(40.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale },
+        shape = CircleShape,
+        color = containerColor,
+        contentColor = contentColor,
+        interactionSource = interactionSource
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }
@@ -1619,7 +1711,7 @@ internal fun AppDetailView(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(48.dp)
+                        .height(44.dp)
                         .clip(CircleShape)
                         .glassFill(
                             glass = MorpheColors.glassContainerColor(),
@@ -1654,15 +1746,15 @@ internal fun AppDetailView(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(48.dp)
+                                .size(40.dp)
                                 .clip(CircleShape)
                         ) {
                             FindAppIcon(
                                 app = app,
                                 gradient = appPalette.gradient,
                                 installed = installed,
-                                size = 48.dp,
-                                cornerRadius = 24.dp
+                                size = 41.dp,
+                                cornerRadius = 21.dp
                             )
                         }
                         Column(
@@ -1757,7 +1849,6 @@ internal fun AppSourceCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
-            .clickable(onClick = onViewPatches)
             .drawWithCache {
                 val corner = CornerRadius(24.dp.toPx())
                 val fill = Brush.linearGradient(
@@ -2121,19 +2212,27 @@ private fun SourcePatchesScreen(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                val versionsToShow = resolvedVersions.ifEmpty { listOf("All versions") }
+                                val versionsToShow = resolvedVersions.ifEmpty { listOf("Any version") }
                                 versionsToShow.forEach { ver ->
                                     Box(
                                         modifier = Modifier
                                             .clip(CircleShape)
-                                            .background(colors.surfaceVariant.copy(alpha = 0.75f))
+                                            .background(
+                                                if (ver == "Any version")
+                                                    colors.surfaceVariant.copy(alpha = 0.45f)
+                                                else
+                                                    colors.primaryContainer.copy(alpha = 0.55f)
+                                            )
                                             .padding(horizontal = 10.dp, vertical = 4.dp)
                                     ) {
                                         Text(
                                             text = ver,
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Medium,
-                                            color = colors.onSurface,
+                                            color = if (ver == "Any version")
+                                                colors.onSurfaceVariant
+                                            else
+                                                colors.onPrimaryContainer,
                                             maxLines = 1
                                         )
                                     }

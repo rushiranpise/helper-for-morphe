@@ -270,6 +270,11 @@ internal object MorpheArchive {
 
     private val patchListCache = java.util.concurrent.ConcurrentHashMap<String, List<ArchivePatch>>()
 
+    /** Call after a successful index refresh to force fresh patch lists next fetch. */
+    fun invalidatePatchListCache() {
+        patchListCache.clear()
+    }
+
     /**
      * Fetches a repo's `patches-list.json` (from `listUrl`) and returns a map of
      * `patchName -> supportedVersions` strictly for [packageName].
