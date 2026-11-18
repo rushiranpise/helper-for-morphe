@@ -59,11 +59,20 @@ internal class MorpheLinkParser(
         // fallback page can be a direct file, a GitHub release or a source page,
         // so it gets the same orchestration instead of always opening a browser.
         for ((url, _) in targets) {
+            if (url.isCaptchaGatedSourcePage()) {
+                android.util.Log.i(
+                    TAG,
+                    "Morphe resolver named a captcha-gated page; only direct files are used: $url"
+                )
+                continue
+            }
             val candidates = resolvedCandidates(request, url, option)
             if (candidates.isNotEmpty()) return candidates
         }
 
-        val (browserUrl, fromFallback) = targets.firstOrNull { it.second } ?: targets.first()
+        val (browserUrl, fromFallback) = targets
+            .firstOrNull { (url, _) -> !url.isCaptchaGatedSourcePage() }
+            ?: return emptyList()
         val browser = browserCandidate(
             request = request,
             url = browserUrl,
@@ -92,6 +101,15 @@ internal class MorpheLinkParser(
 
         val resolvedSource = morpheLinkSourceOf(url) ?: return emptyList()
         if (!ctx.isSourceEnabled(resolvedSource)) return emptyList()
+        // Uptodown and APKCube only get the direct-file path above. Their pages
+        // normally need a Turnstile challenge, so handing the request to their
+        // parser here would stop the whole resolution on a captcha before the
+        // API-backed sources have run.
+        if (resolvedSource == DownloadSource.UPTODOWN ||
+            resolvedSource == DownloadSource.APK_CUBE
+        ) {
+            return emptyList()
+        }
         return runCatching {
             resolvedSource
                 .let(delegatesBySource::get)
@@ -215,6 +233,13 @@ internal class MorpheLinkParser(
         return (urlName ?: "${request.packageName}-${versionName ?: "latest"}-morphe.$fileKind")
             .sanitizeFileName()
     }
+}
+
+/** True for source pages that normally hide their file behind a captcha. */
+private fun String.isCaptchaGatedSourcePage(): Boolean = when (morpheLinkSourceOf(this)) {
+    DownloadSource.UPTODOWN,
+    DownloadSource.APK_CUBE -> true
+    else -> false
 }
 
 /** The parser that should continue from a resolved page, based on its host. */
