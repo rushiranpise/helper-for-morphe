@@ -49,6 +49,43 @@ private data class ScrollbarMetrics(
 )
 
 /**
+ * Sizes measured during this scroll session. The running total keeps the
+ * scrollbar metrics independent of the catalogue length instead of summing
+ * every known row on every frame.
+ */
+private class ScrollbarSizeCache {
+    private val sizes = mutableMapOf<Int, Int>()
+    private var itemCount = -1
+    var measuredTotal = 0f
+        private set
+    var measuredCount = 0
+        private set
+
+    fun prepare(count: Int) {
+        if (itemCount == count) return
+        itemCount = count
+        sizes.clear()
+        measuredTotal = 0f
+        measuredCount = 0
+    }
+
+    fun record(index: Int, size: Int) {
+        val previous = sizes.put(index, size)
+        if (previous == null) {
+            measuredCount++
+            measuredTotal += size
+        } else if (previous != size) {
+            measuredTotal += size - previous
+        }
+    }
+
+    fun sizeAt(index: Int): Int? = sizes[index]
+
+    fun average(fallback: Float): Float =
+        if (measuredCount == 0) fallback else measuredTotal / measuredCount
+}
+
+/**
  * Grabbable scrollbar for a [LazyListState], rendered in a narrow gutter beside the list. The
  * track and thumb fade in while scrolling, and dragging the thumb jumps proportionally across the
  * whole list instead of one row per finger pixel.
@@ -58,9 +95,9 @@ internal fun LazyListScrollbar(
     listState: LazyListState,
     modifier: Modifier = Modifier
 ) {
-    // Keep every row height measured during this scroll session, so a tall card still contributes
-    // its real size after it leaves the viewport and the thumb does not drift.
-    val sizeCache = remember(listState) { mutableMapOf<Int, Int>() }
+    // Keep every row height measured during this scroll session, so seek targets
+    // can use real sizes without rescanning the catalogue while scrolling.
+    val sizeCache = remember(listState) { ScrollbarSizeCache() }
     val metrics by remember(listState) {
         derivedStateOf { listState.scrollbarMetrics(sizeCache) }
     }
@@ -228,7 +265,7 @@ private fun MorpheScrollbar(
  */
 private fun LazyListState.seekTarget(
     fraction: Float,
-    sizeCache: Map<Int, Int>,
+    sizeCache: ScrollbarSizeCache,
     metrics: ScrollbarMetrics
 ): Pair<Int, Int> {
     val total = layoutInfo.totalItemsCount
@@ -238,13 +275,13 @@ private fun LazyListState.seekTarget(
     // Aim past the last row at the very end and let the list clamp, since rows never measured may
     // turn out taller than the estimate.
     if (fraction >= 1f) {
-        val lastSize = sizeCache[lastIndex]?.toFloat() ?: metrics.averageItemSize
+        val lastSize = sizeCache.sizeAt(lastIndex)?.toFloat() ?: metrics.averageItemSize
         return lastIndex to (lastSize + layoutInfo.afterContentPadding).roundToInt().coerceAtLeast(0)
     }
 
     var remaining = fraction * metrics.maxScrollOffset
     for (index in 0 until lastIndex) {
-        val itemSize = sizeCache[index]?.toFloat() ?: metrics.averageItemSize
+        val itemSize = sizeCache.sizeAt(index)?.toFloat() ?: metrics.averageItemSize
         if (itemSize <= 0f || remaining < itemSize) {
             return index to remaining.roundToInt().coerceAtLeast(0)
         }
@@ -253,38 +290,32 @@ private fun LazyListState.seekTarget(
     return lastIndex to remaining.roundToInt().coerceAtLeast(0)
 }
 
-private fun LazyListState.scrollbarMetrics(
-    sizeCache: MutableMap<Int, Int>
-): ScrollbarMetrics {
+private fun LazyListState.scrollbarMetrics(sizeCache: ScrollbarSizeCache): ScrollbarMetrics {
     val info = layoutInfo
     val visible = info.visibleItemsInfo
     val total = info.totalItemsCount
     if (visible.isEmpty() || total <= 0) {
         return ScrollbarMetrics(progress = 0f, thumbFraction = 1f)
     }
-    // Stale tail entries would keep inflating the estimate after the list shrinks
-    if (sizeCache.keys.any { it >= total }) {
-        sizeCache.keys.retainAll { it < total }
-    }
-    visible.forEach { sizeCache[it.index] = it.size }
+    sizeCache.prepare(total)
+    visible.forEach { sizeCache.record(it.index, it.size) }
 
     val viewport = (info.viewportEndOffset - info.viewportStartOffset).coerceAtLeast(1)
-    val average = (sizeCache.values.sum().toFloat() / sizeCache.size).coerceAtLeast(1f)
-    // Use measured heights where available and the average only for rows not yet seen, so a tall
-    // card advances the thumb by exactly its own height as it scrolls past.
-    var scrollOffset = firstVisibleItemScrollOffset.toFloat()
-    for (index in 0 until firstVisibleItemIndex) {
-        scrollOffset += sizeCache[index]?.toFloat() ?: average
-    }
-    var estimatedItemsSize = 0f
-    for (index in 0 until total) {
-        estimatedItemsSize += sizeCache[index]?.toFloat() ?: average
-    }
-    val content = (estimatedItemsSize + info.beforeContentPadding + info.afterContentPadding)
+    // Unseen rows use the measured average, so this stays O(visible) per frame.
+    val average = sizeCache.average(viewport.toFloat() / total).coerceAtLeast(1f)
+    val content = (average * total + info.beforeContentPadding + info.afterContentPadding)
         .coerceAtLeast(viewport.toFloat())
     val maxScrollOffset = (content - viewport).coerceAtLeast(1f)
+    val progress = when {
+        !canScrollBackward -> 0f
+        !canScrollForward -> 1f
+        else -> {
+            val offset = firstVisibleItemIndex * average + firstVisibleItemScrollOffset
+            (offset / maxScrollOffset).coerceIn(0f, 1f)
+        }
+    }
     return ScrollbarMetrics(
-        progress = (scrollOffset / maxScrollOffset).coerceIn(0f, 1f),
+        progress = progress,
         thumbFraction = (viewport / content).coerceIn(ScrollbarMinThumbFraction, 1f),
         averageItemSize = average,
         maxScrollOffset = maxScrollOffset
