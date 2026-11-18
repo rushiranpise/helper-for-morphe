@@ -5,12 +5,12 @@ import dev.rushi.apkdownloadhelper.BuildConfig
 import dev.rushi.apkdownloadhelper.ui.CandidateOption
 import dev.rushi.apkdownloadhelper.ui.DownloadSource
 import dev.rushi.apkdownloadhelper.ui.HelperRequest
-import java.util.Locale
 
 /**
- * Remembers definitive "this source does not have it" answers for a short time.
- * Transient failures are deliberately not cached, and a successful lookup clears
- * the entry so a source gets another chance as soon as it recovers.
+ * Remembers explicit "this source does not have it" answers for a short time.
+ * Empty candidate lists, transient failures and cancellations are not cached,
+ * and a successful lookup clears the entry so a source gets another chance as
+ * soon as it recovers.
  */
 internal object SourceNegativeCache {
     private const val PREFS = "source_negative_cache"
@@ -42,16 +42,14 @@ internal object SourceNegativeCache {
         return raw.substringAfter('|', "")
     }
 
-    fun record(
+    fun recordNotFound(
         context: Context,
         source: DownloadSource,
         request: HelperRequest,
         option: CandidateOption,
-        reason: String?,
-        definitive: Boolean = false
+        reason: String
     ) {
-        if (source !in cacheableSources || reason.isNullOrBlank()) return
-        if (!definitive && !isDefinitive(reason)) return
+        if (source !in cacheableSources || reason.isBlank()) return
         val key = key(source, request, option)
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
@@ -74,26 +72,6 @@ internal object SourceNegativeCache {
             .edit()
             .remove(key(source, request, option))
             .apply()
-    }
-
-    internal fun isDefinitive(message: String): Boolean {
-        val lower = message.lowercase(Locale.US)
-        val transient = listOf(
-            "timeout", "timed out", "http 403", "http 429", "cloudflare",
-            "blocked", "rate limit", "invalid json", "parse", "cancelled",
-            "connection", "network", "unknown host", "ssl", "interrupted",
-            "empty file", "checksum", "sha-256 mismatch"
-        )
-        if (transient.any(lower::contains)) return false
-        val definitive = listOf(
-            "not found", "no listing", "could not find", "couldn't find",
-            "cannot find", "no matching", "no app", "no versions",
-            "no split archive", "not available", "no release",
-            "different package", "is for ", "http 404", "no results",
-            "does not have", "isn't in the catalog", "not in the catalog",
-            "not trusted"
-        )
-        return definitive.any(lower::contains)
     }
 
     private fun key(

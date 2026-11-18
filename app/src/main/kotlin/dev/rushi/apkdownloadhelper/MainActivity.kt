@@ -93,6 +93,7 @@ import dev.rushi.apkdownloadhelper.sources.SourcePrefetch
 import dev.rushi.apkdownloadhelper.sources.UptodownMobileApi
 import dev.rushi.apkdownloadhelper.sources.UptodownParser
 import dev.rushi.apkdownloadhelper.sources.archMatchRank
+import dev.rushi.apkdownloadhelper.sources.runSourceLookup
 import dev.rushi.apkdownloadhelper.storage.AppLog
 import dev.rushi.apkdownloadhelper.storage.DownloadHistoryEntry
 import dev.rushi.apkdownloadhelper.storage.DownloadHistoryStore
@@ -127,6 +128,7 @@ import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
 import dev.rushi.apkdownloadhelper.ui.DownloadHelperContract
 import dev.rushi.apkdownloadhelper.ui.DownloadSource
 import dev.rushi.apkdownloadhelper.ui.FailedAttempt
+import dev.rushi.apkdownloadhelper.ui.definitiveNotFoundReason
 import dev.rushi.apkdownloadhelper.ui.FastModeChoice
 import dev.rushi.apkdownloadhelper.ui.FastModeFindResult
 import dev.rushi.apkdownloadhelper.ui.FastModeProgress
@@ -1363,7 +1365,7 @@ class MainActivity : ComponentActivity() {
         source: DownloadSource,
         option: CandidateOption
     ): ResolveOutcome {
-        val lookup = runCatching { findSourceCandidates(request, source, option) }
+        val lookup = runSourceLookup { findSourceCandidates(request, source, option) }
             .onFailure { error ->
                 if (error !is SourceAppNotFoundException) {
                     Log.w(TAG, "${source.label} ${option.name.lowercase(Locale.US)} lookup failed", error)
@@ -2099,7 +2101,7 @@ class MainActivity : ComponentActivity() {
                 FastModeProgress(sourceLabel = source.label, detail = "Checking ${source.label}…")
             )
             val result = withContext(Dispatchers.IO) {
-                runCatching { fastModeFindCandidate(request, source) }
+                runSourceLookup { fastModeFindCandidate(request, source) }
                     .getOrDefault(FastModeFindResult.None)
             }
             if (!fastModeActive) return
@@ -2247,7 +2249,7 @@ class MainActivity : ComponentActivity() {
                 FastModeProgress(sourceLabel = source.label, detail = "Checking ${source.label}…")
             )
             val outcome = withContext(Dispatchers.IO) {
-                runCatching {
+                runSourceLookup {
                     resolveSourceSection(request, source, CandidateOption.LATEST)
                 }.getOrNull()
             }
@@ -2271,14 +2273,13 @@ class MainActivity : ComponentActivity() {
                 downloadAndReturn(best)
                 return
             }
-            if (candidates.isEmpty()) {
-                SourceNegativeCache.record(
+            outcome?.definitiveNotFoundReason()?.let { reason ->
+                SourceNegativeCache.recordNotFound(
                     this,
                     source,
                     request,
                     CandidateOption.LATEST,
-                    outcome?.notFoundMessage ?: outcome?.errorMessage ?: "no candidates",
-                    definitive = outcome?.errorMessage == null
+                    reason
                 )
             }
             recordFailedAttempt(source, CandidateOption.LATEST)
@@ -2381,14 +2382,13 @@ class MainActivity : ComponentActivity() {
             SourceNegativeCache.clear(this, source, request, CandidateOption.REQUESTED)
             return FastModeFindResult.VersionMismatch(mismatch)
         }
-        if (outcome.candidates.isEmpty()) {
-            SourceNegativeCache.record(
+        outcome.definitiveNotFoundReason()?.let { reason ->
+            SourceNegativeCache.recordNotFound(
                 this,
                 source,
                 request,
                 CandidateOption.REQUESTED,
-                outcome.notFoundMessage ?: outcome.errorMessage ?: "no candidates",
-                definitive = outcome.errorMessage == null
+                reason
             )
         }
         return FastModeFindResult.None

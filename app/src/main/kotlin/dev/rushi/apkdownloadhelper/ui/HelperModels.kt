@@ -383,6 +383,14 @@ internal data class ResolveOutcome(
     val notFoundMessage: String? = null
 )
 
+/**
+ * Only an explicit not-found answer may be cached. An empty candidate list can
+ * be the result of ABI or format filtering, and errors and cancellations are
+ * not misses.
+ */
+internal fun ResolveOutcome.definitiveNotFoundReason(): String? =
+    notFoundMessage?.takeIf { candidates.isEmpty() && errorMessage == null }
+
 internal sealed interface ResolveState {
     data object Idle : ResolveState
     data object Loading : ResolveState

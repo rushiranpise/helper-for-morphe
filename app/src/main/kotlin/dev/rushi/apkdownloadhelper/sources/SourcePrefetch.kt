@@ -19,9 +19,9 @@ internal class SourcePrefetch(
     private val fetcher: SourceTextFetcher,
     private val apkPureApi: ApkPureApi,
     private val uptodownApi: UptodownApi?,
-    private val isSourceEnabled: (DownloadSource) -> Boolean = { true }
+    private val isSourceEnabled: (DownloadSource) -> Boolean = { true },
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val texts = ConcurrentHashMap<String, Deferred<String>>()
     private var requestKey: String? = null
     private var apkPureHistory: Deferred<ApkPureHistoryResponse>? = null
