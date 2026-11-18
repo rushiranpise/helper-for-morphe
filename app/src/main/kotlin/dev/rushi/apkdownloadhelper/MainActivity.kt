@@ -649,6 +649,57 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
+                    // --- OVERLAY FOR SETTINGS SUBPAGE ---
+                    AnimatedVisibility(
+                        visible = activeSettingsCategory != null,
+                        enter = MorpheAnimations.pushEnter,
+                        exit = MorpheAnimations.pushExit
+                    ) {
+                        val category = lastActiveCategory
+                        if (category != null) {
+                            MorphePushedScreen {
+                                SettingsPageDetail(
+                                    title = category.title,
+                                    onBack = { activeSettingsCategory = null }
+                                ) {
+                                    when (category) {
+                                        SettingsCategory.SOURCES -> SourcesSettingsScreen(
+                                            settings = helperSettings,
+                                            onSettingsChange = ::updateHelperSettings
+                                        )
+                                        SettingsCategory.APPEARANCE -> AppearanceTabContent(
+                                            settings = helperSettings,
+                                            onSettingsChange = ::updateHelperSettings
+                                        )
+                                        SettingsCategory.DOWNLOADS -> AdvancedTabContent(
+                                            settings = helperSettings,
+                                            onSettingsChange = ::updateHelperSettings
+                                        )
+                                        SettingsCategory.SECURITY_NETWORK -> SystemTabContent(
+                                            settings = helperSettings,
+                                            onSettingsChange = ::updateHelperSettings
+                                        )
+                                        SettingsCategory.SYSTEM_LOGS -> LogsTabContent(
+                                            settings = helperSettings,
+                                            onSettingsChange = ::updateHelperSettings,
+                                            logs = AppLog.entries,
+                                            onClearLogs = { AppLog.clear() },
+                                            historyEntries = DownloadHistoryStore.entries(applicationContext),
+                                            onOpenHistoryEntry = ::openHistoryEntry,
+                                            onShareHistoryEntry = ::shareHistoryEntry,
+                                            onClearHistory = { DownloadHistoryStore.clear(applicationContext) }
+                                        )
+                                        SettingsCategory.ABOUT -> AboutTabContent(
+                                            settings = helperSettings,
+                                            onSettingsChange = ::updateHelperSettings,
+                                            onOpenUpdates = { showUpdates = true }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // --- OVERLAY FOR FIND APPS DETAIL ---
                     AnimatedVisibility(
                         visible = selectedArchiveApp != null,
