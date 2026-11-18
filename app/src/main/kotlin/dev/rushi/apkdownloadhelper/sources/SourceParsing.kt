@@ -26,6 +26,9 @@ internal fun interface SourceTextFetcher {
  */
 internal class HttpRateLimitedException(message: String) : Exception(message)
 
+/** An explicit HTTP 404, distinct from transient network or parse failures. */
+internal class HttpNotFoundException(url: String) : Exception("HTTP 404 for $url")
+
 /**
  * Thrown when a source answers a probe with a Cloudflare legal-interstitial /
  * challenge page instead of the real content. Callers surface it as a distinct
@@ -65,6 +68,8 @@ internal class OkHttpSourceTextFetcher(
                         retry = true
                     } else if (response.code == 429) {
                         throw HttpRateLimitedException("HTTP 429 Too Many Requests for $url")
+                    } else if (response.code == 404) {
+                        throw HttpNotFoundException(url)
                     } else {
                         throw IllegalStateException("HTTP ${response.code} for $url")
                     }

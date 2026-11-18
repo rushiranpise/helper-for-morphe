@@ -6,11 +6,14 @@ import dev.rushi.apkdownloadhelper.storage.*
 import dev.rushi.apkdownloadhelper.ui.*
 import dev.rushi.apkdownloadhelper.updater.*
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.IOException
 
 class ApkCubeParserTest {
 
@@ -25,6 +28,12 @@ class ApkCubeParserTest {
         </body></html>
     """.trimIndent()
 
+    private fun downloadPage(): String = """
+        <!DOCTYPE html><html><head>
+        <title>Download Battery Guru 2.5.0.6 APK for Android - APKCube</title>
+        </head></html>
+    """.trimIndent()
+
     private fun oldVersionsPage(): String = """
         <!DOCTYPE html><html><head><title>Old versions</title></head><body>
         <script>self.__next_f.push([1,"39:[\"R\",\"RL38\",null,{\"versionName\":\"2.5.0.6\",\"versionCode\":2506,\"arch\":\"arm64-v8a\"}]"])</script>
@@ -36,6 +45,15 @@ class ApkCubeParserTest {
 
     private fun parser(pages: Map<String, String>) =
         ApkCubeParser(testParserContext(pages))
+
+    private fun parserWithFetcher(fetcher: SourceTextFetcher) =
+        ApkCubeParser(
+            SourceParserContext(
+                fetcher = fetcher,
+                apkPureApi = FakeApkPureApi(),
+                aptoideApi = FakeAptoideApi()
+            )
+        )
 
     private val downloaderUrl = "https://apkcube.com/apk-downloader?url=$packageName"
     private val downloadUrl = "https://apkcube.com/battery-guru-battery-health/$packageName/download"
@@ -56,8 +74,14 @@ class ApkCubeParserTest {
     @Test
     fun apkcube_usesTheSameCatalogue() {
         val result = runBlocking {
-            ApkCubeParser(testParserContext(mapOf(downloaderUrl to downloaderPage())))
-                .findCandidates(latestRequest(), CandidateOption.LATEST)
+            ApkCubeParser(
+                testParserContext(
+                    mapOf(
+                        downloaderUrl to downloaderPage(),
+                        downloadUrl to downloadPage()
+                    )
+                )
+            ).findCandidates(latestRequest(), CandidateOption.LATEST)
         }
         assertEquals(1, result.size)
         assertEquals(DownloadSource.APK_CUBE, result.first().source)
@@ -97,7 +121,12 @@ class ApkCubeParserTest {
     @Test
     fun latest_findsVersionAndDownloadPage() {
         val result = runBlocking {
-            parser(mapOf(downloaderUrl to downloaderPage())).findCandidates(latestRequest(), CandidateOption.LATEST)
+            parser(
+                mapOf(
+                    downloaderUrl to downloaderPage(),
+                    downloadUrl to downloadPage()
+                )
+            ).findCandidates(latestRequest(), CandidateOption.LATEST)
         }
         assertEquals(1, result.size)
         val candidate = result.first()
@@ -122,7 +151,12 @@ class ApkCubeParserTest {
             <script>self.__next_f.push([1,"3a:[\"R\",\"RL3\",null,{\"href\":\"/battery-guru-battery-health/com.paget96.batteryguru/download\"}]"])</script>
         """.trimIndent()
         val result = runBlocking {
-            parser(mapOf(downloaderUrl to page)).findCandidates(latestRequest(), CandidateOption.LATEST)
+            parser(
+                mapOf(
+                    downloaderUrl to page,
+                    downloadUrl to downloadPage()
+                )
+            ).findCandidates(latestRequest(), CandidateOption.LATEST)
         }
         assertEquals(1, result.size)
         assertEquals("2.5.0.6", result.first().versionName)
@@ -266,13 +300,47 @@ class ApkCubeParserTest {
     }
 
     @Test
-    fun latest_appMissing_throwsNotFound() {
+    fun latest_noMatchPage_throwsNotFound() {
+        val html = "<div hidden><p>No match</p>" +
+            "<p>We don't hold that package</p>" +
+            "<p>Package isn't in the catalog.</p></div>"
         val error = runCatching {
             runBlocking {
-                parser(emptyMap()).findCandidates(latestRequest(), CandidateOption.LATEST)
+                parser(mapOf(downloaderUrl to html))
+                    .findCandidates(latestRequest(), CandidateOption.LATEST)
             }
         }.exceptionOrNull()
         assertTrue("expected SourceAppNotFoundException, got $error", error is SourceAppNotFoundException)
+    }
+
+    @Test
+    fun explicit404_throwsNotFound() {
+        val error = runCatching {
+            runBlocking {
+                parserWithFetcher(SourceTextFetcher { _, _ ->
+                    throw HttpNotFoundException(downloaderUrl)
+                }).findCandidates(latestRequest(), CandidateOption.LATEST)
+            }
+        }.exceptionOrNull()
+        assertTrue("expected SourceAppNotFoundException, got $error", error is SourceAppNotFoundException)
+    }
+
+    @Test
+    fun transientFailuresAreRethrown() {
+        val failures = listOf(
+            IOException("network failed"),
+            IllegalStateException("parse failed"),
+            CancellationException("cancelled")
+        )
+        failures.forEach { failure ->
+            val error = runCatching {
+                runBlocking {
+                    parserWithFetcher(SourceTextFetcher { _, _ -> throw failure })
+                        .findCandidates(latestRequest(), CandidateOption.LATEST)
+                }
+            }.exceptionOrNull()
+            assertSame(failure, error)
+        }
     }
 
     @Test

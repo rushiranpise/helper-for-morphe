@@ -64,4 +64,18 @@ class OkHttpSourceTextFetcherTest {
 
         assertTrue(result.exceptionOrNull() is HttpRateLimitedException)
     }
+
+    @Test
+    fun surfacesHttp404AsNotFound() {
+        val server = MockWebServer()
+        server.start()
+        server.enqueue(MockResponse().setResponseCode(404))
+        val fetcher = OkHttpSourceTextFetcher(OkHttpClient(), minRequestGapMillis = 0)
+        val url = server.url("/").toString()
+
+        val result = runCatching { fetcher.fetchText(url, null) }
+        server.shutdown()
+
+        assertTrue(result.exceptionOrNull() is HttpNotFoundException)
+    }
 }
