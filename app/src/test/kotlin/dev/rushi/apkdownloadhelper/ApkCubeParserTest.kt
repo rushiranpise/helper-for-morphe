@@ -275,4 +275,30 @@ class ApkCubeParserTest {
         assertTrue("expected SourceAppNotFoundException, got $error", error is SourceAppNotFoundException)
     }
 
+    @Test
+    fun noMatchPageIsDefinitive() {
+        val html = "<div hidden><p>No match</p>" +
+            "<h2>We don&#x27;t hold that package</h2>" +
+            "<p>Package isn&#x27;t in the catalog.</p></div>"
+        assertTrue(apkCubeHtmlNoMatch(html))
+    }
+
+    @Test
+    fun resultPageIsNotSkipped() {
+        val html = "<p>Your file</p><a href='/download?version=1.2.3'>Download</a>"
+        assertFalse(apkCubeHtmlNoMatch(html))
+    }
+
+    @Test
+    fun verificationPageIsNotSkipped() {
+        val html = "<p>No match</p><div>Verify to download</div>"
+        assertFalse(apkCubeHtmlNoMatch(html))
+    }
+
+    @Test
+    fun emptyPageIsNotSkipped() {
+        assertFalse(apkCubeHtmlNoMatch(null))
+        assertFalse(apkCubeHtmlNoMatch(""))
+    }
+
 }

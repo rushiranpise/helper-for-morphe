@@ -2010,7 +2010,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private suspend fun fastModeRun(request: HelperRequest, policy: FastModePolicy) {
-        sourcePrefetch.start(request)
+        sourcePrefetch.start(
+            request,
+            preflightApkCube = fastModeQueue
+                ?.drop(1)
+                ?.contains(DownloadSource.APK_CUBE) == true
+        )
         try {
             if (policy == FastModePolicy.LATEST) {
                 fastModeNextLatest(request)
@@ -2076,6 +2081,25 @@ class MainActivity : ComponentActivity() {
         uiState = UiState.Loading
     }
 
+    /**
+     * APKCube's downloader page can already say it has no match. In that case
+     * skip the source entirely instead of opening its WebView. A missing or
+     * uncertain preflight result keeps the normal WebView path.
+     */
+    private suspend fun skipApkCubeIfPreflightFoundNoMatch(
+        request: HelperRequest,
+        source: DownloadSource,
+        option: CandidateOption
+    ): Boolean {
+        if (source != DownloadSource.APK_CUBE) return false
+        if (!sourcePrefetch.takeApkCubeNoMatch(request)) return false
+        val reason = "no listing for ${request.packageName} (APKCube preflight)"
+        SourceNegativeCache.recordNotFound(this, source, request, option, reason)
+        appendLog("Fast Mode: APKCube preflight found no match; skipping WebView.", LogLevel.Info)
+        recordFailedAttempt(source, option)
+        return true
+    }
+
     private suspend fun fastModeNext(request: HelperRequest) {
         val queue = fastModeQueue ?: return
         while (queue.isNotEmpty()) {
@@ -2094,6 +2118,9 @@ class MainActivity : ComponentActivity() {
                     LogLevel.Info
                 )
                 recordFailedAttempt(source, CandidateOption.REQUESTED)
+                continue
+            }
+            if (skipApkCubeIfPreflightFoundNoMatch(request, source, CandidateOption.REQUESTED)) {
                 continue
             }
             appendLog("Fast Mode: checking ${source.label} for ${request.requestedVersionLabel}...")
@@ -2244,6 +2271,10 @@ class MainActivity : ComponentActivity() {
                 recordFailedAttempt(source, CandidateOption.LATEST)
                 continue
             }
+            if (skipApkCubeIfPreflightFoundNoMatch(request, source, CandidateOption.LATEST)) {
+                continue
+            }
+
             appendLog("Fast Mode: fetching latest from ${source.label}...", LogLevel.Info)
             uiState = UiState.FastMode(
                 FastModeProgress(sourceLabel = source.label, detail = "Checking ${source.label}…")

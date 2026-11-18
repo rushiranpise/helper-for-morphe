@@ -9,6 +9,7 @@ import dev.rushi.apkdownloadhelper.ui.HelperRequest
 import dev.rushi.apkdownloadhelper.ui.VersionStatus
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.util.Locale
 
 /** APKCube's catalogue parser. */
 internal class ApkCubeParser(
@@ -199,9 +200,41 @@ internal abstract class ApkCubeSourceParser(
 private const val APKCUBE_CAPTCHA_NOTE =
     "APKCube gates downloads behind a Cloudflare captcha. Solve it in the in-app browser or open the page manually."
 
-private fun apkCubeSearchUrl(packageName: String): String =
+internal fun apkCubeSearchUrl(packageName: String): String =
     "https://apkcube.com/apk-downloader?url=" +
         URLEncoder.encode(packageName, StandardCharsets.UTF_8.name())
+
+/**
+ * The URL the APKCube WebView opens. The preflight must use the same targeted
+ * downloader page so its no-match answer applies to the page Fast Mode would
+ * otherwise show. Target and ABI are omitted by [apkCubeSearchUrl] alone.
+ */
+internal fun apkCubePreflightUrl(request: HelperRequest): String =
+    apkCubeTargetedDownloadUrl(
+        baseUrl = apkCubeSearchUrl(request.packageName),
+        versionCode = request.versionCode ?: request.versionCodes.firstOrNull(),
+        arch = apkCubeArch(request)
+    )
+
+/**
+ * True when APKCube's server-rendered downloader page definitively reports
+ * that it has no matching app. Verification and download markers make the
+ * page ambiguous, so those pages must keep the normal WebView flow.
+ */
+internal fun apkCubeHtmlNoMatch(html: String?): Boolean {
+    if (html.isNullOrEmpty()) return false
+    val lower = html.lowercase(Locale.US)
+    val hasDownloadMarker = lower.contains("/download?")
+        || lower.contains("download.php")
+        || lower.contains("verify to download")
+        || lower.contains("checking your browser")
+        || lower.contains("turnstile")
+        || lower.contains("captcha")
+    if (hasDownloadMarker) return false
+    return lower.contains("no match")
+        || lower.contains("hold that package")
+        || lower.contains("in the catalog")
+}
 
 /**
  * The Next.js flight payload JSON-escapes its content (`\"` for quotes), so

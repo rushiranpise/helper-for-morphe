@@ -15,6 +15,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -87,6 +88,69 @@ class SourcePrefetchTest {
             prefetch.cancel()
             scope.cancel()
         }
+    }
+
+    @Test
+    fun `apkCube preflight exposes a definitive no-match once`() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val request = request()
+        val html = "<div hidden><p>No match</p>" +
+            "<p>We don't hold that package</p>" +
+            "<p>Package isn't in the catalog.</p></div>"
+        val prefetch = SourcePrefetch(
+            fetcher = ImmediateSourceFetcher(html),
+            apkPureApi = FakeApkPureApi(),
+            uptodownApi = null,
+            scope = scope
+        )
+
+        prefetch.start(request, preflightApkCube = true)
+
+        assertTrue(prefetch.takeApkCubeNoMatch(request))
+        assertFalse(prefetch.takeApkCubeNoMatch(request))
+
+        prefetch.cancel()
+        scope.cancel()
+    }
+
+    @Test
+    fun `apkCube preflight runs on demand when no background probe was started`() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val request = request()
+        val html = "<div hidden><p>No match</p><p>We don't hold that package</p></div>"
+        val prefetch = SourcePrefetch(
+            fetcher = ImmediateSourceFetcher(html),
+            apkPureApi = FakeApkPureApi(),
+            uptodownApi = null,
+            scope = scope
+        )
+
+        prefetch.start(request)
+
+        assertTrue(prefetch.takeApkCubeNoMatch(request))
+
+        prefetch.cancel()
+        scope.cancel()
+    }
+
+    @Test
+    fun `apkCube preflight keeps an uncertain page in the WebView flow`() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val request = request()
+        val html = "<p>No match</p><div>Verify to download</div>"
+        val prefetch = SourcePrefetch(
+            fetcher = ImmediateSourceFetcher(html),
+            apkPureApi = FakeApkPureApi(),
+            uptodownApi = null,
+            scope = scope
+        )
+
+        prefetch.start(request, preflightApkCube = true)
+
+        assertFalse(prefetch.takeApkCubeNoMatch(request))
+
+        prefetch.cancel()
+        scope.cancel()
     }
 
     private fun request(): HelperRequest = HelperRequest(

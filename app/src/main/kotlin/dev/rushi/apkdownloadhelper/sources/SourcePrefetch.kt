@@ -8,6 +8,7 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -26,10 +27,13 @@ internal class SourcePrefetch(
     private var requestKey: String? = null
     private var apkPureHistory: Deferred<ApkPureHistoryResponse>? = null
     private var uptodownPrepared: Deferred<UptodownPrepared>? = null
+    private var apkCubeNoMatch: Deferred<Boolean>? = null
+    private var apkCubeChecked = false
 
-    fun start(request: HelperRequest) {
+    fun start(request: HelperRequest, preflightApkCube: Boolean = false) {
         cancel()
         requestKey = key(request)
+        apkCubeChecked = false
 
         if (isSourceEnabled(DownloadSource.APK_MIRROR)) {
             val url = apkMirrorSearchUrl(request.packageName)
@@ -50,6 +54,14 @@ internal class SourcePrefetch(
                 ?: "apk"
             uptodownPrepared = scope.async {
                 uptodownApi.prepare(request.packageName, version, fileType)
+            }
+        }
+        // Start this after the metadata prefetches so the APKCube probe does
+        // not take the fetcher's pacing slot from the sources checked first.
+        if (preflightApkCube && isSourceEnabled(DownloadSource.APK_CUBE)) {
+            val url = apkCubePreflightUrl(request)
+            apkCubeNoMatch = scope.async {
+                apkCubeHtmlNoMatch(fetcher.fetchText(url, null))
             }
         }
     }
@@ -87,11 +99,40 @@ internal class SourcePrefetch(
         return runCatching { deferred.getCompleted() }.getOrNull()
     }
 
+    /**
+     * True only when APKCube's page definitively has no matching app. If no
+     * background probe was started, check the page now. An unfinished probe is
+     * treated as uncertain so the normal WebView can open without waiting.
+     */
+    suspend fun takeApkCubeNoMatch(request: HelperRequest): Boolean {
+        if (requestKey != key(request) || apkCubeChecked) return false
+        val deferred = apkCubeNoMatch
+        apkCubeNoMatch = null
+        apkCubeChecked = true
+        if (deferred != null) {
+            if (!deferred.isCompleted) {
+                deferred.cancel()
+                return false
+            }
+            return runCatching { deferred.getCompleted() }.getOrDefault(false)
+        }
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                apkCubeHtmlNoMatch(
+                    fetcher.fetchText(apkCubePreflightUrl(request), null)
+                )
+            }.getOrDefault(false)
+        }
+    }
+
     fun cancel() {
         apkPureHistory?.cancel()
         uptodownPrepared?.cancel()
+        apkCubeNoMatch?.cancel()
         apkPureHistory = null
         uptodownPrepared = null
+        apkCubeNoMatch = null
+        apkCubeChecked = false
         texts.values.forEach { it.cancel() }
         texts.clear()
         requestKey = null
