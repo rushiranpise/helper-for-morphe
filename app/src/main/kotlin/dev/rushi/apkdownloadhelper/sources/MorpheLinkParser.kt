@@ -13,6 +13,7 @@ import dev.rushi.apkdownloadhelper.ui.DownloadSource
 import dev.rushi.apkdownloadhelper.ui.HelperRequest
 import dev.rushi.apkdownloadhelper.ui.isApkMirrorFileUrl
 import dev.rushi.apkdownloadhelper.ui.isApkPureFileUrl
+import dev.rushi.apkdownloadhelper.ui.isCapturableDownload
 import dev.rushi.apkdownloadhelper.ui.isUptodownFileUrl
 import dev.rushi.apkdownloadhelper.ui.looksLikeApkDownload
 import java.net.URI
@@ -236,11 +237,12 @@ internal class MorpheLinkParser(
 }
 
 /** True for source pages that normally hide their file behind a captcha. */
-private fun String.isCaptchaGatedSourcePage(): Boolean = when (morpheLinkSourceOf(this)) {
-    DownloadSource.UPTODOWN,
-    DownloadSource.APK_CUBE -> true
-    else -> false
-}
+private fun String.isCaptchaGatedSourcePage(): Boolean =
+    !isCapturableDownload() && when (morpheLinkSourceOf(this)) {
+        DownloadSource.UPTODOWN,
+        DownloadSource.APK_CUBE -> true
+        else -> false
+    }
 
 /** The parser that should continue from a resolved page, based on its host. */
 internal fun morpheLinkSourceOf(url: String): DownloadSource? {
