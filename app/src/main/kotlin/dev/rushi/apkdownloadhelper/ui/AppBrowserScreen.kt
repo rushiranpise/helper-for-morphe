@@ -156,8 +156,8 @@ internal enum class AppSort(val label: String, val icon: ImageVector, val rotati
     AZ("A–Z", Icons.Outlined.SortByAlpha),
     // Same glyph flipped 180° so it reads descending (mirror of A–Z).
     ZA("Z–A", Icons.Outlined.SortByAlpha, 180f),
-    Sources("Sources", Icons.Outlined.Extension),
-    // Newest first, by the most recent release any of the app's sources declares.
+    Bundles("Bundles", Icons.Outlined.Extension),
+    // Newest first, by the most recent release any of the app's bundles declares.
     Newest("Newest", Icons.Outlined.History)
 }
 
@@ -196,7 +196,7 @@ private data class FindAppsStat(
 private fun FindAppsStatsDashboard(index: MorpheArchiveIndex) {
     val scheme = MaterialTheme.colorScheme
     val stats = listOf(
-        FindAppsStat("SOURCES", index.repoCount, Icons.Outlined.Dns),
+        FindAppsStat("BUNDLES", index.repoCount, Icons.Outlined.Dns),
         FindAppsStat("APPS", index.appCount, Icons.Outlined.Apps),
         FindAppsStat("PATCHES", index.patchCount, Icons.Outlined.Extension),
         FindAppsStat("UNIVERSAL", index.universalPatchCount, Icons.Outlined.Public)
@@ -562,7 +562,7 @@ internal fun AppBrowserScreen(
                                     AppSort.AZ -> matches.sortedBy { it.name.lowercase(Locale.US) }
                                     AppSort.ZA ->
                                         matches.sortedByDescending { it.name.lowercase(Locale.US) }
-                                    AppSort.Sources -> matches.sortedByDescending { it.sourceCount }
+                                    AppSort.Bundles -> matches.sortedByDescending { it.sourceCount }
                                     // Keyed once per app and then sorted, rather than
                                     // recomputing the newest release on every comparison.
                                     AppSort.Newest -> matches
@@ -1006,7 +1006,7 @@ private fun FindAppCard(
                     }
                     Text(
                         text = "${app.sourceCount} " +
-                            if (app.sourceCount == 1) "source" else "sources",
+                            if (app.sourceCount == 1) "bundle" else "bundles",
                         style = MaterialTheme.typography.labelSmall,
                         color = subtitleColor.copy(alpha = 0.9f),
                         maxLines = 1
@@ -1641,7 +1641,7 @@ private fun AppDetailHero(
             MorpheStatusBadgeRow {
                 MorpheStatusBadge(
                     text = "${app.sourceCount} " +
-                        if (app.sourceCount == 1) "source" else "sources",
+                        if (app.sourceCount == 1) "bundle" else "bundles",
                     icon = Icons.Outlined.Dns,
                     containerColor = badgeContainer,
                     contentColor = badgeContent
@@ -1755,10 +1755,10 @@ internal fun AppDetailView(
             }
         }
         if (sourceGroups.isEmpty()) {
-            item { MorpheEmptyState(message = "No patch sources listed for this app.") }
+            item { MorpheEmptyState(message = "No patch bundles listed for this app.") }
         } else {
             item {
-                MorpheSectionTitle(text = "Sources", icon = Icons.Outlined.Dns)
+                MorpheSectionTitle(text = "Bundles", icon = Icons.Outlined.Dns)
             }
             items(
                 items = sourceGroups,

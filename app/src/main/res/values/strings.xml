@@ -48,7 +48,7 @@
     <string name="log_to_logcat">Log to Logcat</string>
     <string name="logging">Logging</string>
     <string name="network_policy">Network policy</string>
-    <string name="no_patches_listed_for_this_source">No patches listed for this source.</string>
+    <string name="no_patches_listed_for_this_source">No patches listed for this bundle.</string>
     <string name="open_in_play_store">Open in Play Store</string>
     <string name="open_in_virustotal">Open in VirusTotal</string>
     <string name="open_repo">Open repo</string>
