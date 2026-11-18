@@ -113,6 +113,7 @@ import dev.rushi.apkdownloadhelper.updater.ArchiveApp
 import dev.rushi.apkdownloadhelper.updater.ArchiveFreshness
 import dev.rushi.apkdownloadhelper.updater.ArchiveSource
 import dev.rushi.apkdownloadhelper.updater.MorpheArchive
+import dev.rushi.apkdownloadhelper.updater.MorpheArchiveIndex
 import dev.rushi.apkdownloadhelper.updater.archiveFreshness
 import dev.rushi.apkdownloadhelper.updater.formatBundleRelease
 import dev.rushi.apkdownloadhelper.updater.formatReleaseDate
@@ -171,6 +172,63 @@ internal object MorpheFavourites {
     }
 }
 
+/** One number in the archive dashboard. */
+private data class FindAppsStat(val label: String, val value: Int)
+
+/** Four archive totals, shown before the list warning. */
+@Composable
+private fun FindAppsStatsDashboard(index: MorpheArchiveIndex) {
+    val stats = listOf(
+        FindAppsStat("SOURCES", index.repoCount),
+        FindAppsStat("APPS", index.appCount),
+        FindAppsStat("PATCHES", index.patchCount),
+        FindAppsStat("UNIVERSAL", index.universalPatchCount)
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        stats.chunked(2).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                row.forEach { stat ->
+                    FindAppsStatTile(stat = stat, modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FindAppsStatTile(stat: FindAppsStat, modifier: Modifier = Modifier) {
+    SurfaceCard(
+        modifier = modifier,
+        cornerRadius = MorpheDefaults.CompactCornerRadius,
+        borderWidth = 1.dp,
+        borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+        color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = stat.value.toString(),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1
+            )
+            Text(
+                text = stat.label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+        }
+    }
+}
+
 /** Sticky disclaimer pinned above the archive list. */
 @Composable
 internal fun AppDisclaimerBanner() {
@@ -222,6 +280,7 @@ internal fun AppBrowserScreen(
     modifier: Modifier = Modifier
 ) {
     var apps by remember { mutableStateOf<List<ArchiveApp>?>(null) }
+    var archiveIndex by remember { mutableStateOf<MorpheArchiveIndex?>(null) }
     // When the archive built the index, so a build that predates a source's own
     // changes is visible rather than silently misleading.
     var freshness by remember { mutableStateOf<ArchiveFreshness?>(null) }
@@ -261,10 +320,13 @@ internal fun AppBrowserScreen(
 
     LaunchedEffect(loadKey) {
         apps = null
+        archiveIndex = null
+        freshness = null
         error = null
         try {
             val index = MorpheArchive.fetchIndex()
             apps = index.apps.sortedBy { it.name.lowercase(Locale.US) }
+            archiveIndex = index
             freshness = archiveFreshness(index.generatedAt)
         } catch (e: CancellationException) {
             throw e
@@ -354,11 +416,10 @@ internal fun AppBrowserScreen(
                     if (selected == null) {
                         val fresh = freshness
                         Text(
-                            text = buildString {
-                                append(apps?.let { "${it.size} Apps" } ?: "Loading ...")
-                                // Age goes in the subtitle because a stale index is otherwise
-                                // indistinguishable from a current one.
-                                fresh?.let { append(" - updated ${it.label}") }
+                            text = when {
+                                fresh != null -> "Updated ${fresh.label}"
+                                apps == null -> "Loading ..."
+                                else -> "Community patch index"
                             },
                             color = if (fresh?.stale == true) {
                                 MaterialTheme.colorScheme.error
@@ -417,6 +478,7 @@ internal fun AppBrowserScreen(
                     }
                 }
                 else -> {
+                    val index = archiveIndex
                     val filtered = loaded
                         .filter { app ->
                             query.isBlank() ||
@@ -458,6 +520,9 @@ internal fun AppBrowserScreen(
                         Column(
                             verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
                         ) {
+                            if (index != null) {
+                                FindAppsStatsDashboard(index)
+                            }
                             AppDisclaimerBanner()
                             AnimatedVisibility(
                                 visible = optionsOpen,

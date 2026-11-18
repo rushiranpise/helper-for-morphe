@@ -19,6 +19,10 @@ import java.util.concurrent.TimeUnit
  */
 internal data class MorpheArchiveData(
     @SerializedName("generatedAt") val generatedAt: String? = null,
+    @SerializedName("repoCount") val repoCount: Int = 0,
+    @SerializedName("appCount") val appCount: Int = 0,
+    @SerializedName("patchCount") val patchCount: Int = 0,
+    @SerializedName("universalPatchCount") val universalPatchCount: Int = 0,
     @SerializedName("apps") val apps: List<ArchiveApp> = emptyList()
 )
 
@@ -29,6 +33,10 @@ internal data class MorpheArchiveData(
  */
 internal data class MorpheArchiveIndex(
     val generatedAt: String? = null,
+    val repoCount: Int = 0,
+    val appCount: Int = 0,
+    val patchCount: Int = 0,
+    val universalPatchCount: Int = 0,
     val apps: List<ArchiveApp> = emptyList()
 )
 
@@ -255,7 +263,14 @@ internal object MorpheArchive {
             }
             val body = response.body?.string().orEmpty()
             val parsed = gson.fromJson(body, MorpheArchiveData::class.java)
-            MorpheArchiveIndex(generatedAt = parsed.generatedAt, apps = parsed.apps)
+            MorpheArchiveIndex(
+                generatedAt = parsed.generatedAt,
+                repoCount = parsed.repoCount,
+                appCount = parsed.appCount.takeIf { it > 0 } ?: parsed.apps.size,
+                patchCount = parsed.patchCount,
+                universalPatchCount = parsed.universalPatchCount,
+                apps = parsed.apps
+            )
         }
     }
 
