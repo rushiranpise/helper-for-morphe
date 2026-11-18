@@ -31,6 +31,7 @@
     <string name="enter_api_key">Enter API key</string>
     <string name="fast_mode">Fast Mode</string>
     <string name="file_no_longer_available_temporary_hand">File no longer available (temporary hand-off files are cleaned up after Morphe copies them).</string>
+    <string name="app_details">App details</string>
     <string name="find_new_apps">Find New Apps</string>
     <string name="find_the_download_link">Find the download link</string>
     <string name="format">Format</string>

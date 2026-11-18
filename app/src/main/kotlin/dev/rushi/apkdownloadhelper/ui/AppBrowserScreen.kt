@@ -10,6 +10,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -404,7 +405,11 @@ internal fun AppBrowserScreen(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
-                        text = stringResource(R.string.find_new_apps),
+                        text = if (selected == null) {
+                            stringResource(R.string.find_new_apps)
+                        } else {
+                            stringResource(R.string.app_details)
+                        },
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onBackground,
@@ -455,6 +460,7 @@ internal fun AppBrowserScreen(
         if (current != null) {
             AppDetailView(
                 app = current,
+                installed = current.packageName in installedPackages,
                 onBack = { selected = null },
                 modifier = Modifier.weight(1f)
             )
@@ -1429,9 +1435,188 @@ internal fun openAddSource(context: Context, addUrl: String) {
     runCatching { context.startActivity(intent) }
 }
 
+/**
+ * Manager-style hero for an archive app: its own tinted glass, icon, identity and
+ * the totals that describe the catalogue entry.
+ */
+@Composable
+private fun AppDetailHero(
+    app: ArchiveApp,
+    installed: Boolean,
+    onOpenPlayStore: () -> Unit
+) {
+    val monochrome = LocalMonochromeTheme.current
+    val palette = remember(app.iconColor, app.packageName) { app.findAppCardColors() }
+    val scheme = MaterialTheme.colorScheme
+    val titleColor = if (monochrome) scheme.onSurface else palette.title
+    val subtitleColor = if (monochrome) scheme.onSurfaceVariant else palette.subtitle
+    val badgeContainer = if (monochrome) scheme.surfaceVariant else Color.White.copy(alpha = 0.14f)
+    val badgeContent = if (monochrome) scheme.onSurfaceVariant else Color.White.copy(alpha = 0.92f)
+    val shape = RoundedCornerShape(24.dp)
+    val released = formatReleaseDate(app.newestReleaseDate())
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .drawWithCache {
+                val corner = CornerRadius(24.dp.toPx())
+                val fill: Brush = if (monochrome) {
+                    SolidColor(scheme.surfaceContainerHigh)
+                } else {
+                    Brush.linearGradient(
+                        colors = listOf(
+                            palette.gradient[0].copy(alpha = 0.94f),
+                            palette.gradient[1].copy(alpha = 0.78f),
+                            palette.gradient[2].copy(alpha = 0.90f)
+                        ),
+                        start = Offset(0f, size.height),
+                        end = Offset(size.width, 0f)
+                    )
+                }
+                val border: Brush = if (monochrome) {
+                    SolidColor(scheme.outline.copy(alpha = 0.22f))
+                } else {
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.55f),
+                            palette.gradient[1].copy(alpha = 0.25f),
+                            Color.White.copy(alpha = 0.18f)
+                        ),
+                        start = Offset(0f, 0f),
+                        end = Offset(size.width, size.height)
+                    )
+                }
+                onDrawBehind {
+                    drawRoundRect(brush = fill, cornerRadius = corner)
+                    drawRoundRect(
+                        brush = border,
+                        cornerRadius = corner,
+                        style = Stroke(1.dp.toPx())
+                    )
+                }
+            }
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FindAppIcon(app = app, gradient = palette.gradient, installed = installed)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Text(
+                        text = app.name,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = titleColor,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = app.packageName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = subtitleColor.copy(alpha = 0.82f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(
+                            if (monochrome) scheme.surfaceVariant else Color.White.copy(alpha = 0.16f)
+                        )
+                        .clickable(role = Role.Button, onClick = onOpenPlayStore),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Storefront,
+                        contentDescription = stringResource(R.string.open_in_play_store),
+                        tint = titleColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            MorpheStatusBadgeRow {
+                MorpheStatusBadge(
+                    text = "${app.sourceCount} " +
+                        if (app.sourceCount == 1) "source" else "sources",
+                    icon = Icons.Outlined.Dns,
+                    containerColor = badgeContainer,
+                    contentColor = badgeContent
+                )
+                if (app.versions.isNotEmpty()) {
+                    MorpheStatusBadge(
+                        text = "${app.versions.size} " +
+                            if (app.versions.size == 1) "version" else "versions",
+                        icon = Icons.Outlined.History,
+                        containerColor = badgeContainer,
+                        contentColor = badgeContent
+                    )
+                }
+                released?.let { date ->
+                    MorpheStatusBadge(
+                        text = "Updated $date",
+                        containerColor = badgeContainer,
+                        contentColor = badgeContent
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Horizontally scrollable version pills, instead of one long comma-separated line. */
+@Composable
+private fun AppVersionStrip(versions: List<String>) {
+    SurfaceCard(
+        cornerRadius = MorpheDefaults.SettingsCornerRadius,
+        borderWidth = 1.dp,
+        borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+        color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            versions.forEach { version ->
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+                        .border(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = version,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 internal fun AppDetailView(
     app: ArchiveApp,
+    installed: Boolean = false,
     onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -1454,49 +1639,19 @@ internal fun AppDetailView(
         verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
     ) {
         item {
-            SectionCard {
-                IconTextRow(
-                    modifier = Modifier.padding(MorpheDefaults.ContentPadding),
-                    leadingContent = {
-                        AppAvatar(
-                            packageName = app.packageName,
-                            initial = app.name.firstOrNull()?.uppercaseChar() ?: '?'
-                        )
-                    },
-                    title = app.name,
-                    description = buildString {
-                        append(app.packageName)
-                        append(" · ${app.sourceCount} ")
-                        append(if (app.sourceCount == 1) "source" else "sources")
-                        if (app.versions.isNotEmpty()) {
-                            append(" · ${app.versions.size} ")
-                            append(if (app.versions.size == 1) "version" else "versions")
-                        }
-                    },
-                    titleStyle = MaterialTheme.typography.titleLarge,
-                    titleWeight = FontWeight.Bold,
-                    // Open the Play Store listing, same as the Play source's action, so
-                    // users can see the official page for the app.
-                    trailingContent = {
-                        HelperIconButton(
-                            icon = Icons.Outlined.Storefront,
-                            contentDescription = stringResource(R.string.open_in_play_store),
-                            onClick = {
-                                context.openPlayStoreListing(app.packageName, playStoreUrl(app.packageName))
-                            }
-                        )
-                    }
-                )
-            }
+            AppDetailHero(
+                app = app,
+                installed = installed,
+                onOpenPlayStore = {
+                    context.openPlayStoreListing(app.packageName, playStoreUrl(app.packageName))
+                }
+            )
         }
         if (app.versions.isNotEmpty()) {
             item {
                 MorpheSectionTitle(text = "Versions", icon = Icons.Outlined.History)
-                Text(
-                    text = app.versions.joinToString(),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Spacer(Modifier.height(8.dp))
+                AppVersionStrip(app.versions)
             }
         }
         if (sourceGroups.isEmpty()) {
