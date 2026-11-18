@@ -99,6 +99,8 @@ internal class SourceParserContext(
     val fetcher: SourceTextFetcher,
     val apkPureApi: ApkPureApi,
     val aptoideApi: AptoideApi,
+    /** Uptodown's mobile API; null keeps tests and callers on the HTML flow. */
+    val uptodownApi: UptodownApi? = null,
     /** APKMirror's latest-release JSON endpoint; null keeps tests on the scrape path. */
     val apkMirrorApi: ApkMirrorApi? = null,
     val playHttpClient: PlayHttpClient? = null,

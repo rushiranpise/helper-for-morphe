@@ -181,4 +181,45 @@ class UptodownParserTest {
         assertEquals("https://dw.uptodown.com/dwn/xyz-abc", resolved.files[0].url)
         assertEquals(versionPageUrl, resolved.files[0].referer)
     }
+
+    @Test
+    fun findCandidates_usesMobileApiBeforeHtml() = runBlocking {
+        val downloadUrl = "https://dw.uptodown.com/dwn/signed-token"
+        val api = FakeUptodownApi(
+            prepared = UptodownPrepared(
+                app = UptodownApp(
+                    appId = "12345",
+                    slug = detailUrl,
+                    name = "Example App",
+                    icon = "",
+                    packageName = packageName,
+                    lastVersion = "2.0.0"
+                ),
+                release = UptodownRelease(
+                    version = "2.0.0",
+                    fileId = 222L,
+                    kindFile = "apk"
+                ),
+                download = UptodownDownload(
+                    url = downloadUrl,
+                    sha256 = "a".repeat(64)
+                )
+            )
+        )
+        val parser = UptodownParser(
+            testParserContext(pages = emptyMap(), uptodownApi = api)
+        )
+
+        val candidates = parser.findCandidates(
+            testRequest(packageName = packageName, versionName = "2.0.0"),
+            CandidateOption.REQUESTED
+        )
+
+        assertEquals(1, candidates.size)
+        val candidate = candidates.single()
+        assertTrue(candidate.directDownload)
+        assertEquals(downloadUrl, candidate.url)
+        assertEquals("2.0.0", candidate.versionName)
+        assertEquals("a".repeat(64), candidate.files.single().expectedSha256)
+    }
 }

@@ -2,6 +2,7 @@
 
 import android.net.Uri
 import android.util.Log
+import dev.rushi.apkdownloadhelper.DOWNLOAD_FILE_KIND_ORDER
 import dev.rushi.apkdownloadhelper.DOWNLOAD_FILE_KIND_SET
 import dev.rushi.apkdownloadhelper.TAG
 import dev.rushi.apkdownloadhelper.download.compareVersionNames
@@ -39,6 +40,7 @@ internal class UptodownParser(private val ctx: SourceParserContext) : ApkSourceP
         request: HelperRequest,
         option: CandidateOption
     ): List<DownloadCandidate> {
+        uptodownApiCandidates(request, option)?.let { return it }
         uptodownFastPath(request, option)?.let { return it }
 
         return uptodownDetailUrls(request)
@@ -127,6 +129,75 @@ internal class UptodownParser(private val ctx: SourceParserContext) : ApkSourceP
                     fileName = "${candidate.packageName}-${candidate.versionName ?: "latest"}-uptodown.${candidate.fileKind}"
                         .sanitizeFileName(),
                     referer = candidate.url
+                )
+            )
+        )
+    }
+
+    /**
+     * Uptodown's mobile API names the exact file and signed CDN URL, avoiding the
+     * Turnstile page entirely. Any failure returns null so the existing HTML flow
+     * runs unchanged.
+     */
+    private fun uptodownApiCandidates(
+        request: HelperRequest,
+        option: CandidateOption
+    ): List<DownloadCandidate>? {
+        if (option == CandidateOption.MANUAL) return null
+        val api = ctx.uptodownApi ?: return null
+        val requestedVersion = when (option) {
+            CandidateOption.REQUESTED -> request.requestedVersionNames.firstOrNull()
+                ?: return null
+            else -> null
+        }
+        val wantedKind = DOWNLOAD_FILE_KIND_ORDER.firstOrNull { it in request.requestedFileKinds }
+            ?: "apk"
+        val prepared = runCatching {
+            api.prepare(request.packageName, requestedVersion, wantedKind)
+        }
+            .onFailure { Log.i(TAG, "Uptodown API failed, using HTML flow", it) }
+            .getOrNull()
+            ?: return null
+
+        if (prepared.app.packageName.isNotBlank() &&
+            prepared.app.packageName != request.packageName
+        ) {
+            Log.w(TAG, "Uptodown API returned ${prepared.app.packageName}, expected ${request.packageName}")
+            return null
+        }
+        val versionName = prepared.release.version.trim().takeIf(String::isNotBlank) ?: return null
+        if (option == CandidateOption.REQUESTED &&
+            !request.matchesRequestedVersion(versionName, null)
+        ) {
+            return null
+        }
+        val fileKind = prepared.release.kindFile.trim().lowercase(Locale.US)
+            .takeIf { it in DOWNLOAD_FILE_KIND_SET }
+            ?: "apk"
+        if (!request.acceptsCandidateFormat(fileKind)) return null
+        val downloadUrl = prepared.download.url.trim().normalizedHttpUrlOrNull() ?: return null
+        val expectedSha256 = prepared.download.sha256.trim().takeIf(String::isNotBlank)
+
+        return listOf(
+            DownloadCandidate(
+                source = DownloadSource.UPTODOWN,
+                name = prepared.app.name.ifBlank { request.appName },
+                packageName = request.packageName,
+                versionName = versionName,
+                versionCode = null,
+                url = downloadUrl,
+                fileKind = fileKind,
+                option = option,
+                directDownload = true,
+                versionStatus = request.versionStatus(versionName, null),
+                formatMatches = true,
+                files = listOf(
+                    CandidateDownloadFile(
+                        url = downloadUrl,
+                        fileName = "${request.packageName}-$versionName-uptodown.$fileKind"
+                            .sanitizeFileName(),
+                        expectedSha256 = expectedSha256
+                    )
                 )
             )
         )

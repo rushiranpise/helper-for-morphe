@@ -89,6 +89,7 @@ import dev.rushi.apkdownloadhelper.sources.MorpheResolver
 import dev.rushi.apkdownloadhelper.sources.OkHttpSourceTextFetcher
 import dev.rushi.apkdownloadhelper.sources.SourceAppNotFoundException
 import dev.rushi.apkdownloadhelper.sources.SourceParserContext
+import dev.rushi.apkdownloadhelper.sources.UptodownMobileApi
 import dev.rushi.apkdownloadhelper.sources.UptodownParser
 import dev.rushi.apkdownloadhelper.sources.archMatchRank
 import dev.rushi.apkdownloadhelper.storage.AppLog
@@ -192,6 +193,7 @@ import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -296,6 +298,16 @@ class MainActivity : ComponentActivity() {
         .addInterceptor(httpLoggingInterceptor("APKPure"))
         .build()
 
+    /** Uptodown's app API bypasses its Turnstile page; the parser keeps HTML as fallback. */
+    private val uptodownApi = UptodownMobileApi(
+        OkHttpClient.Builder()
+            .dns(AdGuardDns)
+            .cookieJar(SessionCookies)
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .build()
+    )
+
     private val aptoideApi = Retrofit.Builder()
         .client(client)
         .baseUrl("https://ws75.aptoide.com/api/7/")
@@ -321,6 +333,7 @@ class MainActivity : ComponentActivity() {
             ),
             apkPureApi = apkPureApi,
             aptoideApi = aptoideApi,
+            uptodownApi = uptodownApi,
             apkMirrorApi = apkMirrorApi,
             playHttpClient = playHttpClient,
             appContext = this,
