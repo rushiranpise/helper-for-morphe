@@ -6,6 +6,45 @@ matches the tag (see `tools/release-notes.sh`), so a new version needs a section
 before it is tagged. Commit subjects are only used as a fallback when a section is
 missing.
 
+## 6.0.0 - 2026-11-18
+
+A big update for finding apps, resolving sources, and downloading.
+
+### New
+
+- **Find New Apps has a new dashboard and app details.** The archive now shows
+  app and patch totals at a glance, and each app opens a redesigned detail screen
+  with a compact version selector and source cards.
+- **The app list matches the Manager.** Installed apps show their launcher icons,
+  missing icons fall back to the glass placeholder, and narrow screens stay
+  readable.
+- **Uptodown uses its mobile API first.** App and version lookups avoid the HTML
+  path whenever the API has the answer.
+- **APKPure exact versions resolve directly.** The helper no longer walks every
+  HTML release page for a specific build.
+- **Source probes run earlier.** Enabled sources are prefetched and definitive
+  misses are cached, so repeat scans skip sources that already said no.
+- **APKMirror is faster under load.** The helper waits less between requests and
+  retries a 429 once.
+
+### Fixed
+
+- APKCube no-match and prelander pages no longer count as successful hits.
+- Morphe Link does not open captcha-gated pages for direct file links.
+- APKMirror web-search fallbacks are rejected instead of being offered as exact
+  builds.
+- Downloads no longer save as `download.php`, and standalone APKs served as
+  bundles get the correct extension.
+- Find New Apps only shows Back when it can actually navigate.
+- Download controls keep their layout while scanning, paused, or showing transfer
+  stats.
+
+### Changed
+
+- APKPure and APKCube are tried before Uptodown.
+- Updates moved to About, save location is labelled Downloads, and the launcher
+  icon hiding option is gone.
+
 ## 5.4.0 - 2026-11-16
 
 Defaults that need less setup, and a clearer Settings screen.
