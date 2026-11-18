@@ -86,7 +86,6 @@ internal fun AppearanceTabContent(
     onSettingsChange: (HelperSettings) -> Unit
 ) {
     var showAccentPicker by rememberSaveable { mutableStateOf(false) }
-    var confirmHideIcon by remember { mutableStateOf(false) }
     val supportsDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val styles = ThemeStyle.entries.filter { it != ThemeStyle.MATERIAL_YOU || supportsDynamicColor }
     val accent = settings.customAccentColor.toAccentColorOrNull()
@@ -183,37 +182,6 @@ internal fun AppearanceTabContent(
             }
         }
 
-        // APP ICON SECTION
-        SettingsSection(title = "App Icon", icon = Icons.Outlined.Smartphone) {
-            SettingsGroup {
-                SettingsSwitchItem(
-                    icon = Icons.Outlined.Smartphone,
-                    title = "Show app icon",
-                    subtitle = "Keep the app visible in your launcher.",
-                    checked = settings.showLauncherIcon,
-                    onToggle = {
-                        if (settings.showLauncherIcon) confirmHideIcon = true
-                        else onSettingsChange(settings.copy(showLauncherIcon = true))
-                    }
-                )
-            }
-        }
-    }
-
-    if (confirmHideIcon) {
-        MorpheDialog(
-            title = "Hide app icon?",
-            onDismiss = { confirmHideIcon = false },
-            actions = {
-                HelperOutlinedButton("Cancel", { confirmHideIcon = false }, Modifier.weight(1f))
-                HelperButton("Hide icon", {
-                    confirmHideIcon = false
-                    onSettingsChange(settings.copy(showLauncherIcon = false))
-                }, Modifier.weight(1f))
-            }
-        ) {
-            Text("The app will disappear from your launcher. You can still open it from Android Settings or when Morphe starts a download.")
-        }
     }
 
     if (showAccentPicker) {

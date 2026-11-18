@@ -105,7 +105,6 @@ import dev.rushi.apkdownloadhelper.storage.ThemeStyle
 import dev.rushi.apkdownloadhelper.storage.UpdateMode
 import dev.rushi.apkdownloadhelper.storage.cacheHandoff
 import dev.rushi.apkdownloadhelper.storage.cleanupDownloads
-import dev.rushi.apkdownloadhelper.storage.ensureLauncherIconState
 import dev.rushi.apkdownloadhelper.storage.loadHelperSettings
 import dev.rushi.apkdownloadhelper.storage.logcatLoggingEnabled
 import dev.rushi.apkdownloadhelper.storage.orderedSources
@@ -114,7 +113,6 @@ import dev.rushi.apkdownloadhelper.storage.recordHandOff
 import dev.rushi.apkdownloadhelper.storage.restoreAndPersistRateLimiter
 import dev.rushi.apkdownloadhelper.storage.saveHelperSettings
 import dev.rushi.apkdownloadhelper.storage.scheduleHandoffCleanup
-import dev.rushi.apkdownloadhelper.storage.setLauncherIconVisible
 import dev.rushi.apkdownloadhelper.storage.temporaryDownloadsDir
 import dev.rushi.apkdownloadhelper.ui.AboutTabContent
 import dev.rushi.apkdownloadhelper.ui.AdvancedTabContent
@@ -453,7 +451,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         restoreAndPersistRateLimiter()
         helperSettings = loadHelperSettings()
-        ensureLauncherIconState()
         request = HelperRequest.from(intent)?.withDeviceDpi(
             resources.displayMetrics.densityDpi,
             helperSettings.preferDensitySpecificVariants
@@ -768,7 +765,7 @@ class MainActivity : ComponentActivity() {
             installedPackageRefreshToken++
             return
         }
-        // singleTask routes a launcher-icon tap (bare MAIN intent) to this
+        // singleTask routes a launcher tap (bare MAIN intent) to this
         // existing instance instead of creating a second task. Ignore it and
         // keep the in-flight request on screen: only a fresh Morphe request
         // replaces the current session.
@@ -1319,14 +1316,10 @@ class MainActivity : ComponentActivity() {
         val sourcesChanged = helperSettings.disabledSources != settings.disabledSources ||
             helperSettings.sourceOrder != settings.sourceOrder ||
             helperSettings.preferredSource != settings.preferredSource
-        val launcherChanged = helperSettings.showLauncherIcon != settings.showLauncherIcon
         val densityPreferenceChanged =
             helperSettings.preferDensitySpecificVariants != settings.preferDensitySpecificVariants
         helperSettings = settings
         saveHelperSettings(settings)
-        if (launcherChanged) {
-            setLauncherIconVisible(settings.showLauncherIcon)
-        }
         if (densityPreferenceChanged) {
             request = request?.copy(
                 preferDensitySpecificVariants = settings.preferDensitySpecificVariants

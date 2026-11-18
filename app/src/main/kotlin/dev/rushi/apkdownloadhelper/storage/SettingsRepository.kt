@@ -1,8 +1,6 @@
 ﻿package dev.rushi.apkdownloadhelper.storage
 
-import android.content.ComponentName
 import android.content.Context
-import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
@@ -104,7 +102,6 @@ internal data class HelperSettings(
     val downloadCustomTreeUri: String = "",
     /** APKMirror only: pick a density-specific row instead of nodpi. */
     val preferDensitySpecificVariants: Boolean = false,
-    val showLauncherIcon: Boolean = true,
     val networkPolicy: NetworkPolicy = NetworkPolicy.WIFI_AND_MOBILE,
     /** Maximum workers for a segmented download. File size can lower this. */
     val downloadConnections: DownloadConnectionCount = DownloadConnectionCount.FOUR,
@@ -378,7 +375,6 @@ internal fun Context.loadHelperSettings(): HelperSettings {
         ),
         downloadCustomTreeUri = prefs.getString("download_custom_tree_uri", "") ?: "",
         preferDensitySpecificVariants = prefs.getBoolean("prefer_density_specific_variants", false),
-        showLauncherIcon = prefs.getBoolean("show_launcher_icon", true),
         networkPolicy = enumValueOrDefault(
             prefs.getString("network_policy", null),
             NetworkPolicy.WIFI_AND_MOBILE
@@ -485,7 +481,7 @@ internal fun Context.saveHelperSettings(settings: HelperSettings) {
         .putString("download_retention", settings.downloadRetention.name)
         .putString("download_custom_tree_uri", settings.downloadCustomTreeUri)
         .putBoolean("prefer_density_specific_variants", settings.preferDensitySpecificVariants)
-        .putBoolean("show_launcher_icon", settings.showLauncherIcon)
+        .remove("show_launcher_icon")
         .remove("delete_temporary_after_handoff")
         .putString("network_policy", settings.networkPolicy.name)
         .putString("download_connections", settings.downloadConnections.name)
@@ -524,33 +520,6 @@ internal val HelperSettings.orderedSources: List<DownloadSource>
         val saved = sourceOrder.filter { it in DownloadSource.entries }.distinct()
         return saved + DownloadSource.entries.filterNot { it in saved }
     }
-
-/** Re-applies the saved launcher icon choice without requiring a settings reload. */
-internal fun Context.ensureLauncherIconState() {
-    val shown = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        .getBoolean("show_launcher_icon", true)
-    setLauncherIconVisible(shown)
-}
-
-/**
- * The launcher entry is an activity alias. MainActivity keeps a MAIN/INFO filter
- * so Android Settings can still open the app while the icon is hidden.
- */
-internal fun Context.setLauncherIconVisible(shown: Boolean) {
-    val alias = ComponentName(packageName, "$packageName.Launcher")
-    val state = if (shown) {
-        PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-    } else {
-        PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-    }
-    runCatching {
-        packageManager.setComponentEnabledSetting(
-            alias,
-            state,
-            PackageManager.DONT_KILL_APP
-        )
-    }
-}
 
 /**
  * The stored colour style, or one derived from the retired `dynamic_colors`

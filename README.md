@@ -139,7 +139,6 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
 - **Sources**: enable, disable, reorder or set a **default source**.
 - **Fast Mode**: enable auto-resolve and choose the version policy (Requested / Latest / Always ask).
 - **Updates**: stable or beta channel, notify or automatic install through Shizuku.
-- **Launcher icon**: hide it while keeping the helper available to Morphe.
 - **Downloads and storage**: choose the folder, retention, and APKMirror density preference.
 - **Security**: VirusTotal scanning with API key and scan mode.
 - **AdGuard DNS**: on by default; can be turned off.
