@@ -69,8 +69,8 @@ internal data class ArchivePatch(
 
 internal data class ArchiveCompatiblePackage(
     @SerializedName("packageName") val packageName: String = "",
-    @SerializedName("versions") val versions: List<String> = emptyList(),
-    @SerializedName("targets") val targets: List<ArchivePatchTarget> = emptyList()
+    @SerializedName("versions") val versions: List<String>? = null,
+    @SerializedName("targets") val targets: List<ArchivePatchTarget>? = null
 )
 
 internal data class ArchivePatchTarget(
@@ -283,47 +283,73 @@ internal object MorpheArchive {
         source: ArchiveSource,
         packageName: String
     ): Map<String, List<String>> = withContext(Dispatchers.IO) {
-        val url = source.listUrl?.takeIf { it.isNotBlank() }
-            ?: source.repo.takeIf { it.contains('/') }?.let {
-                val branchHost = if (source.host?.lowercase() == "gitlab.com") {
-                    "https://gitlab.com/$it/-/raw/main/patches-list.json"
+        val candidateUrls = buildList {
+            source.listUrl?.takeIf { it.isNotBlank() }?.let(::add)
+            if (source.repo.contains('/')) {
+                if (source.host?.lowercase() == "gitlab.com") {
+                    add("https://gitlab.com/${source.repo}/-/raw/main/patches-list.json")
+                    add("https://gitlab.com/${source.repo}/-/raw/master/patches-list.json")
                 } else {
-                    "https://raw.githubusercontent.com/$it/main/patches-list.json"
+                    add("https://raw.githubusercontent.com/${source.repo}/main/patches-list.json")
+                    add("https://raw.githubusercontent.com/${source.repo}/master/patches-list.json")
                 }
-                branchHost
             }
-            ?: return@withContext emptyMap()
+        }.distinct()
 
-        val listPatches = patchListCache[url] ?: runCatching {
-            val req = Request.Builder()
-                .url(url)
-                .header("Accept", "application/json")
-                .build()
-            http.newCall(req).execute().use { res ->
-                if (!res.isSuccessful) return@use emptyList()
-                val json = res.body?.string().orEmpty()
-                val type = com.google.gson.reflect.TypeToken.getParameterized(
-                    List::class.java,
-                    ArchivePatch::class.java
-                ).type
-                gson.fromJson<List<ArchivePatch>>(json, type).orEmpty()
+        if (candidateUrls.isEmpty()) return@withContext emptyMap()
+
+        var listPatches: List<ArchivePatch> = emptyList()
+        for (url in candidateUrls) {
+            val cached = patchListCache[url]
+            if (cached != null) {
+                listPatches = cached
+                break
             }
-        }.getOrDefault(emptyList()).also {
-            if (it.isNotEmpty()) patchListCache[url] = it
+            val fetched = runCatching {
+                val req = Request.Builder()
+                    .url(url)
+                    .header("Accept", "application/json")
+                    .build()
+                http.newCall(req).execute().use { res ->
+                    if (!res.isSuccessful) return@use emptyList()
+                    val json = res.body?.string()?.trim().orEmpty()
+                    if (json.isEmpty()) return@use emptyList()
+                    val listType = object : com.google.gson.reflect.TypeToken<List<ArchivePatch>>() {}.type
+                    if (json.startsWith("[")) {
+                        gson.fromJson<List<ArchivePatch>>(json, listType).orEmpty()
+                    } else {
+                        val rootObj = com.google.gson.JsonParser.parseString(json).asJsonObject
+                        val arr = rootObj.getAsJsonArray("patches")
+                            ?: rootObj.getAsJsonArray("items")
+                            ?: rootObj.getAsJsonArray("data")
+                        if (arr != null) {
+                            gson.fromJson<List<ArchivePatch>>(arr, listType).orEmpty()
+                        } else {
+                            emptyList()
+                        }
+                    }
+                }
+            }.getOrDefault(emptyList())
+
+            if (fetched.isNotEmpty()) {
+                patchListCache[url] = fetched
+                listPatches = fetched
+                break
+            }
         }
 
         listPatches.associate { patch ->
             val matchingPackages = patch.compatiblePackages.orEmpty().filter {
-                it.packageName.equals(packageName, ignoreCase = true)
+                it.packageName.isBlank() || it.packageName.equals(packageName, ignoreCase = true)
             }
             val targetVersions = matchingPackages.flatMap { it.targets.orEmpty() }
                 .mapNotNull { it.version?.trim()?.takeIf { v -> v.isNotEmpty() && v != "null" } }
             val compatVersions = matchingPackages.flatMap { it.versions.orEmpty() }
-                .mapNotNull { it.trim().takeIf { v -> v.isNotEmpty() && v != "null" } }
+                .filter { it.isNotBlank() && it != "null" }
             val directVersions = patch.rawVersions.orEmpty()
                 .mapNotNull { it.trim().takeIf { v -> v.isNotEmpty() && v != "null" } }
 
-            patch.name to (directVersions + targetVersions + compatVersions).distinct()
+            patch.name.trim() to (directVersions + targetVersions + compatVersions).distinct()
         }
     }
 
@@ -344,15 +370,15 @@ internal object MorpheArchive {
             val parsed = gson.fromJson(body, MorpheArchiveData::class.java)
             val listUrlByRepo = parsed.repos
                 .filter { it.repo.isNotBlank() && !it.listUrl.isNullOrBlank() }
-                .associate { it.repo to it.listUrl }
+                .associate { it.repo.lowercase(Locale.US) to it.listUrl }
             val hydratedApps = parsed.apps.map { app ->
                 fun ArchivePatch.extractVersions(): List<String> {
                     val matchingPackages = compatiblePackages.filter {
                         it.packageName.isBlank() || it.packageName.equals(app.packageName, ignoreCase = true)
                     }
-                    val targetVersions = matchingPackages.flatMap { it.targets }
+                    val targetVersions = matchingPackages.flatMap { it.targets.orEmpty() }
                         .mapNotNull { it.version?.takeIf { v -> v.isNotBlank() && v != "null" } }
-                    val compatVersions = matchingPackages.flatMap { it.versions }
+                    val compatVersions = matchingPackages.flatMap { it.versions.orEmpty() }
                         .filter { it.isNotBlank() && it != "null" }
                     return (rawVersions + targetVersions + compatVersions).distinct()
                 }
@@ -369,7 +395,8 @@ internal object MorpheArchive {
                     patchDetails = app.patchDetails.map { it.withResolvedVersions() },
                     sources = app.sources.map { source ->
                         source.copy(
-                            listUrl = source.listUrl?.takeIf { it.isNotBlank() } ?: listUrlByRepo[source.repo],
+                            listUrl = source.listUrl?.takeIf { it.isNotBlank() }
+                                ?: listUrlByRepo[source.repo.lowercase(Locale.US)],
                             patches = source.patches.map { it.withResolvedVersions() }
                         )
                     }

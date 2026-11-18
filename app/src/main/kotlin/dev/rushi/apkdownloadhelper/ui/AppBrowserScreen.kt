@@ -156,6 +156,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 
 
 internal enum class AppListTab(
@@ -1442,35 +1444,163 @@ internal fun openAddSource(context: Context, addUrl: String) {
     runCatching { context.startActivity(intent) }
 }
 
+/**
+ * Displays version pills in a single horizontally scrollable row by default.
+ * Automatically detects when the pills overflow past the screen edge and shows
+ * a right-aligned down-arrow button to expand/collapse all pills into a wrapped FlowRow.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AppVersionStrip(versions: List<String>) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        versions.forEach { version ->
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f),
-                        shape = RoundedCornerShape(10.dp)
-                    )
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+private fun ExpandableVersionRow(
+    versions: List<String>,
+    chipShape: RoundedCornerShape,
+    chipHorizontalPadding: Dp,
+    chipVerticalPadding: Dp,
+    chipSpacing: Dp,
+    containerColorFor: @Composable (String) -> Color,
+    contentColorFor: @Composable (String) -> Color,
+    borderColorFor: ((String) -> Color)? = null,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember(versions) { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
+    val hasOverflow by remember {
+        derivedStateOf { scrollState.maxValue > 0 }
+    }
+    val showToggle = expanded || hasOverflow
+
+    if (expanded) {
+        Row(
+            modifier = modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            FlowRow(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(chipSpacing),
+                verticalArrangement = Arrangement.spacedBy(chipSpacing)
             ) {
-                Text(
-                    text = version,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1
+                versions.forEach { ver ->
+                    VersionPillChip(
+                        text = ver,
+                        shape = chipShape,
+                        horizontalPadding = chipHorizontalPadding,
+                        verticalPadding = chipVerticalPadding,
+                        containerColor = containerColorFor(ver),
+                        contentColor = contentColorFor(ver),
+                        borderColor = borderColorFor?.invoke(ver)
+                    )
+                }
+            }
+            VersionExpandToggleButton(
+                expanded = true,
+                onClick = { expanded = false }
+            )
+        }
+    } else {
+        Row(
+            modifier = modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(scrollState),
+                horizontalArrangement = Arrangement.spacedBy(chipSpacing),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                versions.forEach { ver ->
+                    VersionPillChip(
+                        text = ver,
+                        shape = chipShape,
+                        horizontalPadding = chipHorizontalPadding,
+                        verticalPadding = chipVerticalPadding,
+                        containerColor = containerColorFor(ver),
+                        contentColor = contentColorFor(ver),
+                        borderColor = borderColorFor?.invoke(ver)
+                    )
+                }
+            }
+            if (showToggle) {
+                VersionExpandToggleButton(
+                    expanded = false,
+                    onClick = { expanded = true }
                 )
             }
         }
     }
+}
+
+@Composable
+private fun VersionPillChip(
+    text: String,
+    shape: RoundedCornerShape,
+    horizontalPadding: Dp,
+    verticalPadding: Dp,
+    containerColor: Color,
+    contentColor: Color,
+    borderColor: Color? = null
+) {
+    Box(
+        modifier = Modifier
+            .clip(shape)
+            .background(containerColor)
+            .then(
+                if (borderColor != null) {
+                    Modifier.border(width = 1.dp, color = borderColor, shape = shape)
+                } else {
+                    Modifier
+                }
+            )
+            .padding(horizontal = horizontalPadding, vertical = verticalPadding)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
+            color = contentColor,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun VersionExpandToggleButton(
+    expanded: Boolean,
+    onClick: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .size(26.dp)
+            .clip(CircleShape)
+            .background(scheme.surfaceVariant.copy(alpha = 0.65f))
+            .clickable(role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+            contentDescription = if (expanded) "Collapse versions" else "Show all versions",
+            tint = scheme.onSurfaceVariant,
+            modifier = Modifier.size(16.dp)
+        )
+    }
+}
+
+@Composable
+private fun AppVersionStrip(versions: List<String>) {
+    val scheme = MaterialTheme.colorScheme
+    ExpandableVersionRow(
+        versions = versions,
+        chipShape = RoundedCornerShape(10.dp),
+        chipHorizontalPadding = 12.dp,
+        chipVerticalPadding = 8.dp,
+        chipSpacing = 8.dp,
+        containerColorFor = { scheme.surfaceVariant.copy(alpha = 0.45f) },
+        contentColorFor = { scheme.onSurface },
+        borderColorFor = { scheme.outline.copy(alpha = 0.22f) }
+    )
 }
 
 @Composable
@@ -1665,7 +1795,7 @@ internal fun AppDetailView(
                     )
             )
 
-            // 3. Telegram-style floating 3-pill header
+            // 3. Telegram-style floating 3-pill header (all 40.dp height matching Find Apps header)
             Row(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -1676,16 +1806,16 @@ internal fun AppDetailView(
                     .statusBarsPadding()
                     .padding(
                         horizontal = MorpheDefaults.ContentPadding,
-                        vertical = 10.dp
+                        vertical = 12.dp
                     ),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Circular Blurred Back button (no border)
+                // Circular Blurred Back button (40.dp)
                 if (onBack != null) {
                     Box(
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(40.dp)
                             .clip(CircleShape)
                             .glassFill(
                                 glass = MorpheColors.glassContainerColor(),
@@ -1699,19 +1829,19 @@ internal fun AppDetailView(
                             imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                             contentDescription = stringResource(R.string.back),
                             tint = scheme.onSurface,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
 
-                // Center Blurred + Gradient App Pill
+                // Center Blurred + Gradient App Pill (40.dp height, full-bleed 40.dp logo)
                 val titleColor = if (monochrome) scheme.onSurface else appPalette.title
                 val subtitleColor = if (monochrome) scheme.onSurfaceVariant else appPalette.subtitle
 
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(44.dp)
+                        .height(40.dp)
                         .clip(CircleShape)
                         .glassFill(
                             glass = MorpheColors.glassContainerColor(),
@@ -1737,13 +1867,14 @@ internal fun AppDetailView(
                                 drawRoundRect(brush = fill, cornerRadius = corner)
                             }
                         }
-                        .padding(end = 16.dp),
+                        .padding(end = 14.dp),
                     contentAlignment = Alignment.CenterStart
                 ) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // Exact 40.dp x 40.dp logo matching the 40.dp pill height (zero top/bottom gap)
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
@@ -1753,13 +1884,13 @@ internal fun AppDetailView(
                                 app = app,
                                 gradient = appPalette.gradient,
                                 installed = installed,
-                                size = 41.dp,
-                                cornerRadius = 21.dp
+                                size = 40.dp,
+                                cornerRadius = 20.dp
                             )
                         }
                         Column(
                             modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(1.dp)
+                            verticalArrangement = Arrangement.Center
                         ) {
                             Text(
                                 text = app.name,
@@ -1780,10 +1911,10 @@ internal fun AppDetailView(
                     }
                 }
 
-                // Circular Blurred Play Store button (no border)
+                // Circular Blurred Play Store button (40.dp)
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .glassFill(
                             glass = MorpheColors.glassContainerColor(),
@@ -1802,7 +1933,7 @@ internal fun AppDetailView(
                         painter = painterResource(R.drawable.ic_src_play),
                         contentDescription = stringResource(R.string.open_in_play_store),
                         tint = Color.Unspecified,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
@@ -2059,7 +2190,7 @@ private fun SourcePatchesScreen(
     onBack: () -> Unit
 ) {
     var liveVersions by remember(source.repo, packageName) {
-        mutableStateOf<Map<String, List<String>>>(emptyMap())
+        mutableStateOf<Map<String, List<String>>?>(null)
     }
     LaunchedEffect(source.repo, packageName) {
         liveVersions = MorpheArchive.fetchPatchVersions(source, packageName)
@@ -2201,50 +2332,44 @@ private fun SourcePatchesScreen(
                                 )
                             }
 
-                            val resolvedVersions = liveVersions[patch.name]
+                            val resolvedVersions = liveVersions?.get(patch.name.trim())
                                 ?.takeIf { it.isNotEmpty() }
-                                ?: patch.versions
+                                ?: patch.versions.takeIf { it.isNotEmpty() }
 
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                val versionsToShow = resolvedVersions.ifEmpty { listOf("Any version") }
-                                versionsToShow.forEach { ver ->
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(CircleShape)
-                                            .background(
-                                                if (ver == "Any version")
-                                                    colors.surfaceVariant.copy(alpha = 0.45f)
-                                                else
-                                                    colors.primaryContainer.copy(alpha = 0.55f)
-                                            )
-                                            .padding(horizontal = 10.dp, vertical = 4.dp)
-                                    ) {
-                                        Text(
-                                            text = ver,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Medium,
-                                            color = if (ver == "Any version")
-                                                colors.onSurfaceVariant
-                                            else
-                                                colors.onPrimaryContainer,
-                                            maxLines = 1
-                                        )
+                            val versionsToShow = when {
+                                liveVersions == null && resolvedVersions.isNullOrEmpty() -> listOf("Loading…")
+                                resolvedVersions.isNullOrEmpty() -> listOf("Any version")
+                                else -> resolvedVersions.orEmpty()
+                            }
+
+                            ExpandableVersionRow(
+                                versions = versionsToShow,
+                                chipShape = CircleShape,
+                                chipHorizontalPadding = 10.dp,
+                                chipVerticalPadding = 4.dp,
+                                chipSpacing = 6.dp,
+                                containerColorFor = { ver ->
+                                    if (ver == "Any version") {
+                                        colors.surfaceVariant.copy(alpha = 0.45f)
+                                    } else {
+                                        colors.primaryContainer.copy(alpha = 0.55f)
+                                    }
+                                },
+                                contentColorFor = { ver ->
+                                    if (ver == "Any version") {
+                                        colors.onSurfaceVariant
+                                    } else {
+                                        colors.onPrimaryContainer
                                     }
                                 }
-                            }
+                            )
                         }
                     }
                 }
             }
         }
 
-        // Top Header: Source Name as title & Patch Count as subtitle
+        // Top Header: Source Name as title & Patch Count as subtitle (40.dp controls matching Find Apps)
         Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -2271,30 +2396,48 @@ private fun SourcePatchesScreen(
         ) {
             AnimatedContent(
                 targetState = searchExpanded,
-                transitionSpec = { fadeIn() togetherWith fadeOut() },
-                label = "patches_search_transition"
+                transitionSpec = {
+                    val exitDuration = 100
+                    val enterDuration = 200
+                    (fadeIn(tween(enterDuration, delayMillis = exitDuration, easing = LinearOutSlowInEasing)) +
+                            expandHorizontally(tween(enterDuration, delayMillis = exitDuration, easing = LinearOutSlowInEasing)))
+                        .togetherWith(
+                            fadeOut(tween(exitDuration, easing = FastOutLinearInEasing)) +
+                                    shrinkHorizontally(tween(exitDuration, easing = FastOutLinearInEasing))
+                        )
+                },
+                label = "patches_search_transition",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(40.dp)
             ) { isSearchActive ->
                 if (isSearchActive) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        val isDark = colors.background.luminance() < 0.05f
+                        val fieldContainer by animateColorAsState(
+                            targetValue = colors.surfaceVariant.copy(
+                                alpha = if (isDark) 0.35f else 0.6f
+                            ),
+                            animationSpec = tween(200),
+                            label = "patch_search_field_container"
+                        )
                         Surface(
                             modifier = Modifier
                                 .weight(1f)
-                                .height(48.dp),
+                                .height(40.dp),
                             shape = CircleShape,
-                            color = colors.surfaceVariant.copy(alpha = 0.65f)
+                            color = fieldContainer
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(horizontal = 16.dp),
+                                    .padding(horizontal = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Outlined.Search,
@@ -2342,62 +2485,41 @@ private fun SourcePatchesScreen(
                             }
                         }
 
-                        Surface(
+                        GlassHeaderButton(
+                            icon = Icons.Outlined.SearchOff,
+                            contentDescription = "Close search",
+                            active = true,
                             onClick = {
                                 patchQuery = ""
                                 searchExpanded = false
                                 focusManager.clearFocus(force = true)
                                 keyboardController?.hide()
-                            },
-                            modifier = Modifier.size(48.dp),
-                            shape = CircleShape,
-                            color = colors.primaryContainer,
-                            contentColor = colors.onPrimaryContainer
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Outlined.SearchOff,
-                                    contentDescription = "Close search",
-                                    modifier = Modifier.size(22.dp)
-                                )
                             }
-                        }
+                        )
                     }
                 } else {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 52.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Surface(
+                        GlassHeaderButton(
+                            icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                            contentDescription = stringResource(R.string.back),
                             onClick = {
                                 focusManager.clearFocus(force = true)
                                 keyboardController?.hide()
                                 onBack()
-                            },
-                            modifier = Modifier.size(48.dp),
-                            shape = CircleShape,
-                            color = colors.surfaceVariant.copy(alpha = 0.65f),
-                            contentColor = colors.onSurfaceVariant
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                                    contentDescription = stringResource(R.string.back),
-                                    modifier = Modifier.size(22.dp)
-                                )
                             }
-                        }
+                        )
 
                         Column(
                             modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                            verticalArrangement = Arrangement.Center
                         ) {
                             Text(
                                 text = source.repo,
-                                style = MaterialTheme.typography.headlineSmall,
+                                style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = colors.onBackground,
                                 maxLines = 1,
@@ -2406,28 +2528,18 @@ private fun SourcePatchesScreen(
                             Text(
                                 text = "${source.patches.size} " +
                                         if (source.patches.size == 1) "patch" else "patches",
-                                style = MaterialTheme.typography.bodySmall,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = colors.onSurfaceVariant,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
 
-                        Surface(
-                            onClick = { searchExpanded = true },
-                            modifier = Modifier.size(48.dp),
-                            shape = CircleShape,
-                            color = colors.surfaceVariant.copy(alpha = 0.65f),
-                            contentColor = colors.onSurfaceVariant
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Search,
-                                    contentDescription = "Search patches",
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                        }
+                        GlassHeaderButton(
+                            icon = Icons.Outlined.Search,
+                            contentDescription = "Search patches",
+                            onClick = { searchExpanded = true }
+                        )
                     }
                 }
             }
