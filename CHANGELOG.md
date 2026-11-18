@@ -6,6 +6,21 @@ matches the tag (see `tools/release-notes.sh`), so a new version needs a section
 before it is tagged. Commit subjects are only used as a fallback when a section is
 missing.
 
+## 6.0.1 - 2026-11-18
+
+A smoother and clearer Find New Apps screen.
+
+### Fixed
+
+- Scrolling no longer hitches when the archive dashboard and warning scroll
+  away, and the scrollbar no longer rescans the whole catalogue.
+- App cards now line up with the header, with the scrollbar placed in the right
+  margin.
+
+### Changed
+
+- Find New Apps now calls its sources bundles.
+
 ## 6.0.0 - 2026-11-18
 
 A major update for finding apps and resolving downloads.

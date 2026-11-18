@@ -125,8 +125,9 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
 ### Find New Apps
 
 - A **live community patch index** (fetched fresh from the morphe-archive JSON on every open) with an archive dashboard showing app and patch totals.
-- Searchable app list with real installed-app icons (Android default when not installed), per-app **source count**, install-state filters (All / Installed / Not installed), **favourites** that survive refreshes, and sort options (A-Z, Z-A, recently added, recently updated, most sources).
-- Each app opens a redesigned detail screen with a compact version picker, patches grouped **per source** in collapsible lists, "Add to Morphe" actions that deep-link into the manager, and an Open in Play Store shortcut.
+- Searchable app list with real installed-app icons (Android default when not installed), per-app **bundle count**, install-state filters (All / Installed / Not installed), **favourites** that survive refreshes, and sort options (A-Z, Z-A, recently added, recently updated, most bundles).
+- Each app opens a redesigned detail screen with a compact version picker, patches grouped **per bundle** in collapsible lists, "Add to Morphe" actions that deep-link into the manager, and an Open in Play Store shortcut.
+- The dashboard and warning scroll with the list, and the scrollbar sits in the right margin so the cards stay centred.
 - Includes the community disclaimer: the index is community-maintained, bundles are not individually verified, and neither Morphe nor this app's developer is responsible for third-party patches.
 
 ### Appearance, DNS & logs
