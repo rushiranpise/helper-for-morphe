@@ -75,7 +75,6 @@ import androidx.compose.material3.ripple
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -348,13 +347,6 @@ internal fun AppBrowserScreen(
     // opening an app's details and coming back — remember inside the list
     // branch would be discarded when the detail view replaces the list.
     val listState = rememberLazyListState()
-    // Read as a boolean rather than the raw scroll offset, so scrolling recomposes
-    // the chrome once per crossing instead of once per scrolled pixel.
-    val listAtTop by remember(listState) {
-        derivedStateOf {
-            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
-        }
-    }
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         favourites = MorpheFavourites.load(context)
@@ -576,78 +568,71 @@ internal fun AppBrowserScreen(
                                 }
                             }
                     }
-                    // The disclaimer and list options are the tallest elements on this
-                    // screen, so they step aside once the list is scrolled and come back
-                    // at the top, which the "Go to top" button reaches in one tap. An
-                    // open options panel stays put, and an empty result keeps the chrome
-                    // regardless: with nothing left to scroll there would be no way back.
-                    val chromeVisible = filtered.isEmpty() || listAtTop || optionsOpen
+                    // The archive totals and warning scroll with the list instead of
+                    // collapsing on the first drag, so the list viewport stays put.
                     AnimatedVisibility(
-                        visible = chromeVisible,
+                        visible = optionsOpen,
                         enter = MorpheAnimations.expandFadeEnter,
                         exit = MorpheAnimations.shrinkFadeExit
                     ) {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
-                        ) {
-                            if (index != null) {
-                                FindAppsStatsDashboard(index)
-                            }
-                            AppDisclaimerBanner()
-                            AnimatedVisibility(
-                                visible = optionsOpen,
-                                enter = MorpheAnimations.expandFadeEnter,
-                                exit = MorpheAnimations.shrinkFadeExit
-                            ) {
-                                FindAppsOptionsPanel(
-                                    tab = tab,
-                                    sort = sort,
-                                    onTabSelect = { tab = it },
-                                    onSortSelect = { sort = it },
-                                    onReset = {
-                                        tab = AppListTab.All
-                                        sort = AppSort.AZ
-                                    },
-                                    onRefresh = { loadKey++ },
-                                    onClose = { optionsOpen = false }
-                                )
-                            }
-                        }
-                    }
-                    if (filtered.isEmpty()) {
-                        MorpheEmptyState(
-                            message = when (tab) {
-                                AppListTab.Favourites ->
-                                    "No liked apps yet. Tap the heart on any app to pin it here."
-                                AppListTab.Installed -> "No patched apps in the index are installed."
-                                AppListTab.NotInstalled ->
-                                    "Every app in the index is installed on this device."
-                                AppListTab.All -> "No apps match \"$query\"."
+                        FindAppsOptionsPanel(
+                            tab = tab,
+                            sort = sort,
+                            onTabSelect = { tab = it },
+                            onSortSelect = { sort = it },
+                            onReset = {
+                                tab = AppListTab.All
+                                sort = AppSort.AZ
                             },
-                            icon = when (tab) {
-                                AppListTab.Favourites -> Icons.Outlined.FavoriteBorder
-                                AppListTab.Installed -> Icons.Outlined.CheckCircle
-                                AppListTab.NotInstalled -> Icons.Outlined.Block
-                                AppListTab.All -> Icons.Outlined.Search
-                            }
+                            onRefresh = { loadKey++ },
+                            onClose = { optionsOpen = false }
                         )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                        ) {
-                            Row(modifier = Modifier.fillMaxSize()) {
-                                LazyColumn(
-                                    state = listState,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight(),
-                                    // Keep the last row clear of the floating
-                                    // "Go to top" button.
-                                    contentPadding = PaddingValues(bottom = 64.dp),
-                                    verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
-                                ) {
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
+                        Row(modifier = Modifier.fillMaxSize()) {
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight(),
+                                // Keep the last row clear of the floating
+                                // "Go to top" button.
+                                contentPadding = PaddingValues(bottom = 64.dp),
+                                verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
+                            ) {
+                                if (index != null) {
+                                    item(key = "find-apps-stats", contentType = "header") {
+                                        FindAppsStatsDashboard(index)
+                                    }
+                                }
+                                item(key = "find-apps-warning", contentType = "header") {
+                                    AppDisclaimerBanner()
+                                }
+                                if (filtered.isEmpty()) {
+                                    item(key = "find-apps-empty", contentType = "empty") {
+                                        MorpheEmptyState(
+                                            message = when (tab) {
+                                                AppListTab.Favourites ->
+                                                    "No liked apps yet. Tap the heart on any app to pin it here."
+                                                AppListTab.Installed ->
+                                                    "No patched apps in the index are installed."
+                                                AppListTab.NotInstalled ->
+                                                    "Every app in the index is installed on this device."
+                                                AppListTab.All -> "No apps match \"$query\"."
+                                            },
+                                            icon = when (tab) {
+                                                AppListTab.Favourites -> Icons.Outlined.FavoriteBorder
+                                                AppListTab.Installed -> Icons.Outlined.CheckCircle
+                                                AppListTab.NotInstalled -> Icons.Outlined.Block
+                                                AppListTab.All -> Icons.Outlined.Search
+                                            }
+                                        )
+                                    }
+                                } else {
                                     items(
                                         items = filtered,
                                         key = { it.packageName },
@@ -667,35 +652,35 @@ internal fun AppBrowserScreen(
                                         )
                                     }
                                 }
-                                LazyListScrollbar(
-                                    listState = listState,
-                                    modifier = Modifier.fillMaxHeight()
-                                )
                             }
-                            // Quick jump back to the top for long catalogs; only
-                            // shown once the user has scrolled down, and it pops in
-                            // with the manager's floating-button motion. A clickable
-                            // Surface is natively exposed to TalkBack via the
-                            // icon's contentDescription.
-                            MorpheFab(
-                                visible = listState.firstVisibleItemIndex > 0,
-                                modifier = Modifier
-                                    .align(Alignment.BottomEnd)
-                                    .padding(end = 32.dp, bottom = 20.dp)
+                            LazyListScrollbar(
+                                listState = listState,
+                                modifier = Modifier.fillMaxHeight()
+                            )
+                        }
+                        // Quick jump back to the top for long catalogs; only
+                        // shown once the user has scrolled down, and it pops in
+                        // with the manager's floating-button motion. A clickable
+                        // Surface is natively exposed to TalkBack via the
+                        // icon's contentDescription.
+                        MorpheFab(
+                            visible = listState.firstVisibleItemIndex > 0,
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(end = 32.dp, bottom = 20.dp)
+                        ) {
+                            Surface(
+                                onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                                shape = CircleShape,
+                                color = SemanticTone.Primary.container,
+                                contentColor = SemanticTone.Primary.content
                             ) {
-                                Surface(
-                                    onClick = { scope.launch { listState.animateScrollToItem(0) } },
-                                    shape = CircleShape,
-                                    color = SemanticTone.Primary.container,
-                                    contentColor = SemanticTone.Primary.content
-                                ) {
-                                    ThemedIcon(
-                                        icon = Icons.Outlined.KeyboardArrowUp,
-                                        contentDescription = stringResource(R.string.go_to_top),
-                                        tint = SemanticTone.Primary.content,
-                                        modifier = Modifier.padding(12.dp)
-                                    )
-                                }
+                                ThemedIcon(
+                                    icon = Icons.Outlined.KeyboardArrowUp,
+                                    contentDescription = stringResource(R.string.go_to_top),
+                                    tint = SemanticTone.Primary.content,
+                                    modifier = Modifier.padding(12.dp)
+                                )
                             }
                         }
                     }
