@@ -1662,6 +1662,12 @@ internal fun AppDetailView(
     // set can arrive from several repos. Collapsing them keeps a mirror from
     // reading as an independent choice.
     val sourceGroups = remember(app.sources) { groupArchiveSources(app.sources) }
+    val appPalette = remember(app.iconColor, app.packageName) { app.findAppCardColors() }
+    val sourceAccent = if (LocalMonochromeTheme.current) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        appPalette.gradient[1]
+    }
     val detailListState = rememberLazyListState()
     LazyColumn(
         state = detailListState,
@@ -1700,6 +1706,7 @@ internal fun AppDetailView(
             ) { group ->
                 AppSourceCard(
                     source = group.primary,
+                    accentColor = sourceAccent,
                     mirrors = group.mirrors,
                     onOpenUrl = openUrl,
                     onAddToMorphe = { openAddSource(context, it) }
@@ -1722,65 +1729,98 @@ internal fun AppDetailView(
 @Composable
 internal fun AppSourceCard(
     source: ArchiveSource,
+    accentColor: Color,
     onOpenUrl: (String) -> Unit,
     onAddToMorphe: (String) -> Unit,
     mirrors: List<ArchiveSource> = emptyList()
 ) {
     var expanded by remember(source.repo) { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
-    SettingsItemCard(
-        onClick = null,
-        borderWidth = 1.dp
+    val surface = colors.surfaceColorAtElevation(2.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .drawWithCache {
+                val corner = CornerRadius(24.dp.toPx())
+                val fill = Brush.linearGradient(
+                    colors = listOf(
+                        lerp(surface, accentColor, 0.12f),
+                        lerp(surface, accentColor, 0.035f),
+                        surface
+                    ),
+                    start = Offset(0f, 0f),
+                    end = Offset(size.width, size.height)
+                )
+                onDrawBehind {
+                    drawRoundRect(brush = fill, cornerRadius = corner)
+                    drawRoundRect(
+                        brush = SolidColor(accentColor.copy(alpha = 0.28f)),
+                        cornerRadius = corner,
+                        style = Stroke(1.dp.toPx())
+                    )
+                }
+            }
     ) {
         Column(
-            modifier = Modifier.padding(vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { expanded = !expanded }
-                    .padding(horizontal = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                AsyncAvatar(
-                    url = MorpheArchive.avatarUrlFor(source),
-                    fallbackText = source.repo.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
-                    size = 28.dp,
-                    cornerRadius = 8.dp
-                )
-                Column(modifier = Modifier.weight(1f)) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(13.dp))
+                        .background(accentColor.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncAvatar(
+                        url = MorpheArchive.avatarUrlFor(source),
+                        fallbackText = source.repo.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+                        size = 34.dp,
+                        cornerRadius = 10.dp
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     Text(
                         text = source.repo,
                         fontWeight = FontWeight.Bold,
                         color = colors.onSurface,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.titleSmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    // The release is what ranks this card against the mirrors, so it
-                    // is shown rather than left for the user to infer from the order.
-                    Text(
-                        text = buildString {
-                            append("${source.patches.size} ")
-                            append(if (source.patches.size == 1) "patch" else "patches")
-                            formatBundleRelease(source.latestChanges)?.let { release ->
-                                append(" \u00b7 ")
-                                append(release)
-                            }
-                        },
-                        color = colors.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    MorpheStatusBadgeRow {
+                        MorpheStatusBadge(
+                            text = "${source.patches.size} " +
+                                if (source.patches.size == 1) "patch" else "patches",
+                            icon = Icons.Outlined.Extension
+                        )
+                        // The release is what ranks this card against the mirrors, so it
+                        // is shown rather than left for the user to infer from the order.
+                        formatBundleRelease(source.latestChanges)?.let { release ->
+                            MorpheStatusBadge(
+                                text = release,
+                                icon = Icons.Outlined.History
+                            )
+                        }
+                    }
                     if (mirrors.isNotEmpty()) {
                         Text(
                             text = "Same patches in ${mirrors.size} other " +
                                 (if (mirrors.size == 1) "repo" else "repos"),
                             color = colors.onSurfaceVariant.copy(alpha = 0.75f),
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.labelSmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -1795,7 +1835,7 @@ internal fun AppSourceCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
+                    .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingSmall)
             ) {
                 source.addUrl?.takeIf { it.isNotBlank() }?.let { addUrl ->
@@ -1820,7 +1860,7 @@ internal fun AppSourceCard(
             }
             AnimatedExpand(visible = expanded) {
                 Column(
-                    modifier = Modifier.padding(horizontal = 12.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     if (source.patches.isEmpty()) {
