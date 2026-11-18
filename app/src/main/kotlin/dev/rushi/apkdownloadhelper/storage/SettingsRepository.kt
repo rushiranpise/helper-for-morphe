@@ -50,7 +50,7 @@ internal var adGuardDnsEnabled = true
  * by version rather than inferred from what is on disk.
  */
 private const val SETTINGS_VERSION_KEY = "settings_version"
-private const val SETTINGS_VERSION = 6
+private const val SETTINGS_VERSION = 7
 
 internal val DEFAULT_DISABLED_SOURCES: Set<DownloadSource> = setOf(
     DownloadSource.APTOIDE,
@@ -64,12 +64,39 @@ private fun sourceFromStoredName(name: String): DownloadSource? =
     DownloadSource.entries.firstOrNull { it.name == name } ?: LEGACY_SOURCE_NAMES[name]
 
 /**
- * Morphe Link is the resolver-backed fallback, so try it before walking the
- * individual sites. It can hand the request to any of them in one step.
+ * The old default kept Uptodown before APKPure. Existing installs that saved
+ * that exact list are moved to the new default below.
  */
+private val LEGACY_DEFAULT_SOURCE_ORDER: List<DownloadSource> = listOf(
+    DownloadSource.MORPHE_LINK,
+    DownloadSource.APK_MIRROR,
+    DownloadSource.UPTODOWN,
+    DownloadSource.APK_PURE,
+    DownloadSource.APK_CUBE,
+    DownloadSource.APTOIDE,
+    DownloadSource.AURORA,
+    DownloadSource.PLAY
+)
+
+/**
+ * Morphe Link is the resolver-backed fallback, so try it before walking the
+ * individual sites. APKPure and APKCube run before Uptodown because they can
+ * resolve many requests without a captcha, while Uptodown often cannot.
+ */
+private val PREFERRED_DEFAULT_SOURCE_ORDER: List<DownloadSource> = listOf(
+    DownloadSource.MORPHE_LINK,
+    DownloadSource.APK_MIRROR,
+    DownloadSource.APK_PURE,
+    DownloadSource.APK_CUBE,
+    DownloadSource.UPTODOWN,
+    DownloadSource.APTOIDE,
+    DownloadSource.AURORA,
+    DownloadSource.PLAY
+)
+
 internal val DEFAULT_SOURCE_ORDER: List<DownloadSource> =
-    listOf(DownloadSource.MORPHE_LINK) +
-        DownloadSource.entries.filterNot { it == DownloadSource.MORPHE_LINK }
+    PREFERRED_DEFAULT_SOURCE_ORDER +
+        DownloadSource.entries.filterNot { it in PREFERRED_DEFAULT_SOURCE_ORDER }
 
 internal data class HelperSettings(
     val downloadLocation: DownloadLocation = DownloadLocation.TEMPORARY,
@@ -416,8 +443,9 @@ internal fun Context.loadHelperSettings(): HelperSettings {
     // helper is built around. Version 4 moved Morphe Link to the front of the default
     // order, but only when the saved order was still the old unmodified default.
     // Version 5 enables APKCube by default, removing the old default-off entry. Version
-    // 6 enables AdGuard DNS by default. Each step is applied once and saved, so from the
-    // next launch on the stored values win.
+    // 6 enables AdGuard DNS by default. Version 7 moves Uptodown after APKPure and
+    // APKCube for installs that still had the old default order. Each step is applied
+    // once and saved, so from the next launch on the stored values win.
     val storedVersion = prefs.getInt(SETTINGS_VERSION_KEY, 1)
     var migrated = settings
     if (storedVersion < 2) {
@@ -435,6 +463,9 @@ internal fun Context.loadHelperSettings(): HelperSettings {
     }
     if (storedVersion < 6) {
         migrated = migrated.copy(adGuardDns = true)
+    }
+    if (storedVersion < 7 && migrated.sourceOrder == LEGACY_DEFAULT_SOURCE_ORDER) {
+        migrated = migrated.copy(sourceOrder = DEFAULT_SOURCE_ORDER)
     }
     if (migrated !== settings) {
         saveHelperSettings(migrated)
