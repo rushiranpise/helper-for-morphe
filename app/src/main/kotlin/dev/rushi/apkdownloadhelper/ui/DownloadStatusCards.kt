@@ -322,6 +322,8 @@ internal fun FastModeCard(
 ) {
     var showSwitch by remember { mutableStateOf(false) }
     var resumeOnDismiss by remember { mutableStateOf(false) }
+    val isScan = isScanStatus(progress.detail)
+    val scanInProgress = isScan && progress.percent != null && !progress.done
 
     if (showSwitch) {
         AlertDialog(
@@ -399,15 +401,17 @@ internal fun FastModeCard(
                     )
                 }
             }
-            Text(
-                text = progress.detail,
-                color = when {
-                    progress.done && !progress.succeeded -> MaterialTheme.colorScheme.error
-                    progress.done -> MaterialTheme.colorScheme.onSurface
-                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                style = MaterialTheme.typography.bodyMedium
-            )
+            if (!scanInProgress) {
+                Text(
+                    text = progress.detail,
+                    color = when {
+                        progress.done && !progress.succeeded -> MaterialTheme.colorScheme.error
+                        progress.done -> MaterialTheme.colorScheme.onSurface
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
             // Persist the SHA-256 verification on the card once the file's
             // bytes matched the source-published hash (not just the transient
             // post-download status line).
@@ -533,7 +537,6 @@ internal fun FastModeCard(
                 )
             } else if (progress.percent != null && !progress.done) {
                 val percent = progress.percent
-                val isScan = isScanStatus(progress.detail)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing),
@@ -549,7 +552,30 @@ internal fun FastModeCard(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (!isScan) {
+                        if (isScan) {
+                            val (phase, detail) = scanPhaseSplit(progress.detail)
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = phase,
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (detail.isNotBlank()) {
+                                    Text(
+                                        text = detail,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        } else {
                             TransferStats(
                                 connections = progress.connections,
                                 speedBytesPerSec = progress.speedBytesPerSec,
@@ -558,8 +584,6 @@ internal fun FastModeCard(
                                 includeConnections = percent < 100,
                                 modifier = Modifier.weight(1f)
                             )
-                        } else {
-                            Spacer(Modifier.weight(1f))
                         }
                         HelperIconButton(
                             icon = Icons.Outlined.Close,
