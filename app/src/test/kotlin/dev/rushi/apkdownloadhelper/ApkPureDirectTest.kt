@@ -44,6 +44,14 @@ class ApkPureDirectTest {
     }
 
     @Test
+    fun `a version name without a build code is still used directly`() {
+        assertEquals(
+            "https://d.apkpure.com/b/APK/com.example.app?version=8.72.0",
+            apkPureDirectUrl("com.example.app", "APK", null, "8.72.0")
+        )
+    }
+
+    @Test
     fun `the redirect names the file, its version, its build and its size`() {
         val file = apkPureDirectFile(signedUrl, packageName)
 

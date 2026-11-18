@@ -23,12 +23,19 @@ internal class FakeSourceTextFetcher(
 }
 
 internal class FakeApkPureApi(
-    var response: ApkPureUpdateResponse = ApkPureUpdateResponse()
+    var response: ApkPureUpdateResponse = ApkPureUpdateResponse(),
+    var historyResponse: ApkPureHistoryResponse = ApkPureHistoryResponse()
 ) : ApkPureApi {
     override suspend fun getAppUpdate(
         header: String,
         request: ApkPureUpdateRequest
     ): ApkPureUpdateResponse = response
+
+    override suspend fun getAppHistoryVersions(
+        packageName: String,
+        header: String,
+        hl: String
+    ): ApkPureHistoryResponse = historyResponse
 }
 
 internal class FakeApkMirrorApi(

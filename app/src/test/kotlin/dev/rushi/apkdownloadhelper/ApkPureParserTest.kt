@@ -135,6 +135,45 @@ class ApkPureParserTest {
     }
 
     @Test
+    fun findCandidates_requested_usesHistoryApiForExactVersion() = runBlocking {
+        val api = FakeApkPureApi(
+            historyResponse = ApkPureHistoryResponse(
+                versionList = listOf(
+                    ApkPureHistoryVersion(
+                        versionName = "8.72.0",
+                        versionCode = "593",
+                        asset = ApkPureAsset(
+                            type = "XAPK",
+                            url = "https://download.apkpure.com/b/XAPK/$packageName?version=8.72.0",
+                            size = 987654L
+                        )
+                    )
+                )
+            )
+        )
+        val parser = ApkPureParser(testParserContext(pages = emptyMap(), apkPureApi = api))
+
+        val candidates = parser.findCandidates(
+            request = testRequest(
+                packageName = packageName,
+                versionName = "8.72.0",
+                versionCode = 593L,
+                requestedFileType = "XAPK",
+                allowSplitArchive = true
+            ),
+            option = CandidateOption.REQUESTED
+        )
+
+        assertEquals(1, candidates.size)
+        val candidate = candidates[0]
+        assertTrue(candidate.directDownload)
+        assertEquals("8.72.0", candidate.versionName)
+        assertEquals(593L, candidate.versionCode)
+        assertEquals("xapk", candidate.fileKind)
+        assertEquals(987654L, candidate.files.single().size)
+    }
+
+    @Test
     fun findCandidates_latest_fallsBackToWebWhenApiEmpty() = runBlocking {
         val api = FakeApkPureApi(response = ApkPureUpdateResponse())
         val infoUrl = "https://apkpure.com/apk-info/$packageName"

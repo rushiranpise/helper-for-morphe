@@ -37,11 +37,7 @@ internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourcePa
         request: HelperRequest,
         option: CandidateOption
     ): List<DownloadCandidate> = when (option) {
-        CandidateOption.REQUESTED -> apkPureDirectCandidates(
-            request = request,
-            option = CandidateOption.REQUESTED,
-            versionCode = request.requestedVersionCodes.firstOrNull()
-        ) ?: listOfNotNull(apkPureRequestedCandidate(request))
+        CandidateOption.REQUESTED -> apkPureRequestedCandidates(request)
 
         CandidateOption.LATEST -> apkPureDirectCandidates(
             request = request,
@@ -201,25 +197,45 @@ internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourcePa
      * pinned build) answers with a build the request did not ask for - so every caller
      * falls back to the web flow rather than losing the source.
      */
+    private suspend fun apkPureRequestedCandidates(request: HelperRequest): List<DownloadCandidate> {
+        val versionCode = request.requestedVersionCodes.firstOrNull()
+        val versionName = request.requestedVersionNames.firstOrNull()
+        // A build code is the cheapest exact lookup. Without one, the version
+        // name is still enough for the direct endpoint, and the history API is
+        // the fallback when the redirect does not name an exact build.
+        if (versionCode != null) {
+            apkPureDirectCandidates(request, CandidateOption.REQUESTED, versionCode, versionName)
+                ?.let { return it }
+        }
+        apkPureHistoryCandidates(request)?.let { return it }
+        apkPureDirectCandidates(request, CandidateOption.REQUESTED, null, versionName)
+            ?.let { return it }
+        return listOfNotNull(apkPureRequestedCandidate(request))
+    }
+
     private fun apkPureDirectCandidates(
         request: HelperRequest,
         option: CandidateOption,
-        versionCode: Long?
+        versionCode: Long?,
+        versionName: String? = null
     ): List<DownloadCandidate>? {
         val resolveRedirect = ctx.resolveRedirect ?: return null
 
         for (kind in apkPureDirectKinds(request)) {
-            val location = runCatching { resolveRedirect(apkPureDirectUrl(request.packageName, kind, versionCode)) }
+            val location = runCatching {
+                resolveRedirect(apkPureDirectUrl(request.packageName, kind, versionCode, versionName))
+            }
                 .onFailure { Log.w(TAG, "APKPure direct $kind lookup failed", it) }
                 .getOrNull()
             val file = apkPureDirectFile(location, request.packageName) ?: continue
             if (!request.acceptsCandidateFormat(file.fileKind)) continue
 
-            // A pinned build must be the build that came back: the endpoint answers
-            // with the newest file when it does not know the requested code.
-            if (option == CandidateOption.REQUESTED && versionCode != null) {
+            // A pinned request must be the build that came back: the endpoint
+            // answers with the newest file when it does not know the requested
+            // code or name.
+            if (option == CandidateOption.REQUESTED) {
                 val returnedCode = file.versionCode
-                if (returnedCode != null && returnedCode != versionCode) continue
+                if (versionCode != null && returnedCode != null && returnedCode != versionCode) continue
                 if (!request.matchesRequestedVersion(file.versionName, returnedCode ?: versionCode)) continue
             }
 
@@ -271,6 +287,69 @@ internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourcePa
                     fileName = "${request.packageName}-${file.versionName ?: option.name.lowercase(Locale.US)}-apkpure.${file.fileKind}"
                         .sanitizeFileName(),
                     size = file.sizeBytes
+                )
+            )
+        )
+    }
+
+    /**
+     * APKPure's complete version list. Unlike the update API, this still names a
+     * build that is no longer the latest one, so a requested version can be
+     * downloaded without walking the HTML version pages.
+     */
+    private suspend fun apkPureHistoryCandidates(request: HelperRequest): List<DownloadCandidate>? {
+        if (!request.hasRequestedVersionRequest) return null
+        val response = runCatching {
+            apkPureApi.getAppHistoryVersions(
+                packageName = request.packageName,
+                header = gson.toJson(ApkPureDeviceHeader())
+            )
+        }
+            .onFailure { Log.w(TAG, "APKPure history API failed", it) }
+            .getOrNull()
+            ?: return null
+
+        return response.versionList
+            .filter { item ->
+                request.matchesRequestedVersion(
+                    item.versionName,
+                    item.versionCode.toLongOrNull()
+                )
+            }
+            .mapNotNull { item -> apkPureHistoryCandidate(item, request) }
+            .sortedBy { request.apkPureKindRank(it.fileKind) }
+            .takeIf { it.isNotEmpty() }
+    }
+
+    private fun apkPureHistoryCandidate(
+        item: ApkPureHistoryVersion,
+        request: HelperRequest
+    ): DownloadCandidate? {
+        val url = item.asset.url.replace("http://", "https://").normalizedHttpUrlOrNull()
+            ?: return null
+        val fileKind = item.asset.type.trim().lowercase(Locale.US)
+            .takeIf { it in DOWNLOAD_FILE_KIND_SET }
+            ?: if (url.contains("/XAPK", ignoreCase = true)) "xapk" else "apk"
+        val versionCode = item.versionCode.toLongOrNull()
+
+        return DownloadCandidate(
+            source = DownloadSource.APK_PURE,
+            name = request.appName,
+            packageName = request.packageName,
+            versionName = item.versionName,
+            versionCode = versionCode,
+            url = url,
+            fileKind = fileKind,
+            option = CandidateOption.REQUESTED,
+            directDownload = true,
+            versionStatus = request.versionStatus(item.versionName, versionCode),
+            formatMatches = request.acceptsCandidateFormat(fileKind),
+            files = listOf(
+                CandidateDownloadFile(
+                    url = url,
+                    fileName = "${request.packageName}-${item.versionName}-apkpure.$fileKind"
+                        .sanitizeFileName(),
+                    size = item.asset.size.takeIf { it > 0L }
                 )
             )
         )

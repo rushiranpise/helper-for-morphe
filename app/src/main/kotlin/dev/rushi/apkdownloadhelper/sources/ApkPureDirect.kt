@@ -2,6 +2,7 @@
 
 import dev.rushi.apkdownloadhelper.download.normalizedHttpUrlOrNull
 import java.net.URLDecoder
+import java.net.URLEncoder
 import java.util.Base64
 import java.util.Locale
 
@@ -29,10 +30,16 @@ internal data class ApkPureDirectFile(
 )
 
 /**
- * `https://d.apkpure.com/b/APK/com.example?versionCode=123`, or `?version=latest`
- * when no build is pinned. [kind] is `APK` or `XAPK`.
+ * `https://d.apkpure.com/b/APK/com.example?versionCode=123`, `?version=1.2.3`
+ * when only a version name is known, or `?version=latest` when neither is.
+ * [kind] is `APK` or `XAPK`.
  */
-internal fun apkPureDirectUrl(packageName: String, kind: String, versionCode: Long?): String =
+internal fun apkPureDirectUrl(
+    packageName: String,
+    kind: String,
+    versionCode: Long?,
+    versionName: String? = null
+): String =
     buildString {
         append("https://")
         append(APK_PURE_DIRECT_HOST)
@@ -40,13 +47,13 @@ internal fun apkPureDirectUrl(packageName: String, kind: String, versionCode: Lo
         append(kind)
         append('/')
         append(packageName)
-        append(
-            if (versionCode != null && versionCode > 0L) {
-                "?versionCode=$versionCode"
-            } else {
-                "?version=latest"
-            }
-        )
+        when {
+            versionCode != null && versionCode > 0L -> append("?versionCode=$versionCode")
+            !versionName.isNullOrBlank() ->
+                append("?version=")
+                    .append(URLEncoder.encode(versionName.trim(), "UTF-8"))
+            else -> append("?version=latest")
+        }
     }
 
 /**

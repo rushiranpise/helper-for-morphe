@@ -61,6 +61,14 @@ internal interface ApkPureApi {
         @Header("ual-access-projecta") header: String,
         @Body request: ApkPureUpdateRequest
     ): ApkPureUpdateResponse
+
+    /** APKPure's complete version list, including builds the update API does not return. */
+    @GET("v3/get_app_his_version")
+    suspend fun getAppHistoryVersions(
+        @Query("package_name") packageName: String,
+        @Header("ual-access-projecta") header: String,
+        @Query("hl") hl: String = "en"
+    ): ApkPureHistoryResponse
 }
 
 internal data class ApkPureUpdateRequest(
@@ -93,7 +101,22 @@ internal data class ApkPureAppUpdate(
 
 internal data class ApkPureAsset(
     val type: String = "",
-    val url: String = ""
+    val url: String = "",
+    val size: Long = 0L
+)
+
+internal data class ApkPureHistoryResponse(
+    val retcode: Int = 0,
+    @SerializedName("version_list")
+    val versionList: List<ApkPureHistoryVersion> = emptyList()
+)
+
+internal data class ApkPureHistoryVersion(
+    @SerializedName("version_name")
+    val versionName: String = "",
+    @SerializedName("version_code")
+    val versionCode: String = "",
+    val asset: ApkPureAsset = ApkPureAsset()
 )
 
 internal data class ApkPureVersionEntry(
