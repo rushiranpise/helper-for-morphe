@@ -227,7 +227,7 @@ private fun FindAppsStatItem(stat: FindAppsStat, modifier: Modifier = Modifier) 
     val scheme = MaterialTheme.colorScheme
     Row(
         modifier = modifier.padding(horizontal = 14.dp, vertical = 13.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -244,7 +244,10 @@ private fun FindAppsStatItem(stat: FindAppsStat, modifier: Modifier = Modifier) 
                 modifier = Modifier.size(18.dp)
             )
         }
-        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(1.dp)
+        ) {
             Text(
                 text = stat.value.toString(),
                 style = MaterialTheme.typography.titleLarge,
