@@ -25,6 +25,7 @@ import dev.rushi.apkdownloadhelper.ui.DownloadSource
 import dev.rushi.apkdownloadhelper.ui.HelperRequest
 import dev.rushi.apkdownloadhelper.ui.VersionStatus
 import dev.rushi.apkdownloadhelper.ui.identityKey
+import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
@@ -454,10 +455,8 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         return requested.orEmpty()
     }
 
-    private fun apkMirrorPackageSearchUrl(packageName: String): String {
-        val query = URLEncoder.encode(packageName, "UTF-8")
-        return "https://www.apkmirror.com/?post_type=app_release&searchtype=app&s=$query"
-    }
+    private fun apkMirrorPackageSearchUrl(packageName: String): String =
+        apkMirrorSearchUrl(packageName)
 
     private fun resolveApkMirrorLatestInfo(
         request: HelperRequest,
@@ -1325,8 +1324,18 @@ private fun apkMirrorReleaseUrlMatchesVersion(url: String, version: String): Boo
         return hasPackageId || hasPlayPackage || tablePackage
     }
 
-    private fun fetchDocument(url: String, referer: String? = null): Document =
-        ctx.document(url, referer)
+    private fun fetchDocument(url: String, referer: String? = null): Document {
+        ctx.prefetch?.takeText(url, referer)?.let { html ->
+            return Jsoup.parse(html, url)
+        }
+        return ctx.document(url, referer)
+    }
+}
+
+/** The APKMirror search URL used by the parser and its prefetch. */
+internal fun apkMirrorSearchUrl(packageName: String): String {
+    val query = URLEncoder.encode(packageName, "UTF-8")
+    return "https://www.apkmirror.com/?post_type=app_release&searchtype=app&s=$query"
 }
 
 /**

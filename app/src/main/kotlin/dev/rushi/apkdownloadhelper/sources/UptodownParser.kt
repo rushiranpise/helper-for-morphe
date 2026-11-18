@@ -152,11 +152,12 @@ internal class UptodownParser(private val ctx: SourceParserContext) : ApkSourceP
         }
         val wantedKind = DOWNLOAD_FILE_KIND_ORDER.firstOrNull { it in request.requestedFileKinds }
             ?: "apk"
-        val prepared = runCatching {
-            api.prepare(request.packageName, requestedVersion, wantedKind)
-        }
-            .onFailure { Log.i(TAG, "Uptodown API failed, using HTML flow", it) }
-            .getOrNull()
+        val prepared = ctx.prefetch?.takeUptodown(request)
+            ?: runCatching {
+                api.prepare(request.packageName, requestedVersion, wantedKind)
+            }
+                .onFailure { Log.i(TAG, "Uptodown API failed, using HTML flow", it) }
+                .getOrNull()
             ?: return null
 
         if (prepared.app.packageName.isNotBlank() &&

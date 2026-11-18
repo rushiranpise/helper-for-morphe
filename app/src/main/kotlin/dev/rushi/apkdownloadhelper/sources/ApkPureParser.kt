@@ -299,14 +299,15 @@ internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourcePa
      */
     private suspend fun apkPureHistoryCandidates(request: HelperRequest): List<DownloadCandidate>? {
         if (!request.hasRequestedVersionRequest) return null
-        val response = runCatching {
-            apkPureApi.getAppHistoryVersions(
-                packageName = request.packageName,
-                header = gson.toJson(ApkPureDeviceHeader())
-            )
-        }
-            .onFailure { Log.w(TAG, "APKPure history API failed", it) }
-            .getOrNull()
+        val response = ctx.prefetch?.takeApkPureHistory(request)
+            ?: runCatching {
+                apkPureApi.getAppHistoryVersions(
+                    packageName = request.packageName,
+                    header = gson.toJson(ApkPureDeviceHeader())
+                )
+            }
+                .onFailure { Log.w(TAG, "APKPure history API failed", it) }
+                .getOrNull()
             ?: return null
 
         return response.versionList

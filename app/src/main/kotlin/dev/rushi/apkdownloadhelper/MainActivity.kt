@@ -89,6 +89,7 @@ import dev.rushi.apkdownloadhelper.sources.MorpheResolver
 import dev.rushi.apkdownloadhelper.sources.OkHttpSourceTextFetcher
 import dev.rushi.apkdownloadhelper.sources.SourceAppNotFoundException
 import dev.rushi.apkdownloadhelper.sources.SourceParserContext
+import dev.rushi.apkdownloadhelper.sources.SourcePrefetch
 import dev.rushi.apkdownloadhelper.sources.UptodownMobileApi
 import dev.rushi.apkdownloadhelper.sources.UptodownParser
 import dev.rushi.apkdownloadhelper.sources.archMatchRank
@@ -98,6 +99,7 @@ import dev.rushi.apkdownloadhelper.storage.DownloadHistoryStore
 import dev.rushi.apkdownloadhelper.storage.FastModePolicy
 import dev.rushi.apkdownloadhelper.storage.HelperSettings
 import dev.rushi.apkdownloadhelper.storage.LogLevel
+import dev.rushi.apkdownloadhelper.storage.SourceNegativeCache
 import dev.rushi.apkdownloadhelper.storage.ThemeMode
 import dev.rushi.apkdownloadhelper.storage.ThemeStyle
 import dev.rushi.apkdownloadhelper.storage.UpdateMode
@@ -322,18 +324,28 @@ class MainActivity : ComponentActivity() {
         .build()
         .create(ApkMirrorApi::class.java)
 
+    private val sourceTextFetcher = OkHttpSourceTextFetcher(
+        client,
+        // APKMirror declares `Crawl-delay: 3` and answers 429 to denser probe
+        // runs, so give it a slower pace than the app-wide default.
+        hostGapsMillis = mapOf("www.apkmirror.com" to APKMIRROR_REQUEST_GAP_MS)
+    )
+
+    private val sourcePrefetch = SourcePrefetch(
+        fetcher = sourceTextFetcher,
+        apkPureApi = apkPureApi,
+        uptodownApi = uptodownApi,
+        isSourceEnabled = { source -> source !in effectiveDisabledSources }
+    )
+
     private val parsers: Map<DownloadSource, ApkSourceParser> by lazy {
         val playHttpClient = PlayHttpClient(Cache(File(cacheDir, "play-cache"), 64L * 1024L * 1024L))
         val parserContext = SourceParserContext(
-            fetcher = OkHttpSourceTextFetcher(
-                client,
-                // APKMirror declares `Crawl-delay: 3` and answers 429 to denser
-                // probe runs, so give it a slower pace than the app-wide default.
-                hostGapsMillis = mapOf("www.apkmirror.com" to APKMIRROR_REQUEST_GAP_MS)
-            ),
+            fetcher = sourceTextFetcher,
             apkPureApi = apkPureApi,
             aptoideApi = aptoideApi,
             uptodownApi = uptodownApi,
+            prefetch = sourcePrefetch,
             apkMirrorApi = apkMirrorApi,
             playHttpClient = playHttpClient,
             appContext = this,
@@ -923,6 +935,10 @@ class MainActivity : ComponentActivity() {
     ) {
         val sources = attempts.map { it.source }.distinct()
         if (sources.isEmpty()) return
+        sources.forEach { source ->
+            SourceNegativeCache.clear(this, source, activeRequest, CandidateOption.REQUESTED)
+            SourceNegativeCache.clear(this, source, activeRequest, CandidateOption.LATEST)
+        }
         autoRetryActive = false
         autoRetryQueue = null
         autoRetryTarget = null
@@ -1998,14 +2014,20 @@ class MainActivity : ComponentActivity() {
     }
 
     private suspend fun fastModeRun(request: HelperRequest, policy: FastModePolicy) {
-        if (policy == FastModePolicy.LATEST) {
-            fastModeNextLatest(request)
-        } else {
-            fastModeNext(request)
+        sourcePrefetch.start(request)
+        try {
+            if (policy == FastModePolicy.LATEST) {
+                fastModeNextLatest(request)
+            } else {
+                fastModeNext(request)
+            }
+        } finally {
+            sourcePrefetch.cancel()
         }
     }
 
     private fun cancelFastMode() {
+        sourcePrefetch.cancel()
         if (autoRetryActive) {
             appendLog("Retry cancelled  taking over manually.", LogLevel.Warning)
             autoRetryActive = false
@@ -2064,6 +2086,20 @@ class MainActivity : ComponentActivity() {
             // The user may have cancelled while a source was resolving.
             if (!fastModeActive) return
             val source = queue.removeAt(0)
+            val cachedMiss = SourceNegativeCache.get(
+                this,
+                source,
+                request,
+                CandidateOption.REQUESTED
+            )
+            if (cachedMiss != null) {
+                appendLog(
+                    "Fast Mode: skipping ${source.label} from cache: $cachedMiss",
+                    LogLevel.Info
+                )
+                recordFailedAttempt(source, CandidateOption.REQUESTED)
+                continue
+            }
             appendLog("Fast Mode: checking ${source.label} for ${request.requestedVersionLabel}...")
             uiState = UiState.FastMode(
                 FastModeProgress(sourceLabel = source.label, detail = "Checking ${source.label}…")
@@ -2198,18 +2234,34 @@ class MainActivity : ComponentActivity() {
         while (queue.isNotEmpty()) {
             if (!fastModeActive) return
             val source = queue.removeAt(0)
+            val cachedMiss = SourceNegativeCache.get(
+                this,
+                source,
+                request,
+                CandidateOption.LATEST
+            )
+            if (cachedMiss != null) {
+                appendLog(
+                    "Fast Mode: skipping ${source.label} from cache: $cachedMiss",
+                    LogLevel.Info
+                )
+                recordFailedAttempt(source, CandidateOption.LATEST)
+                continue
+            }
             appendLog("Fast Mode: fetching latest from ${source.label}...", LogLevel.Info)
             uiState = UiState.FastMode(
                 FastModeProgress(sourceLabel = source.label, detail = "Checking ${source.label}…")
             )
-            val candidates = withContext(Dispatchers.IO) {
+            val outcome = withContext(Dispatchers.IO) {
                 runCatching {
-                    resolveSourceSection(request, source, CandidateOption.LATEST).candidates
-                }.getOrDefault(emptyList())
+                    resolveSourceSection(request, source, CandidateOption.LATEST)
+                }.getOrNull()
             }
             if (!fastModeActive) return
+            val candidates = outcome?.candidates.orEmpty()
             val best = fastModeLatestCandidate(request, candidates)
             if (best != null) {
+                SourceNegativeCache.clear(this, source, request, CandidateOption.LATEST)
                 appendLog(
                     "Fast Mode: latest ${best.versionDisplay} on ${source.label} " +
                         "(${best.fileKind.uppercase(Locale.US)})  downloading.",
@@ -2224,6 +2276,16 @@ class MainActivity : ComponentActivity() {
                 )
                 downloadAndReturn(best)
                 return
+            }
+            if (candidates.isEmpty()) {
+                SourceNegativeCache.record(
+                    this,
+                    source,
+                    request,
+                    CandidateOption.LATEST,
+                    outcome?.notFoundMessage ?: outcome?.errorMessage ?: "no candidates",
+                    definitive = outcome?.errorMessage == null
+                )
             }
             recordFailedAttempt(source, CandidateOption.LATEST)
             appendLog("Fast Mode: no newer latest on ${source.label}.", LogLevel.Info)
@@ -2303,7 +2365,10 @@ class MainActivity : ComponentActivity() {
                 )
             )
             ?.value
-        if (exact != null) return FastModeFindResult.Exact(exact)
+        if (exact != null) {
+            SourceNegativeCache.clear(this, source, request, CandidateOption.REQUESTED)
+            return FastModeFindResult.Exact(exact)
+        }
 
         // The version name exists on this source but with a different build 
         // hand it to the loop so it can ask the user before proceeding.
@@ -2318,11 +2383,21 @@ class MainActivity : ComponentActivity() {
                 candidate.versionCode != null &&
                 !request.matchesRequestedVersionStrict(candidate.versionName, candidate.versionCode)
         }
-        return if (mismatch != null) {
-            FastModeFindResult.VersionMismatch(mismatch)
-        } else {
-            FastModeFindResult.None
+        if (mismatch != null) {
+            SourceNegativeCache.clear(this, source, request, CandidateOption.REQUESTED)
+            return FastModeFindResult.VersionMismatch(mismatch)
         }
+        if (outcome.candidates.isEmpty()) {
+            SourceNegativeCache.record(
+                this,
+                source,
+                request,
+                CandidateOption.REQUESTED,
+                outcome.notFoundMessage ?: outcome.errorMessage ?: "no candidates",
+                definitive = outcome.errorMessage == null
+            )
+        }
+        return FastModeFindResult.None
     }
 
     private fun handleDownloadEvent(event: DownloadJobManager.Event?) {
