@@ -406,14 +406,13 @@ internal fun AppBrowserScreen(
             .fillMaxSize()
             .statusBarsPadding()
             .navigationBarsPadding()
-            .padding(
-                horizontal = MorpheDefaults.ContentPadding,
-                vertical = MorpheDefaults.ContentPadding
-            ),
+            .padding(vertical = MorpheDefaults.ContentPadding),
         verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = MorpheDefaults.ContentPadding),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -504,7 +503,9 @@ internal fun AppBrowserScreen(
                 app = current,
                 installed = current.packageName in installedPackages,
                 onBack = { selected = null },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = MorpheDefaults.ContentPadding)
             )
         } else {
             val loaded = apps
@@ -514,12 +515,15 @@ internal fun AppBrowserScreen(
                         message = error!!,
                         icon = Icons.Outlined.Warning,
                         actionLabel = "Retry",
-                        onAction = { loadKey++ }
+                        onAction = { loadKey++ },
+                        modifier = Modifier.padding(horizontal = MorpheDefaults.ContentPadding)
                     )
                 }
                 loaded == null -> {
                     Column(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = MorpheDefaults.ContentPadding),
                         verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
                     ) {
                         repeat(5) { FindAppCardLoading(index = it) }
@@ -572,6 +576,7 @@ internal fun AppBrowserScreen(
                     // collapsing on the first drag, so the list viewport stays put.
                     AnimatedVisibility(
                         visible = optionsOpen,
+                        modifier = Modifier.padding(horizontal = MorpheDefaults.ContentPadding),
                         enter = MorpheAnimations.expandFadeEnter,
                         exit = MorpheAnimations.shrinkFadeExit
                     ) {
@@ -593,17 +598,18 @@ internal fun AppBrowserScreen(
                             .weight(1f)
                             .fillMaxWidth()
                     ) {
-                        Row(modifier = Modifier.fillMaxSize()) {
-                            LazyColumn(
-                                state = listState,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight(),
-                                // Keep the last row clear of the floating
-                                // "Go to top" button.
-                                contentPadding = PaddingValues(bottom = 64.dp),
-                                verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
-                            ) {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize(),
+                            // Keep the last row clear of the floating "Go to top"
+                            // button, and the cards clear of the edge scrollbar.
+                            contentPadding = PaddingValues(
+                                start = MorpheDefaults.ContentPadding,
+                                end = MorpheDefaults.ContentPadding,
+                                bottom = 64.dp
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
+                        ) {
                                 if (index != null) {
                                     item(key = "find-apps-stats", contentType = "header") {
                                         FindAppsStatsDashboard(index)
@@ -652,12 +658,13 @@ internal fun AppBrowserScreen(
                                         )
                                     }
                                 }
-                            }
-                            LazyListScrollbar(
-                                listState = listState,
-                                modifier = Modifier.fillMaxHeight()
-                            )
                         }
+                        LazyListScrollbar(
+                            listState = listState,
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .fillMaxHeight()
+                        )
                         // Quick jump back to the top for long catalogs; only
                         // shown once the user has scrolled down, and it pops in
                         // with the manager's floating-button motion. A clickable
