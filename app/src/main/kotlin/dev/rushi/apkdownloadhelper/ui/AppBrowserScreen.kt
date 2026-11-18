@@ -158,6 +158,10 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.Public
+import dev.rushi.apkdownloadhelper.updater.MorpheArchiveIndex
+import androidx.compose.foundation.basicMarquee
 
 
 internal enum class AppListTab(
@@ -193,6 +197,89 @@ internal object MorpheFavourites {
         if (!current.add(packageName)) current.remove(packageName)
         prefs.edit().putStringSet(KEY, current).apply()
         return current
+    }
+}
+
+@Composable
+private fun FindAppsStatsStrip(index: MorpheArchiveIndex?) {
+    val scheme = MaterialTheme.colorScheme
+    val transition = rememberInfiniteTransition(label = "stats_shimmer")
+    val shimmerAlpha by transition.animateFloat(
+        initialValue = 0.16f,
+        targetValue = 0.34f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 850, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "stats_shimmer_alpha"
+    )
+
+    val stats = listOf(
+        Triple("SOURCES", index?.repoCount, Icons.Outlined.Dns),
+        Triple("APPS", index?.appCount, Icons.Outlined.Apps),
+        Triple("PATCHES", index?.patchCount, Icons.Outlined.Extension),
+        Triple("UNIVERSAL", index?.universalPatchCount, Icons.Outlined.Public)
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(scheme.surfaceColorAtElevation(2.dp))
+            .padding(vertical = 10.dp, horizontal = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        stats.forEachIndexed { i, (label, value, icon) ->
+            if (i > 0) {
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(34.dp)
+                        .background(scheme.outlineVariant.copy(alpha = 0.35f))
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                if (value == null) {
+                    Box(
+                        modifier = Modifier
+                            .width(42.dp)
+                            .height(16.dp)
+                            .clip(CircleShape)
+                            .background(scheme.onSurface.copy(alpha = shimmerAlpha))
+                    )
+                } else {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = scheme.primary,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Text(
+                            text = value.toString(),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = scheme.onSurface,
+                            maxLines = 1
+                        )
+                    }
+                }
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
     }
 }
 
@@ -297,6 +384,7 @@ internal fun AppBrowserScreen(
     modifier: Modifier = Modifier
 ) {
     var apps by remember { mutableStateOf<List<ArchiveApp>?>(null) }
+    var archiveIndex by remember { mutableStateOf<MorpheArchiveIndex?>(null) }
     var freshness by remember { mutableStateOf<ArchiveFreshness?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
@@ -333,11 +421,13 @@ internal fun AppBrowserScreen(
 
     LaunchedEffect(loadKey) {
         apps = null
+        archiveIndex = null
         error = null
         if (loadKey > 0) MorpheArchive.invalidatePatchListCache()
         try {
             val index = MorpheArchive.fetchIndex()
             apps = index.apps.sortedBy { it.name.lowercase(Locale.US) }
+            archiveIndex = index
             freshness = archiveFreshness(index.generatedAt)
         } catch (e: Exception) {
             error = e.message ?: "Failed to load the app index"
@@ -401,6 +491,7 @@ internal fun AppBrowserScreen(
                 }
         }
 
+        // CHILD 1: Full-screen LazyColumn
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -419,6 +510,7 @@ internal fun AppBrowserScreen(
                     modifier = Modifier.padding(bottom = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    FindAppsStatsStrip(archiveIndex)
                     AppDisclaimerBanner()
 
                     var filterMenuOpen by remember { mutableStateOf(false) }
@@ -634,6 +726,7 @@ internal fun AppBrowserScreen(
             }
         }
 
+        // CHILD 2: Scrollbar
         LazyListScrollbar(
             listState = listState,
             modifier = Modifier
@@ -643,6 +736,7 @@ internal fun AppBrowserScreen(
                 .navigationBarsPadding()
         )
 
+        // CHILD 3: Go-to-top FAB
         MorpheFab(
             visible = loaded != null && listState.firstVisibleItemIndex > 0,
             modifier = Modifier
@@ -665,8 +759,7 @@ internal fun AppBrowserScreen(
             }
         }
 
-
-        // Rounded bottom header with Haze glass blur when scrolled
+        // CHILD 4: Top-aligned Floating Header (MUST have .align(Alignment.TopCenter))
         val showHeaderSurface = isScrolled
 
         Box(
@@ -708,10 +801,10 @@ internal fun AppBrowserScreen(
                 label = "header_search_transition",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(40.dp)
+                    .height(52.dp)
             ) { isSearchActive ->
                 if (isSearchActive) {
-                    // Search bar matching HeaderControlDefaults.Size = 40.dp
+                    // 40.dp search bar vertically centered inside the 52.dp header row (zero height jump)
                     Row(
                         modifier = Modifier.fillMaxSize(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -787,7 +880,6 @@ internal fun AppBrowserScreen(
                             }
                         }
 
-                        // Close search — active/selected glass style (primaryContainer tinted)
                         GlassHeaderButton(
                             icon = Icons.Outlined.SearchOff,
                             contentDescription = "Close search",
@@ -795,11 +887,13 @@ internal fun AppBrowserScreen(
                             onClick = {
                                 query = ""
                                 searchExpanded = false
+                                focusManager.clearFocus(force = true)
+                                keyboardController?.hide()
                             }
                         )
                     }
                 } else {
-                    // Normal left-aligned header — glass controls matching HeaderControlDefaults
+                    // Normal header vertically centered inside the same 52.dp height
                     Row(
                         modifier = Modifier.fillMaxSize(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -827,12 +921,10 @@ internal fun AppBrowserScreen(
                             )
                             val fresh = freshness
                             Text(
-                                text = buildString {
-                                    append(
-                                        apps?.let { "${it.size} apps with patches" }
-                                            ?: "Morphe patch archive"
-                                    )
-                                    fresh?.let { append(" · index ${it.label}") }
+                                text = when {
+                                    fresh != null -> "Updated ${fresh.label}"
+                                    apps == null -> "Loading…"
+                                    else -> "Community patch index"
                                 },
                                 color = if (fresh?.stale == true) {
                                     MaterialTheme.colorScheme.error
@@ -976,13 +1068,6 @@ internal fun AppBrowserRow(
         }
     )
     val released = formatReleaseDate(app.newestReleaseDate())
-    var contentVisible by remember(app.packageName) { mutableStateOf(false) }
-    LaunchedEffect(app.packageName) { contentVisible = true }
-    val contentAlpha by animateFloatAsState(
-        targetValue = if (contentVisible) 1f else 0f,
-        animationSpec = tween(durationMillis = 280),
-        label = "card_content_fade"
-    )
 
     Box(
         modifier = modifier
@@ -1037,7 +1122,6 @@ internal fun AppBrowserRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .graphicsLayer { alpha = contentAlpha }
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -1898,14 +1982,14 @@ internal fun AppDetailView(
                                 fontWeight = FontWeight.Bold,
                                 color = titleColor,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                modifier = Modifier.basicMarquee()
                             )
                             Text(
                                 text = app.packageName,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = subtitleColor.copy(alpha = 0.85f),
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                modifier = Modifier.basicMarquee()
                             )
                         }
                     }
@@ -2409,11 +2493,11 @@ private fun SourcePatchesScreen(
                 label = "patches_search_transition",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(40.dp)
+                    .height(52.dp)
             ) { isSearchActive ->
                 if (isSearchActive) {
                     Row(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -2499,7 +2583,7 @@ private fun SourcePatchesScreen(
                     }
                 } else {
                     Row(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
