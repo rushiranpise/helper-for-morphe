@@ -202,6 +202,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.ui.unit.dp
+import dev.rushi.apkdownloadhelper.ui.AppDetailView
+import dev.rushi.apkdownloadhelper.updater.ArchiveApp
 
 
 internal const val AURORA_AUTH_URL = "https://auroraoss.com/api/auth"
@@ -499,6 +501,11 @@ class MainActivity : ComponentActivity() {
             var isSettingsSubpageOpen by remember { mutableStateOf(false) }
             var activeSettingsCategory by rememberSaveable { mutableStateOf<SettingsCategory?>(null) }
             var showSourcesScreen by rememberSaveable { mutableStateOf(false) }
+            var selectedArchiveApp by remember { mutableStateOf<ArchiveApp?>(null) }
+            var lastSelectedArchiveApp by remember { mutableStateOf<ArchiveApp?>(null) }
+            if (selectedArchiveApp != null) {
+                lastSelectedArchiveApp = selectedArchiveApp
+            }
 
             // --- FIX: Holds the category on screen during the exit animation ---
             var lastActiveCategory by remember { mutableStateOf<SettingsCategory?>(null) }
@@ -535,7 +542,7 @@ class MainActivity : ComponentActivity() {
                             onChallengeTimeout = ::onBrowserChallengeTimeout
                         )
                     } else {
-                        val backgroundModifier = if (showUpdates || activeSettingsCategory != null || showSourcesScreen) {
+                        val backgroundModifier = if (showUpdates || activeSettingsCategory != null || showSourcesScreen || selectedArchiveApp != null) {
                             Modifier
                                 .focusProperties { canFocus = false }
                                 .clearAndSetSemantics {}
@@ -550,10 +557,10 @@ class MainActivity : ComponentActivity() {
                             HomePagerScreen(
                                 requestResetToken = requestResetToken,
                                 animatedBackground = helperSettings.animatedBackground,
-                                findAppsContent = { bottomBarHeight ->
+                                findAppsContent = { _ ->
                                     AppBrowserScreen(
                                         onBack = null,
-                                        modifier = Modifier.padding(bottom = bottomBarHeight)
+                                        onOpenApp = { selectedArchiveApp = it }
                                     )
                                 },
                                 homeContent = { bottomBarHeight ->
@@ -619,6 +626,7 @@ class MainActivity : ComponentActivity() {
                                     showUpdates ||
                                             activeSettingsCategory != null ||
                                             showSourcesScreen ||
+                                            selectedArchiveApp != null ||
                                             uiState is UiState.Downloading ||
                                             uiState is UiState.FastMode ||
                                             uiState is UiState.ScanAsk ||
@@ -641,55 +649,25 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    // --- OVERLAY FOR SETTINGS CATEGORIES ---
+                    // --- OVERLAY FOR FIND APPS DETAIL ---
                     AnimatedVisibility(
-                        visible = activeSettingsCategory != null,
+                        visible = selectedArchiveApp != null,
                         enter = MorpheAnimations.pushEnter,
-                        exit = MorpheAnimations.pushExit    // This will now play correctly
+                        exit = MorpheAnimations.pushExit
                     ) {
-                        // Use lastActiveCategory so the UI doesn't vanish before sliding down
-                        val cat = lastActiveCategory
-                        if (cat != null) {
-                            val detailScrollState = rememberScrollState()
-                            SettingsPageDetail(
-                                title = cat.title,
-                                onBack = { activeSettingsCategory = null },
-                                scrollState = detailScrollState
-                            ) {
-                                when (cat) {
-                                    SettingsCategory.SOURCES -> SourcesSettingsScreen(
-                                        settings = helperSettings,
-                                        onSettingsChange = ::updateHelperSettings,
-                                        parentScrollState = detailScrollState
-                                    )
-                                    SettingsCategory.DOWNLOADS -> SystemTabContent(
-                                        settings = helperSettings,
-                                        onSettingsChange = ::updateHelperSettings
-                                    )
-                                    SettingsCategory.APPEARANCE -> AppearanceTabContent(
-                                        settings = helperSettings,
-                                        onSettingsChange = ::updateHelperSettings
-                                    )
-                                    SettingsCategory.SECURITY_NETWORK -> AdvancedTabContent(
-                                        settings = helperSettings,
-                                        onSettingsChange = ::updateHelperSettings
-                                    )
-                                    SettingsCategory.SYSTEM_LOGS -> LogsTabContent(
-                                        settings = helperSettings,
-                                        onSettingsChange = ::updateHelperSettings,
-                                        logs = AppLog.entries,
-                                        onClearLogs = { AppLog.clear() },
-                                        historyEntries = DownloadHistoryStore.entries(applicationContext),
-                                        onOpenHistoryEntry = ::openHistoryEntry,
-                                        onShareHistoryEntry = ::shareHistoryEntry,
-                                        onClearHistory = { DownloadHistoryStore.clear(applicationContext) }
-                                    )
-                                    SettingsCategory.ABOUT -> AboutTabContent(
-                                        settings = helperSettings,
-                                        onSettingsChange = ::updateHelperSettings,
-                                        onOpenUpdates = { showUpdates = true }
-                                    )
-                                }
+                        val appDetail = lastSelectedArchiveApp
+                        if (appDetail != null) {
+                            val context = LocalContext.current
+                            val isInstalled = remember(appDetail.packageName) {
+                                context.isPackageInstalled(appDetail.packageName)
+                            }
+                            MorphePushedScreen {
+                                AppDetailView(
+                                    app = appDetail,
+                                    installed = isInstalled,
+                                    onBack = { selectedArchiveApp = null },
+                                    modifier = Modifier.fillMaxSize()
+                                )
                             }
                         }
                     }
