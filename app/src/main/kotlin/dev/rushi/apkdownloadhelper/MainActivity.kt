@@ -204,6 +204,14 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.ui.unit.dp
 import dev.rushi.apkdownloadhelper.ui.AppDetailView
 import dev.rushi.apkdownloadhelper.updater.ArchiveApp
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.layout.height
 
 
 internal const val AURORA_AUTH_URL = "https://auroraoss.com/api/auth"
@@ -3226,6 +3234,7 @@ internal fun HelperTheme(
         } else {
             if (dark) morpheDarkColorScheme() else morpheLightColorScheme()
         }
+
         ThemeStyle.MORPHE -> if (dark) morpheDarkColorScheme() else morpheLightColorScheme()
     }
     val colorScheme = base
@@ -3234,7 +3243,8 @@ internal fun HelperTheme(
         // their colours, so leaving one applied there would contradict the choice.
         .let {
             if (style == ThemeStyle.MORPHE) {
-                accentColorHex.toAccentColorOrNull()?.let { accent -> it.withCustomAccent(accent, dark) } ?: it
+                accentColorHex.toAccentColorOrNull()
+                    ?.let { accent -> it.withCustomAccent(accent, dark) } ?: it
             } else {
                 it
             }
@@ -3314,8 +3324,3 @@ internal fun HelperOutlinedButton(
 // challenges, captures the download URL the page produces, and hands it to the
 // normal download pipeline. Any source that gates its file behind a captcha can
 // opt in by setting DownloadCandidate.captchaUrl.
-
-
-
-
-

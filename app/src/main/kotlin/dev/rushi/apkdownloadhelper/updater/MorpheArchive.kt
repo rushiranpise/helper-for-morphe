@@ -189,6 +189,12 @@ internal fun formatBundleRelease(changes: ArchiveChanges?): String? {
     return listOfNotNull(version, date).takeIf { it.isNotEmpty() }?.joinToString(" \u00b7 ")
 }
 
+/** Extracts just the bundle version from [changes], e.g. `v2.9.0`. */
+internal fun bundleVersionOf(changes: ArchiveChanges?): String? =
+    changes?.title?.substringBefore(" (")?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.let { if (it.first().isDigit()) "v$it" else it }
+
 /**
  * The day a repo's changelog entry was published, as the bundle writes it.
  *

@@ -166,6 +166,7 @@ import androidx.compose.animation.core.EaseOutBack
 import androidx.compose.animation.core.EaseOutCubic
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.draw.clipToBounds
@@ -175,6 +176,9 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.util.lerp
+import dev.rushi.apkdownloadhelper.updater.ArchiveChanges
+import dev.rushi.apkdownloadhelper.updater.bundleVersionOf
+import dev.rushi.apkdownloadhelper.updater.releaseDateOf
 import kotlin.math.roundToInt
 
 internal enum class AppListTab(
@@ -234,25 +238,29 @@ private fun FindAppsStatsStrip(index: MorpheArchiveIndex?) {
         Triple("UNIVERSAL", index?.universalPatchCount, Icons.Outlined.Public)
     )
 
+    val outerRadius = 20.dp
+    val innerRadius = 6.dp
+    val statCount = stats.size
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(scheme.surfaceColorAtElevation(2.dp))
-            .padding(vertical = 10.dp, horizontal = 6.dp),
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         stats.forEachIndexed { i, (label, value, icon) ->
-            if (i > 0) {
-                Box(
-                    modifier = Modifier
-                        .width(1.dp)
-                        .height(34.dp)
-                        .background(scheme.outlineVariant.copy(alpha = 0.35f))
-                )
-            }
+            val isFirst = i == 0
+            val isLast = i == statCount - 1
+            val cardShape = RoundedCornerShape(
+                topStart = if (isFirst) outerRadius else innerRadius,
+                bottomStart = if (isFirst) outerRadius else innerRadius,
+                topEnd = if (isLast) outerRadius else innerRadius,
+                bottomEnd = if (isLast) outerRadius else innerRadius
+            )
             Column(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(cardShape)
+                    .background(scheme.surfaceColorAtElevation(2.dp))
+                    .padding(vertical = 10.dp, horizontal = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
@@ -1844,57 +1852,12 @@ internal fun AppDetailView(
             ),
             verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
         ) {
-            // Versions section
-            if (app.versions.isNotEmpty()) {
-                item(key = "versions") {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.History,
-                                contentDescription = null,
-                                tint = scheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                text = "Versions",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = scheme.onSurface
-                            )
-                        }
-                        AppVersionStrip(app.versions)
-                    }
-                }
-            }
-
             // Sources section
             if (sourceGroups.isEmpty()) {
                 item(key = "no_sources") {
                     MorpheEmptyState(message = "No patch sources listed for this app.")
                 }
             } else {
-                item(key = "sources_header") {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Dns,
-                            contentDescription = null,
-                            tint = scheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text(
-                            text = "Sources",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = scheme.onSurface
-                        )
-                    }
-                }
                 items(
                     items = sourceGroups,
                     key = { group ->
@@ -1902,9 +1865,11 @@ internal fun AppDetailView(
                     }
                 ) { group ->
                     AppSourceCard(
+                        packageName = app.packageName,
                         source = group.primary,
                         accentColor = sourceAccent,
                         mirrors = group.mirrors,
+                        appVersions = app.versions,
                         onOpenUrl = openUrl,
                         onAddToMorphe = { openAddSource(context, it) },
                         onViewPatches = { activePatchGroup = group },
@@ -2100,6 +2065,25 @@ internal fun AppDetailView(
             }
         }
 
+        // Telegram-style bottom dim scrim (above scrolling list, behind Close pill & system nav bar)
+        val detailNavHeight = with(density) {
+            androidx.compose.foundation.layout.WindowInsets.navigationBars.getBottom(this).toDp()
+        }
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(detailNavHeight + 76.dp)
+                .background(
+                    Brush.verticalGradient(
+                        0.0f to Color.Transparent,
+                        0.45f to scheme.background.copy(alpha = 0.55f),
+                        0.80f to scheme.background.copy(alpha = 0.85f),
+                        1.0f to scheme.background.copy(alpha = 0.96f)
+                    )
+                )
+        )
+
         // 3. Pinned Bottom "Close" Frosted Outlined Pill (exact port of Morphe AppDialogOutlinedButton)
         if (onBack != null) {
             val closeInteraction = remember { MutableInteractionSource() }
@@ -2177,46 +2161,58 @@ internal fun AppDetailView(
 
 @Composable
 internal fun AppSourceCard(
+    packageName: String,
     source: ArchiveSource,
     accentColor: Color,
     onOpenUrl: (String) -> Unit,
     onAddToMorphe: (String) -> Unit,
     onViewPatches: () -> Unit,
     onViewMirrorPatches: (ArchiveSource) -> Unit,
-    mirrors: List<ArchiveSource> = emptyList()
+    mirrors: List<ArchiveSource> = emptyList(),
+    appVersions: List<String> = emptyList()
 ) {
     var mirrorsExpanded by remember(source.repo) { mutableStateOf(false) }
+    var liveVersions by remember(source.repo, packageName) {
+        mutableStateOf<Map<String, List<String>>?>(null)
+    }
+    LaunchedEffect(source.repo, packageName) {
+        liveVersions = MorpheArchive.fetchPatchVersions(source, packageName)
+    }
+
     val colors = MaterialTheme.colorScheme
     val surface = colors.surfaceColorAtElevation(2.dp)
+    val owner = remember(source.repo) { source.repo.substringBefore('/', "") }
+    val repoName = remember(source.repo) { source.repo.substringAfter('/', source.repo) }
+    val bundleVersion = remember(source.latestChanges) { bundleVersionOf(source.latestChanges) }
+    val updatedDate = remember(source.latestChanges) {
+        formatReleaseDate(releaseDateOf(source.latestChanges))
+    }
+
+    val supportedAppVersions = remember(source.patches, liveVersions) {
+        val fromLive = liveVersions?.values?.flatten().orEmpty()
+        val fromIndex = source.patches.flatMap { it.versions }
+        (fromLive + fromIndex)
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.equals("null", ignoreCase = true) }
+            .distinct()
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
-            .drawWithCache {
-                val corner = CornerRadius(24.dp.toPx())
-                val fill = Brush.linearGradient(
-                    colors = listOf(
-                        lerp(surface, accentColor, 0.12f),
-                        lerp(surface, accentColor, 0.035f),
-                        surface
-                    ),
-                    start = Offset(0f, 0f),
-                    end = Offset(size.width, size.height)
-                )
-                onDrawBehind {
-                    drawRoundRect(brush = fill, cornerRadius = corner)
-                    drawRoundRect(
-                        brush = SolidColor(accentColor.copy(alpha = 0.28f)),
-                        cornerRadius = corner,
-                        style = Stroke(1.dp.toPx())
-                    )
-                }
-            }
+            .background(surface)
+            .border(
+                width = 1.dp,
+                color = colors.outlineVariant.copy(alpha = 0.25f),
+                shape = RoundedCornerShape(24.dp)
+            )
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // 1. Owner / Repo Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -2224,58 +2220,124 @@ internal fun AppSourceCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(13.dp))
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(14.dp))
                         .background(accentColor.copy(alpha = 0.14f)),
                     contentAlignment = Alignment.Center
                 ) {
                     AsyncAvatar(
                         url = MorpheArchive.avatarUrlFor(source),
                         fallbackText = source.repo.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
-                        size = 34.dp,
-                        cornerRadius = 10.dp
+                        size = 38.dp,
+                        cornerRadius = 11.dp
                     )
                 }
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
+                    if (owner.isNotEmpty()) {
+                        Text(
+                            text = owner,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                     Text(
-                        text = source.repo,
+                        text = repoName,
                         fontWeight = FontWeight.Bold,
                         color = colors.onSurface,
-                        style = MaterialTheme.typography.titleSmall,
+                        style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    MorpheStatusBadgeRow {
-                        MorpheStatusBadge(
-                            text = "${source.patches.size} " +
-                                    if (source.patches.size == 1) "patch" else "patches",
-                            icon = Icons.Outlined.Extension
-                        )
-                        formatBundleRelease(source.latestChanges)?.let { release ->
-                            MorpheStatusBadge(
-                                text = release,
-                                icon = Icons.Outlined.History
-                            )
-                        }
-                    }
                 }
             }
 
-            // Three buttons: Add | Patches | Repo
+            // 2. Metadata Strip: Patch Count | Bundle Version | Latest Update Date
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(colors.surfaceVariant.copy(alpha = 0.35f))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SourceMetaItem(
+                    icon = Icons.Outlined.Extension,
+                    text = "${source.patches.size} " + if (source.patches.size == 1) "patch" else "patches",
+                    modifier = Modifier.weight(1f)
+                )
+                bundleVersion?.let { ver ->
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height(14.dp)
+                            .background(colors.outlineVariant.copy(alpha = 0.4f))
+                    )
+                    SourceMetaItem(
+                        icon = Icons.Outlined.Dns,
+                        text = ver,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                updatedDate?.let { date ->
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height(14.dp)
+                            .background(colors.outlineVariant.copy(alpha = 0.4f))
+                    )
+                    SourceMetaItem(
+                        icon = Icons.Outlined.History,
+                        text = date,
+                        modifier = Modifier.weight(1.15f)
+                    )
+                }
+            }
+
+            // 3. Supported App Versions from patches-list.json (falls back to "Any version")
+            val versionsToDisplay = when {
+                liveVersions == null && supportedAppVersions.isEmpty() -> listOf("Loading…")
+                supportedAppVersions.isEmpty() -> listOf("Any version")
+                else -> supportedAppVersions
+            }
+            ExpandableVersionRow(
+                versions = versionsToDisplay,
+                chipShape = CircleShape,
+                chipHorizontalPadding = 10.dp,
+                chipVerticalPadding = 4.dp,
+                chipSpacing = 6.dp,
+                containerColorFor = { ver ->
+                    if (ver == "Any version" || ver == "Loading…") {
+                        colors.surfaceVariant.copy(alpha = 0.45f)
+                    } else {
+                        colors.primaryContainer.copy(alpha = 0.55f)
+                    }
+                },
+                contentColorFor = { ver ->
+                    if (ver == "Any version" || ver == "Loading…") {
+                        colors.onSurfaceVariant
+                    } else {
+                        colors.onPrimaryContainer
+                    }
+                }
+            )
+
+            // 4. Action Buttons: Repo | Patches | Add
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                source.addUrl?.takeIf { it.isNotBlank() }?.let { addUrl ->
+                source.webUrl?.takeIf { it.isNotBlank() }?.let { webUrl ->
                     MorphePillButton(
-                        onClick = { onAddToMorphe(addUrl) },
-                        icon = Icons.Outlined.Add,
-                        contentDescription = stringResource(R.string.add_to_morphe),
-                        label = "Add",
-                        tone = SemanticTone.Primary,
+                        onClick = { onOpenUrl(webUrl) },
+                        icon = Icons.Outlined.OpenInNew,
+                        contentDescription = stringResource(R.string.open_repo),
+                        label = "Repo",
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -2286,18 +2348,19 @@ internal fun AppSourceCard(
                     label = "Patches",
                     modifier = Modifier.weight(1f)
                 )
-                source.webUrl?.takeIf { it.isNotBlank() }?.let { webUrl ->
+                source.addUrl?.takeIf { it.isNotBlank() }?.let { addUrl ->
                     MorphePillButton(
-                        onClick = { onOpenUrl(webUrl) },
-                        icon = Icons.Outlined.OpenInNew,
-                        contentDescription = stringResource(R.string.open_repo),
-                        label = "Repo",
+                        onClick = { onAddToMorphe(addUrl) },
+                        icon = Icons.Outlined.Add,
+                        contentDescription = stringResource(R.string.add_to_morphe),
+                        label = "Add",
+                        tone = SemanticTone.Primary,
                         modifier = Modifier.weight(1f)
                     )
                 }
             }
 
-            // Expandable "Same patches also provided by" section below buttons
+            // 5. Compact Mirror Repos ("Same patches in N other repos")
             if (mirrors.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
@@ -2328,58 +2391,122 @@ internal fun AppSourceCard(
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             MorpheDivider(fullWidth = true)
                             mirrors.forEach { mirror ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                val mirrorVersion = bundleVersionOf(mirror.latestChanges)
+                                val mirrorDate = formatReleaseDate(releaseDateOf(mirror.latestChanges))
+                                val mirrorMeta = listOfNotNull(
+                                    "${mirror.patches.size} " + if (mirror.patches.size == 1) "patch" else "patches",
+                                    mirrorVersion,
+                                    mirrorDate
+                                ).joinToString(" · ")
+
+                                val mirrorIndexVersions = remember(mirror.patches) {
+                                    mirror.patches.flatMap { it.versions }
+                                        .map { it.trim() }
+                                        .filter { it.isNotEmpty() && !it.equals("null", ignoreCase = true) }
+                                        .distinct()
+                                }
+                                val mirrorVersionsToDisplay = when {
+                                    mirrorIndexVersions.isNotEmpty() -> mirrorIndexVersions
+                                    liveVersions == null && supportedAppVersions.isEmpty() -> listOf("Loading…")
+                                    supportedAppVersions.isEmpty() -> listOf("Any version")
+                                    else -> supportedAppVersions
+                                }
+
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(colors.surfaceVariant.copy(alpha = 0.28f))
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    AsyncAvatar(
-                                        url = MorpheArchive.avatarUrlFor(mirror),
-                                        fallbackText = mirror.repo
-                                            .firstOrNull()?.uppercaseChar()?.toString() ?: "?",
-                                        size = 28.dp,
-                                        cornerRadius = 8.dp
-                                    )
-                                    Column(
-                                        modifier = Modifier.weight(1f),
-                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text(
-                                            text = mirror.repo,
-                                            color = colors.onSurface,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontWeight = FontWeight.Medium,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
+                                        AsyncAvatar(
+                                            url = MorpheArchive.avatarUrlFor(mirror),
+                                            fallbackText = mirror.repo
+                                                .firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+                                            size = 28.dp,
+                                            cornerRadius = 8.dp
                                         )
-                                        formatBundleRelease(mirror.latestChanges)?.let { release ->
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                                        ) {
                                             Text(
-                                                text = release,
-                                                color = colors.onSurfaceVariant.copy(alpha = 0.75f),
-                                                style = MaterialTheme.typography.labelSmall,
+                                                text = mirror.repo,
+                                                color = colors.onSurface,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = mirrorMeta,
+                                                color = colors.onSurfaceVariant.copy(alpha = 0.78f),
+                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
                                         }
                                     }
-                                    mirror.addUrl?.takeIf { it.isNotBlank() }?.let { addUrl ->
-                                        MorphePillButton(
-                                            onClick = { onAddToMorphe(addUrl) },
-                                            icon = Icons.Outlined.Add,
-                                            contentDescription = "Add ${mirror.repo} to Morphe"
-                                        )
-                                    }
-                                    MorphePillButton(
-                                        onClick = { onViewMirrorPatches(mirror) },
-                                        icon = Icons.Outlined.Extension,
-                                        contentDescription = "View ${mirror.repo} patches"
+
+                                    // Compact version pills matching the primary source card
+                                    ExpandableVersionRow(
+                                        versions = mirrorVersionsToDisplay,
+                                        chipShape = CircleShape,
+                                        chipHorizontalPadding = 8.dp,
+                                        chipVerticalPadding = 3.dp,
+                                        chipSpacing = 5.dp,
+                                        containerColorFor = { ver ->
+                                            if (ver == "Any version" || ver == "Loading…") {
+                                                colors.surfaceVariant.copy(alpha = 0.45f)
+                                            } else {
+                                                colors.primaryContainer.copy(alpha = 0.55f)
+                                            }
+                                        },
+                                        contentColorFor = { ver ->
+                                            if (ver == "Any version" || ver == "Loading…") {
+                                                colors.onSurfaceVariant
+                                            } else {
+                                                colors.onPrimaryContainer
+                                            }
+                                        }
                                     )
-                                    mirror.webUrl?.takeIf { it.isNotBlank() }?.let { webUrl ->
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        mirror.webUrl?.takeIf { it.isNotBlank() }?.let { webUrl ->
+                                            MorphePillButton(
+                                                onClick = { onOpenUrl(webUrl) },
+                                                icon = Icons.Outlined.OpenInNew,
+                                                contentDescription = "Open ${mirror.repo}",
+                                                label = "Repo",
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
                                         MorphePillButton(
-                                            onClick = { onOpenUrl(webUrl) },
-                                            icon = Icons.Outlined.OpenInNew,
-                                            contentDescription = "Open ${mirror.repo}"
+                                            onClick = { onViewMirrorPatches(mirror) },
+                                            icon = Icons.Outlined.Extension,
+                                            contentDescription = "View ${mirror.repo} patches",
+                                            label = "Patches",
+                                            modifier = Modifier.weight(1f)
                                         )
+                                        mirror.addUrl?.takeIf { it.isNotBlank() }?.let { addUrl ->
+                                            MorphePillButton(
+                                                onClick = { onAddToMorphe(addUrl) },
+                                                icon = Icons.Outlined.Add,
+                                                contentDescription = "Add ${mirror.repo} to Morphe",
+                                                label = "Add",
+                                                tone = SemanticTone.Primary,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -2388,6 +2515,35 @@ internal fun AppSourceCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SourceMetaItem(
+    icon: ImageVector,
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    val colors = MaterialTheme.colorScheme
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = colors.onSurfaceVariant,
+            modifier = Modifier.size(13.dp)
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
+            color = colors.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -2416,7 +2572,9 @@ private fun SourcePatchesScreen(
     val headerHaze = remember { HazeState() }
     val density = LocalDensity.current
     var headerHeightDp by remember { mutableStateOf(0.dp) }
+    var footerHeightDp by remember { mutableStateOf(0.dp) }
     val colors = MaterialTheme.colorScheme
+    val monochrome = LocalMonochromeTheme.current
 
     val isScrolled by remember(listState) {
         derivedStateOf {
@@ -2438,10 +2596,11 @@ private fun SourcePatchesScreen(
     }
 
     val filteredPatches = remember(source.patches, patchQuery) {
+        val indexed = source.patches.mapIndexed { idx, patch -> (idx + 1) to patch }
         if (patchQuery.isBlank()) {
-            source.patches
+            indexed
         } else {
-            source.patches.filter { patch ->
+            indexed.filter { (_, patch) ->
                 patch.name.contains(patchQuery, ignoreCase = true) ||
                         patch.description?.contains(patchQuery, ignoreCase = true) == true ||
                         patch.versions.any { it.contains(patchQuery, ignoreCase = true) }
@@ -2465,7 +2624,7 @@ private fun SourcePatchesScreen(
                 top = headerHeightDp + 10.dp,
                 start = MorpheDefaults.ContentPadding,
                 end = MorpheDefaults.ContentPadding,
-                bottom = 32.dp
+                bottom = footerHeightDp + 24.dp
             )
         ) {
             if (filteredPatches.isEmpty()) {
@@ -2479,16 +2638,13 @@ private fun SourcePatchesScreen(
                     )
                 }
             } else {
-                itemsIndexed(filteredPatches, key = { index, patch -> "${patch.name}_$index" }) { index, patch ->
+                itemsIndexed(
+                    filteredPatches,
+                    key = { _, (originalNumber, patch) -> "${patch.name}_$originalNumber" }
+                ) { index, (originalNumber, patch) ->
                     val isFirst = index == 0
                     val isLast = index == filteredPatches.lastIndex
 
-                    // =========================================================================
-                    // Patch Card Corners & Spacing (matches Find Apps cards)
-                    // outerRadius  = top corners of first card & bottom corners of last card
-                    // innerRadius  = corners between middle cards
-                    // cardSpacing  = vertical gap between patch cards
-                    // =========================================================================
                     val outerRadius = 22.dp
                     val innerRadius = 10.dp
                     val cardSpacing = 3.dp
@@ -2510,7 +2666,6 @@ private fun SourcePatchesScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.Top
                     ) {
-                        // Neutral high-contrast index badge (no dark accentColor tint)
                         Box(
                             modifier = Modifier
                                 .size(26.dp)
@@ -2519,7 +2674,7 @@ private fun SourcePatchesScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = (index + 1).toString(),
+                                text = originalNumber.toString(),
                                 color = colors.onSurface,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold
@@ -2581,7 +2736,7 @@ private fun SourcePatchesScreen(
             }
         }
 
-        // Top Header: Source Name as title & Patch Count as subtitle (40.dp controls matching Find Apps)
+        // Top Header: Source Name + Patch Count on Left, Search Button on Right
         Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -2625,7 +2780,7 @@ private fun SourcePatchesScreen(
             ) { isSearchActive ->
                 if (isSearchActive) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxSize(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -2711,20 +2866,10 @@ private fun SourcePatchesScreen(
                     }
                 } else {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxSize(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        GlassHeaderButton(
-                            icon = Icons.AutoMirrored.Outlined.ArrowBack,
-                            contentDescription = stringResource(R.string.back),
-                            onClick = {
-                                focusManager.clearFocus(force = true)
-                                keyboardController?.hide()
-                                onBack()
-                            }
-                        )
-
                         Column(
                             modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.Center
@@ -2735,7 +2880,7 @@ private fun SourcePatchesScreen(
                                 fontWeight = FontWeight.Bold,
                                 color = colors.onBackground,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                modifier = Modifier.basicMarquee()
                             )
                             Text(
                                 text = "${source.patches.size} " +
@@ -2754,6 +2899,78 @@ private fun SourcePatchesScreen(
                         )
                     }
                 }
+            }
+        }
+
+        // Telegram-style bottom dim scrim (above scrolling list, behind Close pill & system nav bar)
+        val patchesNavHeight = with(density) {
+            androidx.compose.foundation.layout.WindowInsets.navigationBars.getBottom(this).toDp()
+        }
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(patchesNavHeight + 76.dp)
+                .background(
+                    Brush.verticalGradient(
+                        0.0f to Color.Transparent,
+                        0.45f to colors.background.copy(alpha = 0.55f),
+                        0.80f to colors.background.copy(alpha = 0.85f),
+                        1.0f to colors.background.copy(alpha = 0.96f)
+                    )
+                )
+        )
+
+        // Pinned Bottom "Close" Frosted Outlined Pill (matching AppDetailView)
+        val closeInteraction = remember { MutableInteractionSource() }
+        val closeBorderColor = if (monochrome) {
+            colors.outlineVariant.copy(alpha = 0.5f)
+        } else {
+            accentColor.copy(alpha = 0.35f)
+        }
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .onSizeChanged { size ->
+                    footerHeightDp = with(density) { size.height.toDp() }
+                }
+                .navigationBarsPadding()
+                .padding(
+                    horizontal = MorpheDefaults.ContentPadding,
+                    vertical = 12.dp
+                )
+        ) {
+            androidx.compose.material3.OutlinedButton(
+                onClick = {
+                    focusManager.clearFocus(force = true)
+                    keyboardController?.hide()
+                    onBack()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .pressScale(closeInteraction)
+                    .glassFill(
+                        glass = Color.Transparent,
+                        shape = CircleShape,
+                        hazeState = headerHaze
+                    ),
+                interactionSource = closeInteraction,
+                shape = CircleShape,
+                colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                    containerColor = Color.Transparent,
+                    contentColor = colors.onSurface.copy(alpha = 0.85f)
+                ),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.close),
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
