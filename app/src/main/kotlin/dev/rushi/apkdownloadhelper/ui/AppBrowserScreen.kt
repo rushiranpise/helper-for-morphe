@@ -42,6 +42,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -54,6 +55,7 @@ import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SortByAlpha
@@ -174,17 +176,21 @@ internal object MorpheFavourites {
 }
 
 /** One number in the archive dashboard. */
-private data class FindAppsStat(val label: String, val value: Int)
+private data class FindAppsStat(
+    val label: String,
+    val value: Int,
+    val icon: ImageVector
+)
 
 /** Four archive totals, shown as one compact panel before the list warning. */
 @Composable
 private fun FindAppsStatsDashboard(index: MorpheArchiveIndex) {
     val scheme = MaterialTheme.colorScheme
     val stats = listOf(
-        FindAppsStat("SOURCES", index.repoCount),
-        FindAppsStat("APPS", index.appCount),
-        FindAppsStat("PATCHES", index.patchCount),
-        FindAppsStat("UNIVERSAL", index.universalPatchCount)
+        FindAppsStat("SOURCES", index.repoCount, Icons.Outlined.Dns),
+        FindAppsStat("APPS", index.appCount, Icons.Outlined.Apps),
+        FindAppsStat("PATCHES", index.patchCount, Icons.Outlined.Extension),
+        FindAppsStat("UNIVERSAL", index.universalPatchCount, Icons.Outlined.Public)
     )
     SurfaceCard(
         cornerRadius = MorpheDefaults.SectionCornerRadius,
@@ -219,24 +225,44 @@ private fun FindAppsStatsDashboard(index: MorpheArchiveIndex) {
 @Composable
 private fun FindAppsStatItem(stat: FindAppsStat, modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
-    Column(
+    Row(
         modifier = modifier.padding(horizontal = 14.dp, vertical = 13.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(1.dp)
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = stat.value.toString(),
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = scheme.onSurface,
-            maxLines = 1
-        )
-        Text(
-            text = stat.label,
-            style = MaterialTheme.typography.labelSmall,
-            color = scheme.onSurfaceVariant,
-            maxLines = 1
-        )
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(scheme.primary.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = stat.icon,
+                contentDescription = null,
+                tint = scheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(
+            modifier = Modifier.weight(1f),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(1.dp)
+        ) {
+            Text(
+                text = stat.value.toString(),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = scheme.onSurface,
+                maxLines = 1
+            )
+            Text(
+                text = stat.label,
+                style = MaterialTheme.typography.labelSmall,
+                color = scheme.onSurfaceVariant,
+                maxLines = 1
+            )
+        }
     }
 }
 
