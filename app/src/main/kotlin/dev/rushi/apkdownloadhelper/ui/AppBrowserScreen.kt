@@ -428,13 +428,17 @@ internal fun AppBrowserScreen(
                     onClick = { searchOpen = false }
                 )
             } else {
-                FindAppsHeaderAction(
-                    icon = Icons.AutoMirrored.Outlined.ArrowBack,
-                    contentDescription = stringResource(R.string.back),
-                    onClick = {
-                        if (selected != null) selected = null else onBack?.invoke()
-                    }
-                )
+                // The list is a bottom-tab root, so only show a back arrow when it
+                // came from another screen or is leaving an app detail.
+                if (selected != null || onBack != null) {
+                    FindAppsHeaderAction(
+                        icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                        contentDescription = stringResource(R.string.back),
+                        onClick = {
+                            if (selected != null) selected = null else onBack?.invoke()
+                        }
+                    )
+                }
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
