@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.util.LruCache
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
@@ -70,6 +71,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -125,11 +127,18 @@ import dev.rushi.apkdownloadhelper.updater.groupArchiveSources
 import dev.rushi.apkdownloadhelper.updater.newestReleaseDate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.Request
+import okhttp3.Response
+import java.io.IOException
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.coroutines.resume
 
 
 internal enum class AppListTab(
@@ -526,33 +535,47 @@ internal fun AppBrowserScreen(
                 }
                 else -> {
                     val index = archiveIndex
-                    val filtered = loaded
-                        .filter { app ->
-                            query.isBlank() ||
-                                app.name.contains(query, ignoreCase = true) ||
-                                app.packageName.contains(query, ignoreCase = true)
-                        }
-                        .filter { app ->
-                            when (tab) {
-                                AppListTab.All -> true
-                                AppListTab.Favourites -> app.packageName in favourites
-                                AppListTab.Installed -> app.packageName in installedPackages
-                                AppListTab.NotInstalled -> app.packageName !in installedPackages
+                    // Filter and sort the catalogue only when one of its inputs
+                    // changes, not when scroll state toggles the header.
+                    val filtered = remember(
+                        loaded,
+                        query,
+                        tab,
+                        sort,
+                        favourites,
+                        installedPackages
+                    ) {
+                        loaded
+                            .asSequence()
+                            .filter { app ->
+                                query.isBlank() ||
+                                    app.name.contains(query, ignoreCase = true) ||
+                                    app.packageName.contains(query, ignoreCase = true)
                             }
-                        }
-                        .let { matches ->
-                            when (sort) {
-                                AppSort.AZ -> matches.sortedBy { it.name.lowercase(Locale.US) }
-                                AppSort.ZA -> matches.sortedByDescending { it.name.lowercase(Locale.US) }
-                                AppSort.Sources -> matches.sortedByDescending { it.sourceCount }
-                                // Keyed once per app and then sorted, rather than
-                                // recomputing the newest release on every comparison.
-                                AppSort.Newest -> matches
-                                    .map { app -> app.newestReleaseDate().orEmpty() to app }
-                                    .sortedByDescending { it.first }
-                                    .map { it.second }
+                            .filter { app ->
+                                when (tab) {
+                                    AppListTab.All -> true
+                                    AppListTab.Favourites -> app.packageName in favourites
+                                    AppListTab.Installed -> app.packageName in installedPackages
+                                    AppListTab.NotInstalled -> app.packageName !in installedPackages
+                                }
                             }
-                        }
+                            .toList()
+                            .let { matches ->
+                                when (sort) {
+                                    AppSort.AZ -> matches.sortedBy { it.name.lowercase(Locale.US) }
+                                    AppSort.ZA ->
+                                        matches.sortedByDescending { it.name.lowercase(Locale.US) }
+                                    AppSort.Sources -> matches.sortedByDescending { it.sourceCount }
+                                    // Keyed once per app and then sorted, rather than
+                                    // recomputing the newest release on every comparison.
+                                    AppSort.Newest -> matches
+                                        .map { app -> app.newestReleaseDate().orEmpty() to app }
+                                        .sortedByDescending { it.first }
+                                        .map { it.second }
+                                }
+                            }
+                    }
                     // The disclaimer and list options are the tallest elements on this
                     // screen, so they step aside once the list is scrolled and come back
                     // at the top, which the "Go to top" button reaches in one tap. An
@@ -619,14 +642,17 @@ internal fun AppBrowserScreen(
                                     state = listState,
                                     modifier = Modifier
                                         .weight(1f)
-                                        .fillMaxHeight()
-                                        .verticalScrollFade(listState),
+                                        .fillMaxHeight(),
                                     // Keep the last row clear of the floating
                                     // "Go to top" button.
                                     contentPadding = PaddingValues(bottom = 64.dp),
                                     verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
                                 ) {
-                                    items(filtered, key = { it.packageName }) { app ->
+                                    items(
+                                        items = filtered,
+                                        key = { it.packageName },
+                                        contentType = { "app" }
+                                    ) { app ->
                                         FindAppCard(
                                             app = app,
                                             installed = app.packageName in installedPackages,
@@ -637,10 +663,7 @@ internal fun AppBrowserScreen(
                                             onClick = {
                                                 optionsOpen = false
                                                 selected = app
-                                            },
-                                            // Rows settle into their new places with a spring, so
-                                            // re-sorting or filtering glides instead of jumping.
-                                            modifier = Modifier.animatedListItem(this)
+                                            }
                                         )
                                     }
                                 }
@@ -874,13 +897,14 @@ private fun FindAppCard(
             Shadow(Color.Black.copy(alpha = 0.35f), Offset(0f, 1f), 2f)
         }
     )
-    val released = formatReleaseDate(app.newestReleaseDate())
+    val released = remember(app.packageName, app.sources) {
+        formatReleaseDate(app.newestReleaseDate())
+    }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 88.dp)
-            .pressScale(interactionSource)
             .clip(shape)
             .drawWithCache {
                 val corner = CornerRadius(24.dp.toPx())
@@ -923,7 +947,13 @@ private fun FindAppCard(
             }
             .clickable(
                 interactionSource = interactionSource,
-                indication = null,
+                indication = ripple(
+                    color = if (monochrome) {
+                        scheme.primary.copy(alpha = 0.18f)
+                    } else {
+                        Color.White.copy(alpha = 0.28f)
+                    }
+                ),
                 onClick = onClick
             ),
         contentAlignment = Alignment.CenterStart
@@ -1380,8 +1410,49 @@ private fun <T> FindAppsOptionRow(
     }
 }
 
-/** Decoded archive icons, kept so scrolling a list does not re-fetch every row. */
-private val archiveIconCache = ConcurrentHashMap<String, ImageBitmap>()
+/** Decoded archive icons, bounded so a long scroll cannot fill the heap. */
+private const val ARCHIVE_ICON_CACHE_BYTES = 12 * 1024 * 1024
+
+private val archiveIconCache = object : LruCache<String, ImageBitmap>(ARCHIVE_ICON_CACHE_BYTES) {
+    override fun sizeOf(key: String, value: ImageBitmap): Int =
+        value.width * value.height * 4
+}
+
+/** Icon fetch that is cancelled when the row leaves the viewport. */
+private suspend fun fetchArchiveIcon(iconUrl: String): ImageBitmap? {
+    // The archive is third-party data, so a malformed icon URL must only leave
+    // the row on its letter tile rather than fail the composition.
+    val request = runCatching {
+        Request.Builder()
+            .url(iconUrl)
+            .header(
+                "User-Agent",
+                "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Mobile Safari/537.36"
+            )
+            .build()
+    }.getOrNull() ?: return null
+    val call = MorpheArchive.http.newCall(request)
+    return suspendCancellableCoroutine { continuation ->
+        continuation.invokeOnCancellation { call.cancel() }
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                if (continuation.isActive) continuation.resume(null)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                val bitmap = runCatching {
+                    response.use {
+                        if (!it.isSuccessful) return@use null
+                        it.body.bytes().let { bytes ->
+                            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        }?.asImageBitmap()
+                    }
+                }.getOrNull()
+                if (continuation.isActive) continuation.resume(bitmap)
+            }
+        })
+    }
+}
 
 /**
  * Small async image loader for source avatars: fetches the URL off the main
@@ -1405,27 +1476,17 @@ internal fun AsyncAvatar(
             bitmap = null
             return@LaunchedEffect
         }
-        archiveIconCache[iconUrl]?.let {
+        archiveIconCache.get(iconUrl)?.let {
             bitmap = it
             return@LaunchedEffect
         }
-        bitmap = withContext(Dispatchers.IO) {
-            runCatching {
-                val request = Request.Builder()
-                    .url(iconUrl)
-                    .header(
-                        "User-Agent",
-                        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Mobile Safari/537.36"
-                    )
-                    .build()
-                MorpheArchive.http.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) return@use null
-                    response.body?.bytes()?.let { bytes ->
-                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                    }?.asImageBitmap()
-                }
-            }.getOrNull()
-        }?.also { archiveIconCache[iconUrl] = it }
+        // A fling composes rows faster than icons can load. Let the row settle
+        // first so a fast scroll does not queue an image for every card that
+        // passes through the viewport.
+        delay(120)
+        val loaded = fetchArchiveIcon(iconUrl) ?: return@LaunchedEffect
+        archiveIconCache.put(iconUrl, loaded)
+        bitmap = loaded
     }
     if (bitmap != null) {
         Image(
