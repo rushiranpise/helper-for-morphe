@@ -162,7 +162,20 @@ import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Public
 import dev.rushi.apkdownloadhelper.updater.MorpheArchiveIndex
 import androidx.compose.foundation.basicMarquee
-
+import androidx.compose.animation.core.EaseOutBack
+import androidx.compose.animation.core.EaseOutCubic
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.spring
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.util.lerp
+import kotlin.math.roundToInt
 
 internal enum class AppListTab(
     val label: String,
@@ -1687,6 +1700,57 @@ private fun AppVersionStrip(versions: List<String>) {
     )
 }
 
+@Stable
+private class DetailHeaderCollapse {
+    var folded by mutableFloatStateOf(0f)
+        private set
+
+    private var range = 0
+    private var drags = 0
+
+    val connection: NestedScrollConnection = object : NestedScrollConnection {
+        override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+            if (source == NestedScrollSource.UserInput) drags++
+            return Offset.Zero
+        }
+
+        override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+            folded = (folded - consumed.y - available.y.coerceAtLeast(0f)).coerceIn(0f, range.toFloat())
+            return Offset.Zero
+        }
+
+        override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+            if (folded > 0f && folded < range) {
+                easeTo(if (folded < range / 2f) 0f else range.toFloat())
+            }
+            return Velocity.Zero
+        }
+    }
+
+    private suspend fun easeTo(target: Float) {
+        val drag = drags
+        animate(folded, target, animationSpec = tween(220)) { value, _ ->
+            if (drags == drag) folded = value
+        }
+    }
+
+    fun measured(height: Int) {
+        range = height
+        if (folded > height) folded = height.toFloat()
+    }
+}
+
+private fun Modifier.foldsWith(collapse: DetailHeaderCollapse): Modifier =
+    clipToBounds().layout { measurable, constraints ->
+        val placeable = measurable.measure(constraints)
+        collapse.measured(placeable.height)
+        val height = (placeable.height - collapse.folded.roundToInt()).coerceAtLeast(0)
+        layout(placeable.width, height) {
+            placeable.place(0, height - placeable.height)
+        }
+    }
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun AppDetailView(
     app: ArchiveApp,
@@ -1718,7 +1782,30 @@ internal fun AppDetailView(
     val scheme = MaterialTheme.colorScheme
     val detailListState = rememberLazyListState()
     val detailHeaderHaze = remember { HazeState() }
-    var headerHeightDp by remember { mutableStateOf(0.dp) }
+    val collapse = remember(app.packageName) { DetailHeaderCollapse() }
+    var unfoldedHeaderHeightDp by remember { mutableStateOf(0.dp) }
+    var footerHeightDp by remember { mutableStateOf(0.dp) }
+
+    // Morphe DialogHeaderEntrance clocks (icon spring, text slide, badges rise)
+    var headerEntered by remember(app.packageName) { mutableStateOf(false) }
+    LaunchedEffect(app.packageName) { headerEntered = true }
+    val entranceTarget = if (headerEntered) 1f else 0f
+
+    val iconEntrance by animateFloatAsState(
+        targetValue = entranceTarget,
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = 320f),
+        label = "morphe_header_icon_entrance"
+    )
+    val textEntrance by animateFloatAsState(
+        targetValue = entranceTarget,
+        animationSpec = tween(durationMillis = 260, delayMillis = 60, easing = EaseOutCubic),
+        label = "morphe_header_text_entrance"
+    )
+    val badgesEntrance by animateFloatAsState(
+        targetValue = entranceTarget,
+        animationSpec = tween(durationMillis = 240, delayMillis = 160, easing = EaseOutBack),
+        label = "morphe_header_badges_entrance"
+    )
 
     val openUrl: (String) -> Unit = { url ->
         runCatching {
@@ -1730,317 +1817,358 @@ internal fun AppDetailView(
     val sourceAccent = if (monochrome) scheme.primary else appPalette.gradient[1]
     val released = formatReleaseDate(app.newestReleaseDate())
 
+    val headerBandShape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp)
+    val bandTint = if (monochrome) {
+        scheme.surfaceColorAtElevation(3.dp).copy(alpha = 0.92f)
+    } else {
+        lerp(scheme.surfaceColorAtElevation(2.dp), sourceAccent, 0.16f).copy(alpha = 0.92f)
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(scheme.background)
+            .nestedScroll(collapse.connection)
     ) {
-        Box(
-            modifier = modifier
+        // 1. Base App Details List (scrolls under floating header & pinned Close footer)
+        LazyColumn(
+            state = detailListState,
+            modifier = Modifier
                 .fillMaxSize()
-                .background(scheme.background)
+                .hazeSource(state = detailHeaderHaze),
+            contentPadding = PaddingValues(
+                top = unfoldedHeaderHeightDp + 12.dp,
+                start = MorpheDefaults.ContentPadding,
+                end = MorpheDefaults.ContentPadding,
+                bottom = footerHeightDp + 16.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
         ) {
-            // 1. Base App Details Layer
-            LazyColumn(
-                state = detailListState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .hazeSource(state = detailHeaderHaze),
-                contentPadding = PaddingValues(
-                    top = headerHeightDp + 10.dp,
-                    start = MorpheDefaults.ContentPadding,
-                    end = MorpheDefaults.ContentPadding,
-                    bottom = 32.dp
-                ),
-                verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing)
-            ) {
-                // 1. Sources, Versions & Updated pills directly below the header
-                item(key = "meta_pills") {
+            // Versions section
+            if (app.versions.isNotEmpty()) {
+                item(key = "versions") {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.History,
+                                contentDescription = null,
+                                tint = scheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "Versions",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = scheme.onSurface
+                            )
+                        }
+                        AppVersionStrip(app.versions)
+                    }
+                }
+            }
+
+            // Sources section
+            if (sourceGroups.isEmpty()) {
+                item(key = "no_sources") {
+                    MorpheEmptyState(message = "No patch sources listed for this app.")
+                }
+            } else {
+                item(key = "sources_header") {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Dns,
+                            contentDescription = null,
+                            tint = scheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = "Sources",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = scheme.onSurface
+                        )
+                    }
+                }
+                items(
+                    items = sourceGroups,
+                    key = { group ->
+                        group.primary.patches.map { it.name }.sorted().joinToString("\u0000")
+                    }
+                ) { group ->
+                    AppSourceCard(
+                        source = group.primary,
+                        accentColor = sourceAccent,
+                        mirrors = group.mirrors,
+                        onOpenUrl = openUrl,
+                        onAddToMorphe = { openAddSource(context, it) },
+                        onViewPatches = { activePatchGroup = group },
+                        onViewMirrorPatches = { mirrorSource ->
+                            activePatchGroup = dev.rushi.apkdownloadhelper.updater.ArchiveSourceGroup(
+                                primary = mirrorSource,
+                                mirrors = emptyList()
+                            )
+                        }
+                    )
+                }
+            }
+
+            // Standard neutral gray Play Store button matching Patches/Repo buttons
+            item(key = "play_store_action") {
+                Surface(
+                    onClick = {
+                        context.openPlayStoreListing(
+                            app.packageName,
+                            playStoreUrl(app.packageName)
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
+                        .height(52.dp),
+                    shape = CircleShape,
+                    color = scheme.surfaceVariant.copy(alpha = 0.65f),
+                    contentColor = scheme.onSurface,
+
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_src_play),
+                            contentDescription = null,
+                            tint = Color.Unspecified,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = stringResource(R.string.open_in_play_store),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+
+        // 2. Morphe Official ListDialogHeader Band (pure icon + title + subtitle + 1-row scrollable badges)
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .onSizeChanged { size ->
+                    val measuredDp = with(density) { size.height.toDp() }
+                    if (collapse.folded == 0f && measuredDp > 0.dp) {
+                        unfoldedHeaderHeightDp = measuredDp
+                    }
+                }
+                .clip(headerBandShape)
+                .glassFill(
+                    glass = MorpheColors.glassContainerColor(),
+                    shape = headerBandShape,
+                    hazeState = detailHeaderHaze
+                )
+                .background(bandTint)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(
+                        horizontal = MorpheDefaults.ContentPadding,
+                        vertical = 14.dp
+                    )
+            ) {
+                // Pinned Top Row: 48.dp Rounded App Icon + Bold App Name + Package Name Subtitle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .graphicsLayer {
+                                val s = lerp(0.6f, 1f, iconEntrance)
+                                scaleX = s
+                                scaleY = s
+                                alpha = iconEntrance.coerceIn(0f, 1f)
+                            }
+                    ) {
+                        FindAppIcon(
+                            app = app,
+                            gradient = appPalette.gradient,
+                            installed = installed,
+                            size = 48.dp,
+                            cornerRadius = 14.dp
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = app.name,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = scheme.onSurface,
+                            maxLines = 1,
+                            modifier = Modifier
+                                .graphicsLayer {
+                                    translationX = lerp(40f, 0f, textEntrance)
+                                    alpha = textEntrance.coerceIn(0f, 1f)
+                                }
+                                .basicMarquee()
+                        )
+                        val subtitleProgress = ((textEntrance - 0.15f) / 0.85f).coerceIn(0f, 1f)
+                        Text(
+                            text = app.packageName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = scheme.onSurfaceVariant,
+                            maxLines = 1,
+                            modifier = Modifier
+                                .graphicsLayer {
+                                    translationX = lerp(40f, 0f, subtitleProgress)
+                                    alpha = subtitleProgress
+                                }
+                                .basicMarquee()
+                        )
+                    }
+                }
+
+                // Single-row horizontally scrollable badges that collapse smoothly on scroll
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .foldsWith(collapse)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp)
+                            .horizontalScroll(rememberScrollState())
+                            .graphicsLayer {
+                                translationY = lerp(20f, 0f, badgesEntrance)
+                                alpha = badgesEntrance.coerceIn(0f, 1f)
+                            },
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val badgeFill = if (monochrome) {
+                            scheme.surfaceVariant.copy(alpha = 0.65f)
+                        } else {
+                            lerp(scheme.surfaceVariant, sourceAccent, 0.25f).copy(alpha = 0.65f)
+                        }
                         MorpheStatusBadge(
                             text = "${app.sourceCount} " +
                                     if (app.sourceCount == 1) "source" else "sources",
                             icon = Icons.Outlined.Dns,
-                            containerColor = scheme.surfaceVariant.copy(alpha = 0.55f),
-                            contentColor = scheme.onSurfaceVariant
+                            containerColor = badgeFill,
+                            contentColor = scheme.onSurface
                         )
                         if (app.versions.isNotEmpty()) {
                             MorpheStatusBadge(
                                 text = "${app.versions.size} " +
                                         if (app.versions.size == 1) "version" else "versions",
                                 icon = Icons.Outlined.History,
-                                containerColor = scheme.surfaceVariant.copy(alpha = 0.55f),
-                                contentColor = scheme.onSurfaceVariant
+                                containerColor = badgeFill,
+                                contentColor = scheme.onSurface
                             )
                         }
                         released?.let { date ->
                             MorpheStatusBadge(
                                 text = "Updated $date",
-                                containerColor = scheme.surfaceVariant.copy(alpha = 0.55f),
-                                contentColor = scheme.onSurfaceVariant
+                                icon = Icons.Outlined.History,
+                                containerColor = badgeFill,
+                                contentColor = scheme.onSurface
                             )
                         }
-                    }
-                }
-
-                // 2. Versions section with plain icon
-                if (app.versions.isNotEmpty()) {
-                    item(key = "versions") {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.History,
-                                    contentDescription = null,
-                                    tint = scheme.onSurfaceVariant,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Text(
-                                    text = "Versions",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = scheme.onSurface
-                                )
-                            }
-                            AppVersionStrip(app.versions)
-                        }
-                    }
-                }
-
-                // 3. Sources section with plain icon
-                if (sourceGroups.isEmpty()) {
-                    item(key = "no_sources") {
-                        MorpheEmptyState(message = "No patch sources listed for this app.")
-                    }
-                } else {
-                    item(key = "sources_header") {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Dns,
-                                contentDescription = null,
-                                tint = scheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                text = "Sources",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = scheme.onSurface
-                            )
-                        }
-                    }
-                    items(
-                        items = sourceGroups,
-                        key = { group ->
-                            group.primary.patches.map { it.name }.sorted().joinToString("\u0000")
-                        }
-                    ) { group ->
-                        AppSourceCard(
-                            source = group.primary,
-                            accentColor = sourceAccent,
-                            mirrors = group.mirrors,
-                            onOpenUrl = openUrl,
-                            onAddToMorphe = { openAddSource(context, it) },
-                            onViewPatches = { activePatchGroup = group },
-                            onViewMirrorPatches = { mirrorSource ->
-                                activePatchGroup = dev.rushi.apkdownloadhelper.updater.ArchiveSourceGroup(
-                                    primary = mirrorSource,
-                                    mirrors = emptyList()
-                                )
-                            }
-                        )
                     }
                 }
             }
+        }
 
-            // 2. Telegram-style top dark gradient scrim so status bar & floating pills stay crisp on scroll
+        // 3. Pinned Bottom "Close" Frosted Outlined Pill (exact port of Morphe AppDialogOutlinedButton)
+        if (onBack != null) {
+            val closeInteraction = remember { MutableInteractionSource() }
+            val closeBorderColor = if (monochrome) {
+                scheme.outlineVariant.copy(alpha = 0.5f)
+            } else {
+                sourceAccent.copy(alpha = 0.35f)
+            }
+
             Box(
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .fillMaxWidth()
-                    .height(headerHeightDp + 16.dp)
-                    .background(
-                        Brush.verticalGradient(
-                            0.0f to scheme.background.copy(alpha = 0.96f),
-                            0.68f to scheme.background.copy(alpha = 0.84f),
-                            1.0f to Color.Transparent
-                        )
-                    )
-            )
-
-            // 3. Telegram-style floating 3-pill header (all 40.dp height matching Find Apps header)
-            Row(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
+                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .onSizeChanged { size ->
-                        headerHeightDp = with(density) { size.height.toDp() }
+                        footerHeightDp = with(density) { size.height.toDp() }
                     }
-                    .statusBarsPadding()
+                    .navigationBarsPadding()
                     .padding(
                         horizontal = MorpheDefaults.ContentPadding,
                         vertical = 12.dp
-                    ),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    )
             ) {
-                // Circular Blurred Back button (40.dp)
-                if (onBack != null) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .glassFill(
-                                glass = MorpheColors.glassContainerColor(),
-                                shape = CircleShape,
-                                hazeState = detailHeaderHaze
-                            )
-                            .clickable(role = Role.Button, onClick = onBack),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                            contentDescription = stringResource(R.string.back),
-                            tint = scheme.onSurface,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-
-                // Center Blurred + Gradient App Pill (40.dp height, full-bleed 40.dp logo)
-                val titleColor = if (monochrome) scheme.onSurface else appPalette.title
-                val subtitleColor = if (monochrome) scheme.onSurfaceVariant else appPalette.subtitle
-
-                Box(
+                androidx.compose.material3.OutlinedButton(
+                    onClick = onBack,
                     modifier = Modifier
-                        .weight(1f)
-                        .height(40.dp)
-                        .clip(CircleShape)
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .pressScale(closeInteraction)
                         .glassFill(
-                            glass = MorpheColors.glassContainerColor(),
+                            glass = Color.Transparent,
                             shape = CircleShape,
                             hazeState = detailHeaderHaze
-                        )
-                        .drawWithCache {
-                            val corner = CornerRadius(size.height / 2f)
-                            val fill: Brush = if (monochrome) {
-                                SolidColor(scheme.surfaceContainerHigh.copy(alpha = 0.65f))
-                            } else {
-                                Brush.linearGradient(
-                                    colors = listOf(
-                                        appPalette.gradient[0].copy(alpha = 0.78f),
-                                        appPalette.gradient[1].copy(alpha = 0.66f),
-                                        appPalette.gradient[2].copy(alpha = 0.74f)
-                                    ),
-                                    start = Offset(0f, size.height),
-                                    end = Offset(size.width, 0f)
-                                )
-                            }
-                            onDrawBehind {
-                                drawRoundRect(brush = fill, cornerRadius = corner)
-                            }
-                        }
-                        .padding(end = 14.dp),
-                    contentAlignment = Alignment.CenterStart
+                        ),
+                    interactionSource = closeInteraction,
+                    shape = CircleShape,
+                    colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = scheme.onSurface.copy(alpha = 0.85f)
+                    ),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
                 ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Exact 40.dp x 40.dp logo matching the 40.dp pill height (zero top/bottom gap)
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                        ) {
-                            FindAppIcon(
-                                app = app,
-                                gradient = appPalette.gradient,
-                                installed = installed,
-                                size = 40.dp,
-                                cornerRadius = 20.dp
-                            )
-                        }
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                text = app.name,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = titleColor,
-                                maxLines = 1,
-                                modifier = Modifier.basicMarquee()
-                            )
-                            Text(
-                                text = app.packageName,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = subtitleColor.copy(alpha = 0.85f),
-                                maxLines = 1,
-                                modifier = Modifier.basicMarquee()
-                            )
-                        }
-                    }
-                }
-
-                // Circular Blurred Play Store button (40.dp)
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .glassFill(
-                            glass = MorpheColors.glassContainerColor(),
-                            shape = CircleShape,
-                            hazeState = detailHeaderHaze
-                        )
-                        .clickable(role = Role.Button) {
-                            context.openPlayStoreListing(
-                                app.packageName,
-                                playStoreUrl(app.packageName)
-                            )
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_src_play),
-                        contentDescription = stringResource(R.string.open_in_play_store),
-                        tint = Color.Unspecified,
-                        modifier = Modifier.size(18.dp)
+                    Text(
+                        text = stringResource(R.string.close),
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
+        }
 
-            // 4. Smooth bottom-to-top animated Patches overlay
-            AnimatedVisibility(
-                visible = activePatchGroup != null,
-                enter = MorpheAnimations.pushEnter,
-                exit = MorpheAnimations.pushExit
-            ) {
-                val group = lastPatchGroup
-                if (group != null) {
-                    MorphePushedScreen {
-                        SourcePatchesScreen(
-                            packageName = app.packageName,
-                            source = group.primary,
-                            mirrors = group.mirrors,
-                            accentColor = sourceAccent,
-                            onOpenUrl = openUrl,
-                            onAddToMorphe = { openAddSource(context, it) },
-                            onBack = { activePatchGroup = null }
-                        )
-                    }
+        // 4. Smooth bottom-to-top animated Patches overlay
+        AnimatedVisibility(
+            visible = activePatchGroup != null,
+            enter = MorpheAnimations.pushEnter,
+            exit = MorpheAnimations.pushExit
+        ) {
+            val group = lastPatchGroup
+            if (group != null) {
+                MorphePushedScreen {
+                    SourcePatchesScreen(
+                        packageName = app.packageName,
+                        source = group.primary,
+                        mirrors = group.mirrors,
+                        accentColor = sourceAccent,
+                        onOpenUrl = openUrl,
+                        onAddToMorphe = { openAddSource(context, it) },
+                        onBack = { activePatchGroup = null }
+                    )
                 }
             }
         }
