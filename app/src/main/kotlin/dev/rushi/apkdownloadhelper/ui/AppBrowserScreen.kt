@@ -362,6 +362,93 @@ internal fun AppDisclaimerBanner() {
 }
 
 @Composable
+private fun PendingTrackedPackagesCard(
+    packages: Set<String>,
+    onRemove: (String) -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val isDark = scheme.background.luminance() < 0.05f
+    val container = scheme.surfaceVariant.copy(alpha = if (isDark) 0.35f else 0.6f)
+    val sorted = remember(packages) { packages.sorted() }
+
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = container,
+        border = BorderStroke(1.dp, scheme.outline.copy(alpha = 0.25f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Notifications,
+                    contentDescription = null,
+                    tint = scheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    text = "Waiting for index",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = "${packages.size}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = scheme.onSurfaceVariant
+                )
+            }
+            Text(
+                text = "We'll notify you when these packages appear in the Morphe index.",
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant
+            )
+            sorted.forEach { packageName ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(scheme.surface.copy(alpha = if (isDark) 0.25f else 0.65f))
+                        .padding(start = 10.dp, end = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = packageName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .clickable(role = Role.Button) { onRemove(packageName) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Close,
+                            contentDescription = "Stop waiting for $packageName",
+                            tint = scheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun TrackPackageField(
     value: String,
     onValueChange: (String) -> Unit,
@@ -449,14 +536,16 @@ private fun TrackPackageField(
                     )
                 }
             }
-            if (!notice.isNullOrBlank()) {
-                Text(
-                    text = notice,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (noticeIsError) scheme.error else scheme.primary,
-                    modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 10.dp)
-                )
-            }
+            Text(
+                text = notice ?: "Not in the index yet? It will be tracked when it appears.",
+                style = MaterialTheme.typography.bodySmall,
+                color = when {
+                    notice == null -> scheme.onSurfaceVariant.copy(alpha = 0.75f)
+                    noticeIsError -> scheme.error
+                    else -> scheme.primary
+                },
+                modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 10.dp)
+            )
         }
     }
 }
@@ -587,18 +676,34 @@ internal fun AppBrowserScreen(
     }
 
     fun trackPackage() {
-        val packageName = trackPackageQuery.trim()
-        if (packageName.isBlank()) {
+        val entered = trackPackageQuery.trim()
+        if (entered.isBlank()) {
             trackPackageNotice = "Enter a package name."
             trackPackageNoticeIsError = true
             return
         }
+        val packageKey = entered.lowercase(Locale.US)
         val app = apps?.firstOrNull {
-            it.packageName.equals(packageName, ignoreCase = true)
+            it.packageName.equals(entered, ignoreCase = true)
         }
         if (app == null) {
-            trackPackageNotice = "No app in the Morphe index uses package \"$packageName\"."
-            trackPackageNoticeIsError = true
+            if (packageKey in tracked) {
+                trackPackageNotice = "$packageKey is already waiting for the index."
+                trackPackageNoticeIsError = false
+                tab = AppListTab.Tracked
+                return
+            }
+
+            tracked = MorpheTracking.trackPackage(context, packageKey)
+            trackingSnapshots = MorpheTracking.loadSnapshots(context, tracked)
+            TrackingCheckScheduler.sync(context)
+            requestNotificationPermission()
+            tab = AppListTab.Tracked
+            trackPackageQuery = ""
+            trackPackageNotice = "Waiting for $packageKey to appear in the Morphe index."
+            trackPackageNoticeIsError = false
+            focusManager.clearFocus(force = true)
+            keyboardController?.hide()
             return
         }
         if (app.packageName in tracked) {
@@ -618,6 +723,14 @@ internal fun AppBrowserScreen(
         trackPackageNoticeIsError = false
         focusManager.clearFocus(force = true)
         keyboardController?.hide()
+    }
+
+    fun removePendingPackage(packageName: String) {
+        tracked = MorpheTracking.untrack(context, packageName)
+        trackingSnapshots = MorpheTracking.loadSnapshots(context, tracked)
+        TrackingCheckScheduler.sync(context)
+        trackPackageNotice = "Stopped waiting for $packageName."
+        trackPackageNoticeIsError = false
     }
 
     LaunchedEffect(Unit) {
@@ -687,6 +800,12 @@ internal fun AppBrowserScreen(
             loaded.orEmpty().associate { app ->
                 app.packageName to app.trackedChanges(trackingSnapshots[app.packageName])
             }
+        }
+        val indexedPackages = remember(loaded) {
+            loaded.orEmpty().mapNotNull { it.packageName.takeIf(String::isNotBlank) }.toSet()
+        }
+        val pendingTracked = remember(tracked, indexedPackages) {
+            tracked - indexedPackages
         }
         val filtered = remember(
             loaded,
@@ -778,6 +897,12 @@ internal fun AppBrowserScreen(
                             noticeIsError = trackPackageNoticeIsError,
                             onTrack = { trackPackage() }
                         )
+                        if (loaded != null && pendingTracked.isNotEmpty()) {
+                            PendingTrackedPackagesCard(
+                                packages = pendingTracked,
+                                onRemove = { removePendingPackage(it) }
+                            )
+                        }
                     }
 
                     var filterMenuOpen by remember { mutableStateOf(false) }
@@ -941,9 +1066,14 @@ internal fun AppBrowserScreen(
                         InfoCard(
                             when {
                                 trackedOnly && tracked.isEmpty() ->
-                                    "No tracked apps yet. Tap the bell on any app to follow its updates and patches."
+                                    "No tracked apps yet. Enter a package name above or tap the bell on any app."
                                 tab == AppListTab.Tracked && tracked.isEmpty() ->
                                     "No tracked apps yet. Tap the bell on any app to follow its updates and patches."
+                                tab == AppListTab.Tracked &&
+                                    pendingTracked.isNotEmpty() && query.isBlank() ->
+                                    "Waiting for ${pendingTracked.size} tracked " +
+                                        (if (pendingTracked.size == 1) "package" else "packages") +
+                                        " to appear in the Morphe index."
                                 tab == AppListTab.Tracked ->
                                     "No tracked apps match \"$query\"."
                                 tab == AppListTab.Favourites ->

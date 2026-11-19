@@ -30,7 +30,8 @@ private const val MAX_NOTIFICATION_APPS = 5
 
 private data class TrackedAppNotification(
     val app: ArchiveApp,
-    val changes: TrackedAppChanges
+    val changes: TrackedAppChanges,
+    val newlyAvailable: Boolean = false
 )
 
 /**
@@ -66,11 +67,19 @@ class TrackingCheckWorker(
         val changes = tracked.mapNotNull { packageName ->
             val app = apps[packageName] ?: return@mapNotNull null
             val baseline = notified[packageName] ?: seen[packageName]
-            val delta = app.trackedChanges(baseline)
-            if (delta.updates == 0 && delta.newPatches == 0) {
-                null
+            if (baseline == null) {
+                TrackedAppNotification(
+                    app = app,
+                    changes = TrackedAppChanges(),
+                    newlyAvailable = true
+                )
             } else {
-                TrackedAppNotification(app, delta)
+                val delta = app.trackedChanges(baseline)
+                if (delta.updates == 0 && delta.newPatches == 0) {
+                    null
+                } else {
+                    TrackedAppNotification(app, delta)
+                }
             }
         }.sortedBy { it.app.name.lowercase(Locale.US) }
 
@@ -78,6 +87,10 @@ class TrackingCheckWorker(
         if (!showNotification(context, changes)) return Result.success()
 
         MorpheTracking.markNotified(context, changes.map { it.app })
+        MorpheTracking.seedSeen(
+            context,
+            changes.filter { it.newlyAvailable }.map { it.app }
+        )
         return Result.success()
     }
 }
@@ -92,23 +105,31 @@ private fun showNotification(
     val title = if (changes.size == 1) {
         val change = changes.single()
         when {
+            change.newlyAvailable -> "${change.app.name} is now available"
             change.changes.updates > 0 && change.changes.newPatches > 0 ->
                 "${change.app.name} has updates"
             change.changes.updates > 0 -> "${change.app.name} has new versions"
             else -> "${change.app.name} has new patches"
         }
+    } else if (changes.all { it.newlyAvailable }) {
+        "${changes.size} tracked apps are now available"
     } else {
         "${changes.size} tracked apps have changes"
     }
     val text = if (changes.size == 1) {
-        changes.single().changes.summary()
+        val change = changes.single()
+        if (change.newlyAvailable) {
+            "It is now in the Morphe index."
+        } else {
+            change.changes.summary()
+        }
     } else {
-        "New versions or patches are available."
+        "New versions, patches, or apps are available."
     }
     val style = NotificationCompat.InboxStyle()
         .setBigContentTitle(title)
     changes.take(MAX_NOTIFICATION_APPS).forEach { change ->
-        style.addLine("${change.app.name}: ${change.changes.summary()}")
+        style.addLine("${change.app.name}: ${change.summary()}")
     }
     if (changes.size > MAX_NOTIFICATION_APPS) {
         style.setSummaryText("+${changes.size - MAX_NOTIFICATION_APPS} more")
@@ -139,6 +160,9 @@ private fun showNotification(
             .notify(NOTIFICATION_ID_TRACKED_APPS, notification)
     }.isSuccess
 }
+
+private fun TrackedAppNotification.summary(): String =
+    if (newlyAvailable) "now available" else changes.summary()
 
 private fun TrackedAppChanges.summary(): String {
     val parts = buildList {

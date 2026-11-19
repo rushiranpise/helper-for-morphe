@@ -3,6 +3,7 @@ package dev.rushi.apkdownloadhelper.ui
 import android.content.Context
 import android.content.SharedPreferences
 import dev.rushi.apkdownloadhelper.updater.ArchiveApp
+import java.util.Locale
 
 /** What an app looked like when the user last saw it. */
 internal data class TrackedAppSnapshot(
@@ -51,6 +52,31 @@ internal object MorpheTracking {
     fun load(context: Context): Set<String> =
         prefs(context).getStringSet(KEY_PACKAGES, emptySet()).orEmpty().toSet()
 
+    /** Adds a package that may not be in the index yet, without a baseline. */
+    fun trackPackage(context: Context, packageName: String): Set<String> {
+        val normalized = packageName.trim().lowercase(Locale.US)
+        if (normalized.isEmpty()) return load(context)
+
+        val current = load(context).toMutableSet()
+        if (!current.add(normalized)) return current
+
+        prefs(context).edit()
+            .putStringSet(KEY_PACKAGES, current)
+            .clearTrackingState(normalized)
+            .apply()
+        return current
+    }
+
+    fun untrack(context: Context, packageName: String): Set<String> {
+        val current = load(context).toMutableSet()
+        current.remove(packageName)
+        prefs(context).edit()
+            .putStringSet(KEY_PACKAGES, current)
+            .clearTrackingState(packageName)
+            .apply()
+        return current
+    }
+
     fun loadSnapshots(
         context: Context,
         packages: Set<String> = load(context)
@@ -81,14 +107,23 @@ internal object MorpheTracking {
             editor.putStringSet(notifiedPatchesKey(app.packageName), snapshot.patches)
         } else {
             current.remove(app.packageName)
-            editor.remove(versionsKey(app.packageName))
-            editor.remove(patchesKey(app.packageName))
-            editor.remove(notifiedVersionsKey(app.packageName))
-            editor.remove(notifiedPatchesKey(app.packageName))
+            editor.clearTrackingState(app.packageName)
         }
         editor.putStringSet(KEY_PACKAGES, current)
         editor.apply()
         return current
+    }
+
+    /** Seeds the seen baseline for packages that just appeared in the index. */
+    fun seedSeen(context: Context, apps: Iterable<ArchiveApp>) {
+        if (apps.none()) return
+        val editor = prefs(context).edit()
+        apps.forEach { app ->
+            val snapshot = app.trackingSnapshot()
+            editor.putStringSet(versionsKey(app.packageName), snapshot.versions)
+            editor.putStringSet(patchesKey(app.packageName), snapshot.patches)
+        }
+        editor.commit()
     }
 
     /** Records the app's current state as seen, clearing its badges. */
@@ -163,4 +198,14 @@ internal object MorpheTracking {
 
     private fun notifiedPatchesKey(packageName: String) =
         "$NOTIFIED_PREFIX$packageName:patches"
+
+    private fun SharedPreferences.Editor.clearTrackingState(
+        packageName: String
+    ): SharedPreferences.Editor {
+        remove(versionsKey(packageName))
+        remove(patchesKey(packageName))
+        remove(notifiedVersionsKey(packageName))
+        remove(notifiedPatchesKey(packageName))
+        return this
+    }
 }
