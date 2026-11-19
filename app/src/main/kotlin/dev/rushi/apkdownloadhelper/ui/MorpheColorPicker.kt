@@ -317,7 +317,10 @@ private fun AccentSwatch(
     onClick: () -> Unit,
     icon: ImageVector? = null
 ) {
-    val shape = RoundedCornerShape(MorpheDefaults.CompactCornerRadius)
+    val shape = animateCornersAsState(
+        if (selected) MorpheDefaults.PillShape
+        else RoundedCornerShape(MorpheDefaults.CompactCornerRadius)
+    )
     val scheme = MaterialTheme.colorScheme
 
     val borderWidth by animateDpAsState(if (selected) 3.dp else 1.dp)
