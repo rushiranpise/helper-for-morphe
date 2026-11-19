@@ -49,6 +49,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -59,6 +60,7 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Refresh
@@ -77,6 +79,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -198,6 +201,7 @@ internal enum class AppListTab(
 ) {
     All("All", Icons.Outlined.ViewList, "All"),
     Favourites("Liked", Icons.Outlined.FavoriteBorder, "Liked"),
+    Tracked("Tracked", Icons.Outlined.Notifications, "Tracked"),
     Installed("Installed", Icons.Outlined.CheckCircle, "Installed"),
     NotInstalled("Not installed", Icons.Outlined.Block, "Not installed")
 }
@@ -206,7 +210,9 @@ internal enum class AppSort(val label: String, val icon: ImageVector, val rotati
     AZ("A–Z", Icons.Outlined.SortByAlpha),
     ZA("Z–A", Icons.Outlined.SortByAlpha, 180f),
     Sources("Sources", Icons.Outlined.Extension),
-    Newest("Newest", Icons.Outlined.History)
+    Newest("Newest", Icons.Outlined.History),
+    Updates("Updates", Icons.Outlined.Notifications),
+    NewPatches("New patches", Icons.Outlined.Extension)
 }
 
 internal object MorpheFavourites {
@@ -410,6 +416,7 @@ private fun CompactFilterChip(
 
 @Composable
 internal fun AppBrowserScreen(
+    trackedOnly: Boolean = false,
     hideStats: Boolean = false,
     hideCommunityNotice: Boolean = false,
     useGradientCards: Boolean = true,
@@ -425,12 +432,18 @@ internal fun AppBrowserScreen(
     var query by remember { mutableStateOf("") }
     var searchExpanded by remember { mutableStateOf(false) }
     var loadKey by remember { mutableIntStateOf(0) }
-    var tab by remember { mutableStateOf(AppListTab.All) }
+    var tab by remember(trackedOnly) {
+        mutableStateOf(if (trackedOnly) AppListTab.Tracked else AppListTab.All)
+    }
     var sort by remember { mutableStateOf(AppSort.AZ) }
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     var favourites by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var tracked by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var trackingSnapshots by remember {
+        mutableStateOf<Map<String, TrackedAppSnapshot>>(emptyMap())
+    }
     var installedPackages by remember { mutableStateOf<Set<String>>(emptySet()) }
     val listState = rememberLazyListState()
     val searchFocusRequester = remember { FocusRequester() }
@@ -447,11 +460,21 @@ internal fun AppBrowserScreen(
 
     LaunchedEffect(Unit) {
         favourites = MorpheFavourites.load(context)
+        tracked = MorpheTracking.load(context)
+        trackingSnapshots = MorpheTracking.loadSnapshots(context, tracked)
         installedPackages = withContext(Dispatchers.IO) {
             context.packageManager.getInstalledApplications(0)
                 .mapNotNull { it.packageName.takeIf(String::isNotBlank) }
                 .toSet()
         }
+    }
+
+    DisposableEffect(context) {
+        val observer = MorpheTracking.observe(context) {
+            tracked = MorpheTracking.load(context)
+            trackingSnapshots = MorpheTracking.loadSnapshots(context, tracked)
+        }
+        onDispose { observer.close() }
     }
 
     LaunchedEffect(loadKey) {
@@ -498,17 +521,34 @@ internal fun AppBrowserScreen(
             .fillMaxSize()
     ) {
         val loaded = apps
-        val filtered = remember(loaded, query, tab, sort, favourites, installedPackages) {
+        val changesByPackage = remember(loaded, trackingSnapshots) {
+            loaded.orEmpty().associate { app ->
+                app.packageName to app.trackedChanges(trackingSnapshots[app.packageName])
+            }
+        }
+        val filtered = remember(
+            loaded,
+            query,
+            tab,
+            sort,
+            favourites,
+            installedPackages,
+            tracked,
+            trackedOnly,
+            changesByPackage
+        ) {
             loaded.orEmpty()
                 .filter { app ->
-                    query.isBlank() ||
+                    (!trackedOnly || app.packageName in tracked) &&
+                        (query.isBlank() ||
                             app.name.contains(query, ignoreCase = true) ||
-                            app.packageName.contains(query, ignoreCase = true)
+                            app.packageName.contains(query, ignoreCase = true))
                 }
                 .filter { app ->
                     when (tab) {
                         AppListTab.All -> true
                         AppListTab.Favourites -> app.packageName in favourites
+                        AppListTab.Tracked -> app.packageName in tracked
                         AppListTab.Installed -> app.packageName in installedPackages
                         AppListTab.NotInstalled -> app.packageName !in installedPackages
                     }
@@ -522,8 +562,21 @@ internal fun AppBrowserScreen(
                             .map { app -> app.newestReleaseDate().orEmpty() to app }
                             .sortedByDescending { it.first }
                             .map { it.second }
+                        AppSort.Updates -> matches.sortedWith(
+                            compareByDescending<ArchiveApp> {
+                                changesByPackage[it.packageName]?.updates ?: 0
+                            }.thenBy { it.name.lowercase(Locale.US) }
+                        )
+                        AppSort.NewPatches -> matches.sortedWith(
+                            compareByDescending<ArchiveApp> {
+                                changesByPackage[it.packageName]?.newPatches ?: 0
+                            }.thenBy { it.name.lowercase(Locale.US) }
+                        )
                     }
                 }
+        }
+        val availableTabs = remember(trackedOnly) {
+            if (trackedOnly) AppListTab.entries.filter { it != AppListTab.All } else AppListTab.entries
         }
 
         // CHILD 1: Full-screen LazyColumn
@@ -585,7 +638,7 @@ internal fun AppBrowserScreen(
                                 border = menuBorder,
                                 modifier = Modifier.width(with(density) { filterWidthPx.toDp() })
                             ) {
-                                AppListTab.entries.forEach { itemTab ->
+                                availableTabs.forEach { itemTab ->
                                     val isSelected = tab == itemTab
                                     DropdownMenuItem(
                                         text = {
@@ -711,13 +764,20 @@ internal fun AppBrowserScreen(
                 filtered.isEmpty() -> {
                     item(key = "empty") {
                         InfoCard(
-                            when (tab) {
-                                AppListTab.Favourites ->
+                            when {
+                                trackedOnly && tracked.isEmpty() ->
+                                    "No tracked apps yet. Tap the bell on any app to follow its updates and patches."
+                                tab == AppListTab.Tracked && tracked.isEmpty() ->
+                                    "No tracked apps yet. Tap the bell on any app to follow its updates and patches."
+                                tab == AppListTab.Tracked ->
+                                    "No tracked apps match \"$query\"."
+                                tab == AppListTab.Favourites ->
                                     "No liked apps yet. Tap the heart on any app to pin it here."
-                                AppListTab.Installed -> "No patched apps in the index are installed."
-                                AppListTab.NotInstalled ->
+                                tab == AppListTab.Installed ->
+                                    "No patched apps in the index are installed."
+                                tab == AppListTab.NotInstalled ->
                                     "Every app in the index is installed on this device."
-                                AppListTab.All -> "No apps match \"$query\"."
+                                else -> "No apps match \"$query\"."
                             }
                         )
                     }
@@ -744,16 +804,28 @@ internal fun AppBrowserScreen(
                             bottomEnd = if (isLast) outerRadius else innerRadius
                         )
 
+                        val changes = changesByPackage[app.packageName] ?: TrackedAppChanges()
                         AppBrowserRow(
                             app = app,
                             installed = app.packageName in installedPackages,
                             favourite = app.packageName in favourites,
+                            tracked = app.packageName in tracked,
+                            updates = changes.updates,
+                            newPatches = changes.newPatches,
                             shape = cardShape,
                             useGradient = useGradientCards,
                             onToggleFavourite = {
                                 favourites = MorpheFavourites.toggle(context, app.packageName)
                             },
+                            onToggleTracking = {
+                                tracked = MorpheTracking.toggle(context, app)
+                                trackingSnapshots = MorpheTracking.loadSnapshots(context, tracked)
+                            },
                             onClick = {
+                                if (app.packageName in tracked) {
+                                    MorpheTracking.markSeen(context, app)
+                                    trackingSnapshots = MorpheTracking.loadSnapshots(context, tracked)
+                                }
                                 focusManager.clearFocus(force = true)
                                 keyboardController?.hide()
                                 onOpenApp(app)
@@ -957,7 +1029,7 @@ internal fun AppBrowserScreen(
                             verticalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = stringResource(R.string.find_new_apps),
+                                text = if (trackedOnly) "Tracking" else stringResource(R.string.find_new_apps),
                                 style = MaterialTheme.typography.headlineMedium.copy(
                                     platformStyle = androidx.compose.ui.text.PlatformTextStyle(
                                         includeFontPadding = false
@@ -971,8 +1043,13 @@ internal fun AppBrowserScreen(
                             val fresh = freshness
                             Text(
                                 text = when {
+                                    fresh != null && trackedOnly ->
+                                        "${tracked.size} tracked \u00b7 updated ${fresh.label}"
                                     fresh != null -> "Updated ${fresh.label}"
                                     apps == null -> "Loading…"
+                                    trackedOnly && tracked.isEmpty() ->
+                                        "Track updates and new patches"
+                                    trackedOnly -> "${tracked.size} tracked"
                                     else -> "Community patch index"
                                 },
                                 color = if (fresh?.stale == true) {
@@ -1096,6 +1173,10 @@ internal fun AppBrowserRow(
     shape: RoundedCornerShape,
     onToggleFavourite: () -> Unit,
     onClick: () -> Unit,
+    tracked: Boolean = false,
+    updates: Int = 0,
+    newPatches: Int = 0,
+    onToggleTracking: () -> Unit = {},
     modifier: Modifier = Modifier,
     useGradient: Boolean = true
 ) {
@@ -1202,6 +1283,32 @@ internal fun AppBrowserRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                if (updates > 0 || newPatches > 0) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (updates > 0) {
+                            TrackingChangeBadge(
+                                text = "$updates update" + if (updates == 1) "" else "s",
+                                container = if (effectiveGradient) {
+                                    Color.White.copy(alpha = 0.22f)
+                                } else {
+                                    scheme.primaryContainer
+                                },
+                                content = if (effectiveGradient) Color.White else scheme.onPrimaryContainer
+                            )
+                        }
+                        if (newPatches > 0) {
+                            TrackingChangeBadge(
+                                text = "$newPatches new patch" + if (newPatches == 1) "" else "es",
+                                container = if (effectiveGradient) {
+                                    Color.White.copy(alpha = 0.18f)
+                                } else {
+                                    scheme.tertiaryContainer
+                                },
+                                content = if (effectiveGradient) Color.White else scheme.onTertiaryContainer
+                            )
+                        }
+                    }
+                }
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -1236,34 +1343,95 @@ internal fun AppBrowserRow(
                 }
             }
 
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(
-                        when {
-                            favourite -> Color.White.copy(alpha = 0.92f)
-                            !effectiveGradient -> scheme.surfaceVariant.copy(alpha = 0.65f)
-                            else -> Color.White.copy(alpha = 0.16f)
-                        }
-                    )
-                    .clickable(role = Role.Button, onClick = onToggleFavourite),
-                contentAlignment = Alignment.Center
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = if (favourite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                    contentDescription = if (favourite) "Unlike" else "Like",
-                    tint = if (favourite) {
-                        Color(0xFFD32F2F)
-                    } else if (!effectiveGradient) {
-                        scheme.onSurface
-                    } else {
-                        Color.White
-                    },
-                    modifier = Modifier.size(20.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(
+                            when {
+                                tracked -> if (effectiveGradient) {
+                                    Color.White.copy(alpha = 0.22f)
+                                } else {
+                                    scheme.primaryContainer.copy(alpha = 0.85f)
+                                }
+                                !effectiveGradient -> scheme.surfaceVariant.copy(alpha = 0.65f)
+                                else -> Color.White.copy(alpha = 0.16f)
+                            }
+                        )
+                        .clickable(role = Role.Button, onClick = onToggleTracking),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (tracked) {
+                            Icons.Filled.Notifications
+                        } else {
+                            Icons.Outlined.Notifications
+                        },
+                        contentDescription = if (tracked) "Stop tracking" else "Track updates",
+                        tint = if (tracked) {
+                            if (!effectiveGradient) scheme.onPrimaryContainer else Color.White
+                        } else if (!effectiveGradient) {
+                            scheme.onSurface
+                        } else {
+                            Color.White
+                        },
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(
+                            when {
+                                favourite -> Color.White.copy(alpha = 0.92f)
+                                !effectiveGradient -> scheme.surfaceVariant.copy(alpha = 0.65f)
+                                else -> Color.White.copy(alpha = 0.16f)
+                            }
+                        )
+                        .clickable(role = Role.Button, onClick = onToggleFavourite),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (favourite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                        contentDescription = if (favourite) "Unlike" else "Like",
+                        tint = if (favourite) {
+                            Color(0xFFD32F2F)
+                        } else if (!effectiveGradient) {
+                            scheme.onSurface
+                        } else {
+                            Color.White
+                        },
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun TrackingChangeBadge(
+    text: String,
+    container: Color,
+    content: Color
+) {
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = container,
+        contentColor = content
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+        )
     }
 }
 

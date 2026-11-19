@@ -581,6 +581,21 @@ class MainActivity : ComponentActivity() {
                                         onOpenApp = { selectedArchiveApp = it }
                                     )
                                 },
+                                trackingContent = { bottomBarHeight ->
+                                    AppBrowserScreen(
+                                        trackedOnly = true,
+                                        hideStats = true,
+                                        hideCommunityNotice = true,
+                                        useGradientCards = helperSettings.useGradientCardColors,
+                                        bottomContentPadding = if (bottomBarHeight > 0.dp) {
+                                            bottomBarHeight + 24.dp
+                                        } else {
+                                            160.dp
+                                        },
+                                        onBack = null,
+                                        onOpenApp = { selectedArchiveApp = it }
+                                    )
+                                },
                                 homeContent = { bottomBarHeight ->
                                     HelperScreen(
                                         request = request,
