@@ -49,6 +49,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -110,6 +112,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -358,6 +362,106 @@ internal fun AppDisclaimerBanner() {
 }
 
 @Composable
+private fun TrackPackageField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    enabled: Boolean,
+    notice: String?,
+    noticeIsError: Boolean,
+    onTrack: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val isDark = scheme.background.luminance() < 0.05f
+    val canTrack = enabled && value.isNotBlank()
+    val container = scheme.surfaceVariant.copy(alpha = if (isDark) 0.35f else 0.6f)
+
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = container,
+        border = BorderStroke(1.dp, scheme.outline.copy(alpha = 0.25f))
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Apps,
+                    contentDescription = null,
+                    tint = scheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    if (value.isEmpty()) {
+                        Text(
+                            text = "Package name (com.example.app)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = scheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    BasicTextField(
+                        value = value,
+                        onValueChange = onValueChange,
+                        enabled = enabled,
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                            color = if (enabled) {
+                                scheme.onSurface
+                            } else {
+                                scheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            }
+                        ),
+                        cursorBrush = SolidColor(scheme.primary),
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.None,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = { if (canTrack) onTrack() }
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(if (canTrack) scheme.primary else container)
+                        .clickable(enabled = canTrack, role = Role.Button, onClick = onTrack)
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Track",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (canTrack) scheme.onPrimary else scheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                }
+            }
+            if (!notice.isNullOrBlank()) {
+                Text(
+                    text = notice,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (noticeIsError) scheme.error else scheme.primary,
+                    modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 10.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun CompactFilterChip(
     label: String,
     icon: ImageVector,
@@ -437,6 +541,9 @@ internal fun AppBrowserScreen(
     var freshness by remember { mutableStateOf<ArchiveFreshness?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
+    var trackPackageQuery by remember { mutableStateOf("") }
+    var trackPackageNotice by remember { mutableStateOf<String?>(null) }
+    var trackPackageNoticeIsError by remember { mutableStateOf(false) }
     var searchExpanded by remember { mutableStateOf(false) }
     var loadKey by remember { mutableIntStateOf(0) }
     var tab by remember(trackedOnly) {
@@ -467,6 +574,51 @@ internal fun AppBrowserScreen(
         }
     }
     val scope = rememberCoroutineScope()
+
+    fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    fun trackPackage() {
+        val packageName = trackPackageQuery.trim()
+        if (packageName.isBlank()) {
+            trackPackageNotice = "Enter a package name."
+            trackPackageNoticeIsError = true
+            return
+        }
+        val app = apps?.firstOrNull {
+            it.packageName.equals(packageName, ignoreCase = true)
+        }
+        if (app == null) {
+            trackPackageNotice = "No app in the Morphe index uses package \"$packageName\"."
+            trackPackageNoticeIsError = true
+            return
+        }
+        if (app.packageName in tracked) {
+            trackPackageNotice = "${app.name} is already tracked."
+            trackPackageNoticeIsError = false
+            tab = AppListTab.Tracked
+            return
+        }
+
+        tracked = MorpheTracking.toggle(context, app)
+        trackingSnapshots = MorpheTracking.loadSnapshots(context, tracked)
+        TrackingCheckScheduler.sync(context)
+        requestNotificationPermission()
+        tab = AppListTab.Tracked
+        trackPackageQuery = ""
+        trackPackageNotice = "Tracking ${app.name}."
+        trackPackageNoticeIsError = false
+        focusManager.clearFocus(force = true)
+        keyboardController?.hide()
+    }
 
     LaunchedEffect(Unit) {
         favourites = MorpheFavourites.load(context)
@@ -613,6 +765,19 @@ internal fun AppBrowserScreen(
                     }
                     if (!hideCommunityNotice) {
                         AppDisclaimerBanner()
+                    }
+                    if (trackedOnly) {
+                        TrackPackageField(
+                            value = trackPackageQuery,
+                            onValueChange = {
+                                trackPackageQuery = it
+                                trackPackageNotice = null
+                            },
+                            enabled = loaded != null,
+                            notice = trackPackageNotice,
+                            noticeIsError = trackPackageNoticeIsError,
+                            onTrack = { trackPackage() }
+                        )
                     }
 
                     var filterMenuOpen by remember { mutableStateOf(false) }
@@ -832,17 +997,7 @@ internal fun AppBrowserScreen(
                                 tracked = MorpheTracking.toggle(context, app)
                                 trackingSnapshots = MorpheTracking.loadSnapshots(context, tracked)
                                 TrackingCheckScheduler.sync(context)
-                                if (adding &&
-                                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                                    ContextCompat.checkSelfPermission(
-                                        context,
-                                        Manifest.permission.POST_NOTIFICATIONS
-                                    ) != PackageManager.PERMISSION_GRANTED
-                                ) {
-                                    notificationPermissionLauncher.launch(
-                                        Manifest.permission.POST_NOTIFICATIONS
-                                    )
-                                }
+                                if (adding) requestNotificationPermission()
                             },
                             onClick = {
                                 if (app.packageName in tracked) {
