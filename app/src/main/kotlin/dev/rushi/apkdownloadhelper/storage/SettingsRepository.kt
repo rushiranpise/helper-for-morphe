@@ -130,6 +130,9 @@ internal data class HelperSettings(
     val customAccentColor: String = "",
     /** Drifting circles behind the pager; off removes the backdrop entirely. */
     val animatedBackground: Boolean = true,
+    val hideFindAppsStats: Boolean = false,
+    val hideCommunityNotice: Boolean = false,
+    val useGradientCardColors: Boolean = true,
     val adGuardDns: Boolean = true,
     val virusTotalEnabled: Boolean = false,
     val virusTotalApiKey: String = "",
@@ -408,6 +411,9 @@ internal fun Context.loadHelperSettings(): HelperSettings {
         pureBlackTheme = prefs.getBoolean("pure_black_theme", false),
         customAccentColor = prefs.getString("custom_accent_color", "") ?: "",
         animatedBackground = prefs.getBoolean("animated_background", true),
+        hideFindAppsStats = prefs.getBoolean("hide_find_apps_stats", false),
+        hideCommunityNotice = prefs.getBoolean("hide_community_notice", false),
+        useGradientCardColors = prefs.getBoolean("use_gradient_card_colors", true),
         adGuardDns = prefs.getBoolean("adguard_dns", true),
         virusTotalEnabled = prefs.getBoolean("virus_total_enabled", false),
         virusTotalApiKey = prefs.getString("virus_total_api_key", "") ?: "",
@@ -507,6 +513,9 @@ internal fun Context.saveHelperSettings(settings: HelperSettings) {
         .putString("update_channel", settings.updateChannel.name)
         .putString("update_mode", settings.updateMode.name)
         .putBoolean("update_popup", settings.updatePopup)
+        .putBoolean("hide_find_apps_stats", settings.hideFindAppsStats)
+        .putBoolean("hide_community_notice", settings.hideCommunityNotice)
+        .putBoolean("use_gradient_card_colors", settings.useGradientCardColors)
         .putString("shizuku_package", settings.shizukuPackage)
         .apply()
 }

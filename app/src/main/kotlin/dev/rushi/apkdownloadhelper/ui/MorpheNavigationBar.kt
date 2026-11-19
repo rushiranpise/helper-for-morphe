@@ -65,12 +65,12 @@ internal fun MorpheNavigationBar(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(bottom = 24.dp)
                 .onGloballyPositioned { coords ->
                     measuredHeight = with(density) { coords.size.height.toDp() }
                     onHeightChanged(measuredHeight)
-                },
+                }
+                .navigationBarsPadding()
+                .padding(bottom = 24.dp),
             contentAlignment = Alignment.Center
         ) {
             // Exact Morphe Pill Container
