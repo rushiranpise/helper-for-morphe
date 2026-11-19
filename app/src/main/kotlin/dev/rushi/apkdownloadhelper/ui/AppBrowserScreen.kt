@@ -2013,48 +2013,6 @@ internal fun AppDetailView(
                 }
             }
 
-            // Standard neutral gray Play Store button matching Patches/Repo buttons
-            item(key = "play_store_action") {
-                Surface(
-                    onClick = {
-                        context.openPlayStoreListing(
-                            app.packageName,
-                            playStoreUrl(app.packageName)
-                        )
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp)
-                        .height(52.dp),
-                    shape = CircleShape,
-                    color = scheme.surfaceVariant.copy(alpha = 0.65f),
-                    contentColor = scheme.onSurface,
-
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 20.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_src_play),
-                            contentDescription = null,
-                            tint = Color.Unspecified,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            text = stringResource(R.string.open_in_play_store),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
         }
 
         // 2. Morphe Official ListDialogHeader Band (pure icon + title + subtitle + 1-row scrollable badges)
@@ -2214,53 +2172,97 @@ internal fun AppDetailView(
                 )
         )
 
-        // 3. Pinned Bottom "Close" Frosted Outlined Pill (exact port of Morphe AppDialogOutlinedButton)
-        if (onBack != null) {
-            val closeInteraction = remember { MutableInteractionSource() }
-            val closeBorderColor = if (monochrome) {
-                scheme.outlineVariant.copy(alpha = 0.5f)
-            } else {
-                sourceAccent.copy(alpha = 0.35f)
-            }
+        // 3. Pinned bottom actions: Play Store stays available while the list scrolls.
+        val closeInteraction = remember { MutableInteractionSource() }
+        val closeBorderColor = if (monochrome) {
+            scheme.outlineVariant.copy(alpha = 0.5f)
+        } else {
+            sourceAccent.copy(alpha = 0.35f)
+        }
 
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .onSizeChanged { size ->
-                        footerHeightDp = with(density) { size.height.toDp() }
-                    }
-                    .navigationBarsPadding()
-                    .padding(
-                        horizontal = MorpheDefaults.ContentPadding,
-                        vertical = 12.dp
-                    )
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .onSizeChanged { size ->
+                    footerHeightDp = with(density) { size.height.toDp() }
+                }
+                .navigationBarsPadding()
+                .padding(
+                    horizontal = MorpheDefaults.ContentPadding,
+                    vertical = 12.dp
+                )
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                androidx.compose.material3.OutlinedButton(
-                    onClick = onBack,
+                Surface(
+                    onClick = {
+                        context.openPlayStoreListing(
+                            app.packageName,
+                            playStoreUrl(app.packageName)
+                        )
+                    },
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .pressScale(closeInteraction)
-                        .glassFill(
-                            glass = Color.Transparent,
-                            shape = CircleShape,
-                            hazeState = detailHeaderHaze
-                        ),
-                    interactionSource = closeInteraction,
+                        .weight(if (onBack != null) 1.4f else 1f)
+                        .heightIn(min = 48.dp),
                     shape = CircleShape,
-                    colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
-                        containerColor = Color.Transparent,
-                        contentColor = scheme.onSurface.copy(alpha = 0.85f)
-                    ),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+                    color = scheme.surfaceVariant.copy(alpha = 0.65f),
+                    contentColor = scheme.onSurface
                 ) {
-                    Text(
-                        text = stringResource(R.string.close),
-                        style = MaterialTheme.typography.labelLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_src_play),
+                            contentDescription = null,
+                            tint = Color.Unspecified,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = stringResource(R.string.open_in_play_store),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                if (onBack != null) {
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = onBack,
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .pressScale(closeInteraction)
+                            .glassFill(
+                                glass = Color.Transparent,
+                                shape = CircleShape,
+                                hazeState = detailHeaderHaze
+                            ),
+                        interactionSource = closeInteraction,
+                        shape = CircleShape,
+                        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                            containerColor = Color.Transparent,
+                            contentColor = scheme.onSurface.copy(alpha = 0.85f)
+                        ),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.close),
+                            style = MaterialTheme.typography.labelLarge,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }
