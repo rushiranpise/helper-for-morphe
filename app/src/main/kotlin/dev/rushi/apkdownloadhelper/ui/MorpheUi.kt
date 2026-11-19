@@ -745,7 +745,7 @@ internal fun SettingsItemCard(
             color = color,
             contentColor = MaterialTheme.colorScheme.onSurface,
             tonalElevation = 1.dp,
-            border = BorderStroke(1.dp, borderColor),
+            border = if (borderWidth > 0.dp) BorderStroke(borderWidth, borderColor) else null,
             content = rowContent
         )
     } else {
@@ -755,7 +755,7 @@ internal fun SettingsItemCard(
             color = color,
             contentColor = MaterialTheme.colorScheme.onSurface,
             tonalElevation = 1.dp,
-            border = BorderStroke(1.dp, borderColor),
+            border = if (borderWidth > 0.dp) BorderStroke(borderWidth, borderColor) else null,
             content = rowContent
         )
     }

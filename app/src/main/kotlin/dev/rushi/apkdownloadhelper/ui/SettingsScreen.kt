@@ -1091,7 +1091,6 @@ internal fun SettingsOptionCard(
         color = if (selected) colors.surfaceVariant else colors.surfaceColorAtElevation(3.dp),
         contentColor = colors.onSurface,
         tonalElevation = if (selected) 0.dp else 1.dp,
-        border = if (selected) BorderStroke(1.5.dp, colors.onSurface.copy(alpha = 0.5f)) else null
     ) {
         Row(modifier = Modifier.fillMaxWidth().padding(MorpheDefaults.ContentPadding), horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing), verticalAlignment = Alignment.CenterVertically) {
             if (source != null) SourceAvatar(source = source, size = MorpheDefaults.IconSize)
@@ -1170,7 +1169,6 @@ internal fun VirusTotalQuotaCard(apiKey: String) {
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(MorpheDefaults.CardCornerRadius),
         color = sourceCardFill(),
-        border = BorderStroke(1.dp, sourceCardBorder())
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
