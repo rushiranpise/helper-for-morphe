@@ -98,6 +98,7 @@ internal fun CaptchaBrowserScreen(
     // The page that produced the link is the referer APKMirror and APKPure
     // expect. It changes as their scripts walk search -> release -> download.
     val browserPageUrl = remember { mutableStateOf(candidate.captchaUrl ?: candidate.url) }
+    val webViewUserAgent = remember { WebSettings.getDefaultUserAgent(context) }
     val bridge = remember {
         CaptchaCaptureBridge { url ->
             Handler(Looper.getMainLooper()).post {
@@ -106,7 +107,8 @@ internal fun CaptchaBrowserScreen(
                     BrowserDownloadCapture(
                         downloadUrl = url,
                         refererUrl = referer,
-                        cookieHeader = CookieManager.getInstance().getCookie(referer)
+                        cookieHeader = browserCookieHeader(url, referer),
+                        userAgent = webViewUserAgent
                     )
                 )
             }
@@ -116,6 +118,7 @@ internal fun CaptchaBrowserScreen(
         WebView(context).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
+            settings.userAgentString = webViewUserAgent
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             addJavascriptInterface(bridge, CAPTCHA_BRIDGE_NAME)
             fun handleBrowserNavigation(view: WebView?, rawUrl: String?): Boolean {
@@ -132,7 +135,8 @@ internal fun CaptchaBrowserScreen(
                         BrowserDownloadCapture(
                             downloadUrl = url,
                             refererUrl = referer,
-                            cookieHeader = CookieManager.getInstance().getCookie(referer)
+                            cookieHeader = browserCookieHeader(url, referer),
+                            userAgent = webViewUserAgent
                         )
                     )
                     return true
@@ -201,7 +205,8 @@ internal fun CaptchaBrowserScreen(
                     BrowserDownloadCapture(
                         downloadUrl = url,
                         refererUrl = referer,
-                        cookieHeader = CookieManager.getInstance().getCookie(referer)
+                        cookieHeader = browserCookieHeader(url, referer),
+                        userAgent = webViewUserAgent
                     )
                 )
             }
@@ -1014,6 +1019,17 @@ internal fun String.isUptodownFileUrl(): Boolean {
     val host = uri.host?.lowercase(Locale.US) ?: return false
     if (!host.endsWith("uptodown.com") && !host.endsWith("uptodown.net")) return false
     return uri.path.orEmpty().contains("/dwn/", ignoreCase = true)
+}
+
+/**
+ * Cookies the browser holds for a captured file URL, falling back to the page
+ * that produced it. The downloader imports this header into its own jar; it is
+ * the same session that passed the challenge, so the file hop must reuse it.
+ */
+private fun browserCookieHeader(downloadUrl: String, referer: String?): String? {
+    val manager = CookieManager.getInstance()
+    return manager.getCookie(downloadUrl)?.takeIf(String::isNotBlank)
+        ?: referer?.let { manager.getCookie(it) }?.takeIf(String::isNotBlank)
 }
 
 /**

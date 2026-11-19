@@ -635,6 +635,10 @@ internal data class CandidateDownloadFile(
     val size: Long? = null,
     val referer: String? = null,
     val cookieHeader: String? = null,
+    // The exact browser identity that earned the captured cookies. APKMirror's
+    // Cloudflare clearance is tied to the user agent, so the download must
+    // introduce itself the same way the WebView did.
+    val userAgent: String? = null,
     // The SHA-256 the source publishes for the file, when it does. When set,
     // the downloaded bytes are checked against it before handoff, catching
     // corrupted or wrong builds outright instead of only a package/version
@@ -646,7 +650,8 @@ internal data class CandidateDownloadFile(
 internal data class BrowserDownloadCapture(
     val downloadUrl: String,
     val refererUrl: String? = null,
-    val cookieHeader: String? = null
+    val cookieHeader: String? = null,
+    val userAgent: String? = null
 )
 
 private val GENERIC_BROWSER_DOWNLOAD_NAMES = setOf(

@@ -1970,7 +1970,8 @@ class MainActivity : ComponentActivity() {
                         url = capture.downloadUrl,
                         fileName = capturedDownloadFileName(candidate, capture.downloadUrl, fileKind),
                         referer = referer,
-                        cookieHeader = cookieHeader
+                        cookieHeader = cookieHeader,
+                        userAgent = capture.userAgent
                     )
                 )
             )

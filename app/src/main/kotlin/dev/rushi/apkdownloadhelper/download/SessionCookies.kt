@@ -46,6 +46,49 @@ internal object SessionCookies : CookieJar {
         }
     }
 
+    /**
+     * Adds the cookies a WebView already holds for [url] to this jar.
+     *
+     * The in-app browser keeps its cookies in Android's [android.webkit.CookieManager],
+     * not in this jar, so a download that follows a solved challenge would otherwise
+     * start without the clearance cookie. [header] is the Cookie request header
+     * format returned by `CookieManager.getCookie`, not a Set-Cookie header.
+     */
+    fun importCookieHeader(url: HttpUrl, header: String?) {
+        if (header.isNullOrBlank()) return
+        val host = url.host.lowercase(Locale.US)
+        val imported = header.split(';').mapNotNull { raw ->
+            val pair = raw.trim()
+            val separator = pair.indexOf('=')
+            if (separator <= 0) return@mapNotNull null
+            val name = pair.substring(0, separator).trim()
+            val value = pair.substring(separator + 1).trim()
+            if (name.isEmpty()) return@mapNotNull null
+            runCatching {
+                Cookie.Builder()
+                    .name(name)
+                    .value(value)
+                    .hostOnlyDomain(host)
+                    .path("/")
+                    .expiresAt(Long.MAX_VALUE)
+                    .build()
+            }.getOrNull()
+        }
+        if (imported.isEmpty()) return
+        synchronized(byHost) {
+            val stored = byHost.getOrPut(host) { mutableListOf() }
+            imported.forEach { cookie ->
+                stored.removeAll { existing ->
+                    existing.name == cookie.name && existing.path == cookie.path
+                }
+                stored.add(cookie)
+            }
+            if (stored.size > MAX_COOKIES_PER_HOST) {
+                byHost[host] = stored.takeLast(MAX_COOKIES_PER_HOST).toMutableList()
+            }
+        }
+    }
+
     override fun loadForRequest(url: HttpUrl): List<Cookie> {
         val host = url.host.lowercase(Locale.US)
         val now = System.currentTimeMillis()
