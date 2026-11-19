@@ -600,6 +600,7 @@ internal fun LogsTabContent(
     onClearHistory: () -> Unit
 ) {
     var subTab by rememberSaveable { mutableStateOf(LogsSubTab.HISTORY) }
+    var displayedHistory by remember(historyEntries) { mutableStateOf(historyEntries) }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -615,7 +616,15 @@ internal fun LogsTabContent(
             Spacer(Modifier.height(8.dp))
 
             when (subTab) {
-                LogsSubTab.HISTORY -> DownloadHistorySection(entries = historyEntries, onClear = onClearHistory, onOpen = onOpenHistoryEntry, onShare = onShareHistoryEntry)
+                LogsSubTab.HISTORY -> DownloadHistorySection(
+                    entries = displayedHistory,
+                    onClear = {
+                        onClearHistory()
+                        displayedHistory = emptyList()
+                    },
+                    onOpen = onOpenHistoryEntry,
+                    onShare = onShareHistoryEntry
+                )
                 LogsSubTab.LOGGING -> SettingsGroup {
                     SettingsSwitchItem(
                         icon = Icons.Outlined.BugReport,

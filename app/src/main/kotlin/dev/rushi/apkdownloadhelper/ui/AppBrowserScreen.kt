@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.util.LruCache
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.expandHorizontally
@@ -20,6 +21,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -99,6 +101,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -119,10 +122,17 @@ import dev.rushi.apkdownloadhelper.updater.formatReleaseDate
 import dev.rushi.apkdownloadhelper.updater.groupArchiveSources
 import dev.rushi.apkdownloadhelper.updater.newestReleaseDate
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.Request
+import okhttp3.Response
+import java.io.IOException
 import java.util.Locale
+import kotlin.coroutines.resume
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
@@ -345,7 +355,7 @@ private fun CompactFilterChip(
 ) {
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.05f
     val targetContainer = if (selected) {
-        MaterialTheme.colorScheme.primaryContainer.copy(alpha = if (isDark) 0.55f else 0.72f)
+        MaterialTheme.colorScheme.primaryContainer
     } else {
         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (isDark) 0.35f else 0.6f)
     }
@@ -403,6 +413,7 @@ internal fun AppBrowserScreen(
     hideStats: Boolean = false,
     hideCommunityNotice: Boolean = false,
     useGradientCards: Boolean = true,
+    bottomContentPadding: Dp = 160.dp,
     onBack: (() -> Unit)? = null,
     onOpenApp: (ArchiveApp) -> Unit = {},
     modifier: Modifier = Modifier
@@ -447,9 +458,9 @@ internal fun AppBrowserScreen(
         apps = null
         archiveIndex = null
         error = null
-        if (loadKey > 0) MorpheArchive.invalidatePatchListCache()
         try {
             val index = MorpheArchive.fetchIndex()
+            MorpheArchive.invalidatePatchListCache()
             apps = index.apps.sortedBy { it.name.lowercase(Locale.US) }
             archiveIndex = index
             freshness = archiveFreshness(index.generatedAt)
@@ -525,7 +536,7 @@ internal fun AppBrowserScreen(
                 top = headerHeightDp + 10.dp,
                 start = MorpheDefaults.ContentPadding,
                 end = MorpheDefaults.ContentPadding,
-                bottom = 160.dp
+                bottom = bottomContentPadding
             )
         ) {
             // Always show Disclaimer, Filter, and Sort immediately
@@ -831,12 +842,14 @@ internal fun AppBrowserScreen(
                 label = "header_search_transition",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp)
+                    .heightIn(min = 52.dp)
             ) { isSearchActive ->
                 if (isSearchActive) {
                     // 40.dp search bar vertically centered inside the 52.dp header row (zero height jump)
                     Row(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 52.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -851,7 +864,7 @@ internal fun AppBrowserScreen(
                         Surface(
                             modifier = Modifier
                                 .weight(1f)
-                                .height(40.dp),
+                                .heightIn(min = 40.dp),
                             shape = CircleShape,
                             color = fieldContainer
                         ) {
@@ -925,7 +938,9 @@ internal fun AppBrowserScreen(
                 } else {
                     // Normal header vertically centered inside the same 52.dp height
                     Row(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 52.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -1492,7 +1507,59 @@ private fun FindAppIcon(
     )
 }
 
-private val archiveIconCache = ConcurrentHashMap<String, ImageBitmap>()
+/** Decoded archive icons, bounded so a long scroll cannot fill the heap. */
+private const val ARCHIVE_ICON_CACHE_BYTES = 12 * 1024 * 1024
+private const val ARCHIVE_ICON_MAX_PX = 256
+
+private val archiveIconCache = object : LruCache<String, ImageBitmap>(ARCHIVE_ICON_CACHE_BYTES) {
+    override fun sizeOf(key: String, value: ImageBitmap): Int =
+        value.width * value.height * 4
+}
+
+/** Decode at avatar scale instead of retaining full-resolution source bitmaps. */
+private fun decodeArchiveIcon(bytes: ByteArray): ImageBitmap? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    val maxDimension = maxOf(bounds.outWidth, bounds.outHeight)
+    var sampleSize = 1
+    while (maxDimension / (sampleSize * 2) >= ARCHIVE_ICON_MAX_PX) {
+        sampleSize *= 2
+    }
+    val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+    return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.asImageBitmap()
+}
+
+/** Icon fetch that is cancelled when the row leaves the viewport. */
+private suspend fun fetchArchiveIcon(iconUrl: String): ImageBitmap? {
+    val request = runCatching {
+        Request.Builder()
+            .url(iconUrl)
+            .header(
+                "User-Agent",
+                "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Mobile Safari/537.36"
+            )
+            .build()
+    }.getOrNull() ?: return null
+    val call = MorpheArchive.http.newCall(request)
+    return suspendCancellableCoroutine { continuation ->
+        continuation.invokeOnCancellation { call.cancel() }
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                if (continuation.isActive) continuation.resume(null)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                val bitmap = runCatching {
+                    response.use {
+                        if (!it.isSuccessful) return@use null
+                        it.body.bytes().let { bytes -> decodeArchiveIcon(bytes) }
+                    }
+                }.getOrNull()
+                if (continuation.isActive) continuation.resume(bitmap)
+            }
+        })
+    }
+}
 
 @Composable
 internal fun AsyncAvatar(
@@ -1509,27 +1576,14 @@ internal fun AsyncAvatar(
             bitmap = null
             return@LaunchedEffect
         }
-        archiveIconCache[iconUrl]?.let {
+        archiveIconCache.get(iconUrl)?.let {
             bitmap = it
             return@LaunchedEffect
         }
-        bitmap = withContext(Dispatchers.IO) {
-            runCatching {
-                val request = Request.Builder()
-                    .url(iconUrl)
-                    .header(
-                        "User-Agent",
-                        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Mobile Safari/537.36"
-                    )
-                    .build()
-                MorpheArchive.http.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) return@use null
-                    response.body?.bytes()?.let { bytes ->
-                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                    }?.asImageBitmap()
-                }
-            }.getOrNull()
-        }?.also { archiveIconCache[iconUrl] = it }
+        delay(120)
+        val loaded = fetchArchiveIcon(iconUrl) ?: return@LaunchedEffect
+        archiveIconCache.put(iconUrl, loaded)
+        bitmap = loaded
     }
     if (bitmap != null) {
         Image(
@@ -1599,69 +1653,87 @@ private fun ExpandableVersionRow(
     val setExpanded: (Boolean) -> Unit = onExpandedChange ?: { internalExpanded = it }
 
     val scrollState = rememberScrollState()
-    val hasOverflow by remember {
-        derivedStateOf { scrollState.maxValue > 0 }
-    }
-    val showToggle = isExpanded || hasOverflow
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
 
-    if (isExpanded) {
-        Row(
-            modifier = modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            FlowRow(
-                modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(chipSpacing),
-                verticalArrangement = Arrangement.spacedBy(chipSpacing)
-            ) {
-                versions.forEach { ver ->
-                    VersionPillChip(
-                        text = ver,
-                        shape = chipShape,
-                        horizontalPadding = chipHorizontalPadding,
-                        verticalPadding = chipVerticalPadding,
-                        containerColor = containerColorFor(ver),
-                        contentColor = contentColorFor(ver),
-                        borderColor = borderColorFor?.invoke(ver)
-                    )
-                }
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val hasOverflow = if (versions.isEmpty()) {
+            false
+        } else {
+            var requiredWidth = chipSpacing * (versions.size - 1).coerceAtLeast(0)
+            versions.forEach { ver ->
+                val textWidth = textMeasurer.measure(
+                    text = ver,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    softWrap = false
+                ).size.width
+                requiredWidth += with(density) { textWidth.toDp() } + chipHorizontalPadding * 2
             }
-            VersionExpandToggleButton(
-                expanded = true,
-                onClick = { setExpanded(false) }
-            )
+            requiredWidth > maxWidth
         }
-    } else {
-        Row(
-            modifier = modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        val showToggle = isExpanded || hasOverflow
+
+        if (isExpanded) {
             Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .horizontalScroll(scrollState),
-                horizontalArrangement = Arrangement.spacedBy(chipSpacing),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                FlowRow(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(chipSpacing),
+                    verticalArrangement = Arrangement.spacedBy(chipSpacing)
+                ) {
+                    versions.forEach { ver ->
+                        VersionPillChip(
+                            text = ver,
+                            shape = chipShape,
+                            horizontalPadding = chipHorizontalPadding,
+                            verticalPadding = chipVerticalPadding,
+                            containerColor = containerColorFor(ver),
+                            contentColor = contentColorFor(ver),
+                            borderColor = borderColorFor?.invoke(ver),
+                            wrap = true
+                        )
+                    }
+                }
+                VersionExpandToggleButton(
+                    expanded = true,
+                    onClick = { setExpanded(false) }
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                versions.forEach { ver ->
-                    VersionPillChip(
-                        text = ver,
-                        shape = chipShape,
-                        horizontalPadding = chipHorizontalPadding,
-                        verticalPadding = chipVerticalPadding,
-                        containerColor = containerColorFor(ver),
-                        contentColor = contentColorFor(ver),
-                        borderColor = borderColorFor?.invoke(ver)
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(scrollState),
+                    horizontalArrangement = Arrangement.spacedBy(chipSpacing),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    versions.forEach { ver ->
+                        VersionPillChip(
+                            text = ver,
+                            shape = chipShape,
+                            horizontalPadding = chipHorizontalPadding,
+                            verticalPadding = chipVerticalPadding,
+                            containerColor = containerColorFor(ver),
+                            contentColor = contentColorFor(ver),
+                            borderColor = borderColorFor?.invoke(ver)
+                        )
+                    }
+                }
+                if (showToggle) {
+                    VersionExpandToggleButton(
+                        expanded = false,
+                        onClick = { setExpanded(true) }
                     )
                 }
-            }
-            if (showToggle) {
-                VersionExpandToggleButton(
-                    expanded = false,
-                    onClick = { setExpanded(true) }
-                )
             }
         }
     }
@@ -1675,7 +1747,8 @@ private fun VersionPillChip(
     verticalPadding: Dp,
     containerColor: Color,
     contentColor: Color,
-    borderColor: Color? = null
+    borderColor: Color? = null,
+    wrap: Boolean = false
 ) {
     Box(
         modifier = Modifier
@@ -1695,7 +1768,8 @@ private fun VersionPillChip(
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Medium,
             color = contentColor,
-            maxLines = 1
+            maxLines = if (wrap) Int.MAX_VALUE else 1,
+            overflow = if (wrap) TextOverflow.Clip else TextOverflow.Ellipsis
         )
     }
 }
@@ -2365,7 +2439,7 @@ internal fun AppSourceCard(
                     if (ver == "Any version" || ver == "Loading…") {
                         colors.surfaceVariant.copy(alpha = 0.45f)
                     } else {
-                        colors.primaryContainer.copy(alpha = 0.55f)
+                        colors.primaryContainer
                     }
                 },
                 contentColorFor = { ver ->
@@ -2604,7 +2678,7 @@ internal fun AppSourceCard(
                                             if (ver == "Any version" || ver == "Loading…") {
                                                 colors.surfaceVariant.copy(alpha = 0.45f)
                                             } else {
-                                                colors.primaryContainer.copy(alpha = 0.55f)
+                                                colors.primaryContainer
                                             }
                                         },
                                         contentColorFor = { ver ->
@@ -2786,15 +2860,19 @@ private fun SourcePatchesScreen(
         keyboardController?.hide()
     }
 
-    val filteredPatches = remember(source.patches, patchQuery) {
+    val filteredPatches = remember(source.patches, patchQuery, liveVersions) {
         val indexed = source.patches.mapIndexed { idx, patch -> (idx + 1) to patch }
         if (patchQuery.isBlank()) {
             indexed
         } else {
             indexed.filter { (_, patch) ->
+                val resolvedVersions = liveVersions
+                    ?.get(patch.name.trim())
+                    ?.takeIf { it.isNotEmpty() }
+                    ?: patch.versions
                 patch.name.contains(patchQuery, ignoreCase = true) ||
                         patch.description?.contains(patchQuery, ignoreCase = true) == true ||
-                        patch.versions.any { it.contains(patchQuery, ignoreCase = true) }
+                        resolvedVersions.any { it.contains(patchQuery, ignoreCase = true) }
             }
         }
     }
@@ -2913,7 +2991,7 @@ private fun SourcePatchesScreen(
                                     if (ver == "Any version") {
                                         colors.surfaceVariant.copy(alpha = 0.45f)
                                     } else {
-                                        colors.primaryContainer.copy(alpha = 0.55f)
+                                        colors.primaryContainer
                                     }
                                 },
                                 contentColorFor = { ver ->
@@ -2970,11 +3048,13 @@ private fun SourcePatchesScreen(
                 label = "patches_search_transition",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp)
+                    .heightIn(min = 52.dp)
             ) { isSearchActive ->
                 if (isSearchActive) {
                     Row(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 52.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -2989,7 +3069,7 @@ private fun SourcePatchesScreen(
                         Surface(
                             modifier = Modifier
                                 .weight(1f)
-                                .height(40.dp),
+                                .heightIn(min = 40.dp),
                             shape = CircleShape,
                             color = fieldContainer
                         ) {
@@ -3060,7 +3140,9 @@ private fun SourcePatchesScreen(
                     }
                 } else {
                     Row(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 52.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {

@@ -68,7 +68,7 @@ internal data class ArchivePatch(
 )
 
 internal data class ArchiveCompatiblePackage(
-    @SerializedName("packageName") val packageName: String = "",
+    @SerializedName("packageName") val packageName: String? = null,
     @SerializedName("versions") val versions: List<String>? = null,
     @SerializedName("targets") val targets: List<ArchivePatchTarget>? = null
 )
@@ -274,11 +274,14 @@ internal object MorpheArchive {
         .followRedirects(true)
         .build()
 
-    private val patchListCache = java.util.concurrent.ConcurrentHashMap<String, List<ArchivePatch>>()
+    @Volatile
+    private var patchListCache = java.util.concurrent.ConcurrentHashMap<String, List<ArchivePatch>>()
 
     /** Call after a successful index refresh to force fresh patch lists next fetch. */
     fun invalidatePatchListCache() {
-        patchListCache.clear()
+        // Replace the map instead of clearing it so requests already in flight
+        // cannot write a stale response back into the live cache.
+        patchListCache = java.util.concurrent.ConcurrentHashMap()
     }
 
     /**
@@ -304,9 +307,10 @@ internal object MorpheArchive {
 
         if (candidateUrls.isEmpty()) return@withContext emptyMap()
 
+        val cache = patchListCache
         var listPatches: List<ArchivePatch> = emptyList()
         for (url in candidateUrls) {
-            val cached = patchListCache[url]
+            val cached = cache[url]
             if (cached != null) {
                 listPatches = cached
                 break
@@ -325,9 +329,10 @@ internal object MorpheArchive {
                         gson.fromJson<List<ArchivePatch>>(json, listType).orEmpty()
                     } else {
                         val rootObj = com.google.gson.JsonParser.parseString(json).asJsonObject
-                        val arr = rootObj.getAsJsonArray("patches")
-                            ?: rootObj.getAsJsonArray("items")
-                            ?: rootObj.getAsJsonArray("data")
+                        val arr = listOf("patches", "items", "data")
+                            .firstNotNullOfOrNull { key ->
+                                rootObj.get(key)?.takeIf { it.isJsonArray }?.asJsonArray
+                            }
                         if (arr != null) {
                             gson.fromJson<List<ArchivePatch>>(arr, listType).orEmpty()
                         } else {
@@ -338,7 +343,7 @@ internal object MorpheArchive {
             }.getOrDefault(emptyList())
 
             if (fetched.isNotEmpty()) {
-                patchListCache[url] = fetched
+                cache[url] = fetched
                 listPatches = fetched
                 break
             }
@@ -346,12 +351,12 @@ internal object MorpheArchive {
 
         listPatches.associate { patch ->
             val matchingPackages = patch.compatiblePackages.orEmpty().filter {
-                it.packageName.isBlank() || it.packageName.equals(packageName, ignoreCase = true)
+                it.packageName.isNullOrBlank() || it.packageName.equals(packageName, ignoreCase = true)
             }
             val targetVersions = matchingPackages.flatMap { it.targets.orEmpty() }
                 .mapNotNull { it.version?.trim()?.takeIf { v -> v.isNotEmpty() && v != "null" } }
             val compatVersions = matchingPackages.flatMap { it.versions.orEmpty() }
-                .filter { it.isNotBlank() && it != "null" }
+                .mapNotNull { it.trim().takeIf { v -> v.isNotEmpty() && v != "null" } }
             val directVersions = patch.rawVersions.orEmpty()
                 .mapNotNull { it.trim().takeIf { v -> v.isNotEmpty() && v != "null" } }
 
@@ -380,13 +385,15 @@ internal object MorpheArchive {
             val hydratedApps = parsed.apps.map { app ->
                 fun ArchivePatch.extractVersions(): List<String> {
                     val matchingPackages = compatiblePackages.filter {
-                        it.packageName.isBlank() || it.packageName.equals(app.packageName, ignoreCase = true)
+                        it.packageName.isNullOrBlank() || it.packageName.equals(app.packageName, ignoreCase = true)
                     }
                     val targetVersions = matchingPackages.flatMap { it.targets.orEmpty() }
-                        .mapNotNull { it.version?.takeIf { v -> v.isNotBlank() && v != "null" } }
+                        .mapNotNull { it.version?.trim()?.takeIf { v -> v.isNotEmpty() && v != "null" } }
                     val compatVersions = matchingPackages.flatMap { it.versions.orEmpty() }
-                        .filter { it.isNotBlank() && it != "null" }
-                    return (rawVersions + targetVersions + compatVersions).distinct()
+                        .mapNotNull { it.trim().takeIf { v -> v.isNotEmpty() && v != "null" } }
+                    val directVersions = rawVersions
+                        .mapNotNull { it.trim().takeIf { v -> v.isNotEmpty() && v != "null" } }
+                    return (directVersions + targetVersions + compatVersions).distinct()
                 }
 
                 val detailsByName = app.patchDetails.associate { it.name to it.extractVersions() }

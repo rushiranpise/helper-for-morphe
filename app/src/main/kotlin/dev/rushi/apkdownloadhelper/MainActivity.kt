@@ -524,6 +524,7 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(requestResetToken) {
                 if (requestResetToken > 0) {
                     activeSettingsCategory = null
+                    selectedArchiveApp = null
                 }
             }
 
@@ -566,11 +567,16 @@ class MainActivity : ComponentActivity() {
                             HomePagerScreen(
                                 requestResetToken = requestResetToken,
                                 animatedBackground = helperSettings.animatedBackground,
-                                findAppsContent = { _ ->
+                                findAppsContent = { bottomBarHeight ->
                                     AppBrowserScreen(
                                         hideStats = helperSettings.hideFindAppsStats,
                                         hideCommunityNotice = helperSettings.hideCommunityNotice,
                                         useGradientCards = helperSettings.useGradientCardColors,
+                                        bottomContentPadding = if (bottomBarHeight > 0.dp) {
+                                            bottomBarHeight + 24.dp
+                                        } else {
+                                            160.dp
+                                        },
                                         onBack = null,
                                         onOpenApp = { selectedArchiveApp = it }
                                     )
@@ -669,15 +675,18 @@ class MainActivity : ComponentActivity() {
                     ) {
                         val category = lastActiveCategory
                         if (category != null) {
+                            val settingsDetailScrollState = rememberScrollState()
                             MorphePushedScreen {
                                 SettingsPageDetail(
                                     title = category.title,
-                                    onBack = { activeSettingsCategory = null }
+                                    onBack = { activeSettingsCategory = null },
+                                    scrollState = settingsDetailScrollState
                                 ) {
                                     when (category) {
                                         SettingsCategory.SOURCES -> SourcesSettingsScreen(
                                             settings = helperSettings,
-                                            onSettingsChange = ::updateHelperSettings
+                                            onSettingsChange = ::updateHelperSettings,
+                                            parentScrollState = settingsDetailScrollState
                                         )
                                         SettingsCategory.APPEARANCE -> AppearanceTabContent(
                                             settings = helperSettings,
@@ -687,11 +696,11 @@ class MainActivity : ComponentActivity() {
                                             settings = helperSettings,
                                             onSettingsChange = ::updateHelperSettings
                                         )
-                                        SettingsCategory.DOWNLOADS -> AdvancedTabContent(
+                                        SettingsCategory.DOWNLOADS -> SystemTabContent(
                                             settings = helperSettings,
                                             onSettingsChange = ::updateHelperSettings
                                         )
-                                        SettingsCategory.SECURITY_NETWORK -> SystemTabContent(
+                                        SettingsCategory.SECURITY_NETWORK -> AdvancedTabContent(
                                             settings = helperSettings,
                                             onSettingsChange = ::updateHelperSettings
                                         )
