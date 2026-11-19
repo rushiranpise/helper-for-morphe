@@ -2683,9 +2683,14 @@ internal fun AppDetailView(
                     },
                     modifier = Modifier
                         .weight(if (onBack != null) 1.4f else 1f)
-                        .heightIn(min = 48.dp),
+                        .heightIn(min = 48.dp)
+                        .glassFill(
+                            glass = scheme.surfaceVariant.copy(alpha = 0.65f),
+                            shape = CircleShape,
+                            hazeState = detailHeaderHaze
+                        ),
                     shape = CircleShape,
-                    color = scheme.surfaceVariant.copy(alpha = 0.65f),
+                    color = Color.Transparent,
                     contentColor = scheme.onSurface
                 ) {
                     Row(
