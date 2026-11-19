@@ -82,6 +82,27 @@ class SessionCookiesTest {
     }
 
     @Test
+    fun `cookies captured by the browser are imported for the file hop`() {
+        val download = "https://www.apkmirror.com/wp-content/themes/APKMirror/download.php?id=1"
+            .toHttpUrl()
+
+        SessionCookies.importCookieHeader(download, "cf_clearance=browser; session=abc")
+
+        val sent = SessionCookies.loadForRequest(download)
+        assertEquals(listOf("cf_clearance", "session"), sent.map { it.name })
+        assertEquals("browser", sent.first().value)
+    }
+
+    @Test
+    fun `an imported cookie replaces the jar's stale value`() {
+        SessionCookies.saveFromResponse(variantPage, listOf(cookie(value = "stale")))
+
+        SessionCookies.importCookieHeader(variantPage, "cf_clearance=fresh")
+
+        assertEquals("fresh", SessionCookies.loadForRequest(variantPage).single().value)
+    }
+
+    @Test
     fun `clearing drops every host`() {
         SessionCookies.saveFromResponse(variantPage, listOf(cookie()))
         assertEquals(1, SessionCookies.hostCount)

@@ -7,6 +7,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import okhttp3.Call
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
@@ -96,6 +97,10 @@ internal class ApkDownloader(
     ) {
         val url = download.url.normalizedHttpUrlOrNull()
             ?: error("Source returned an invalid download URL.".withManualModeHint())
+        // The in-app browser keeps its session in CookieManager rather than in
+        // this HTTP client, so import it before the first request. A cleared
+        // challenge is only valid for the cookies that solved it.
+        url.toHttpUrlOrNull()?.let { SessionCookies.importCookieHeader(it, download.cookieHeader) }
 
         // Resume a partial single-stream file with the existing path. Mixing a
         // byte offset with a segment layout would corrupt the output.
@@ -155,7 +160,7 @@ internal class ApkDownloader(
             .url(url)
             .header("Range", "bytes=0-0")
             .header("Accept-Encoding", "identity")
-        download.referer?.let { builder.header("Referer", it) }
+        builder.withCapturedBrowserHeaders(download)
 
         val call = client.newCall(builder.build())
         synchronized(activeCalls) { activeCalls.add(call) }
@@ -348,7 +353,7 @@ internal class ApkDownloader(
                 .url(plan.url)
                 .header("Range", "bytes=$from-$end")
                 .header("Accept-Encoding", "identity")
-            download.referer?.let { builder.header("Referer", it) }
+            builder.withCapturedBrowserHeaders(download)
             // Only a resumed range needs the guard; a fresh chunk must not
             // risk a server rejecting a weak Last-Modified validator.
             if (from > start) {
@@ -448,7 +453,7 @@ internal class ApkDownloader(
     ) {
         val partial = if (target.exists()) target.length() else 0L
         val builder = Request.Builder().url(url)
-        download.referer?.let { builder.header("Referer", it) }
+        builder.withCapturedBrowserHeaders(download)
         builder.header("Accept-Encoding", "identity")
         if (partial > 0L) builder.header("Range", "bytes=$partial-")
 
@@ -554,6 +559,12 @@ internal class ApkDownloader(
         return match.groupValues[1].toLongOrNull() == expectedStart &&
             match.groupValues[2].toLongOrNull() == expectedEnd &&
             match.groupValues[3].toLongOrNull() == expectedTotal
+    }
+
+    private fun Request.Builder.withCapturedBrowserHeaders(download: CandidateDownloadFile) {
+        download.referer?.let { header("Referer", it) }
+        download.cookieHeader?.let { header("Cookie", it) }
+        download.userAgent?.let { header("User-Agent", it) }
     }
 
     private fun downloadClientFor(url: String): OkHttpClient =

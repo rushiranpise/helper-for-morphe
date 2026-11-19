@@ -12,8 +12,10 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun HomePagerScreen(
     requestResetToken: Int,
+    openTrackingToken: Int = 0,
     animatedBackground: Boolean = true,
     findAppsContent: @Composable (bottomBarHeight: Dp) -> Unit,
+    trackingContent: @Composable (bottomBarHeight: Dp) -> Unit,
     homeContent: @Composable (bottomBarHeight: Dp) -> Unit,
     settingsContent: @Composable (bottomBarHeight: Dp) -> Unit,
     navigationCovered: () -> Boolean,
@@ -25,6 +27,12 @@ internal fun HomePagerScreen(
     LaunchedEffect(requestResetToken) {
         if (requestResetToken > 0) {
             pagerState.scrollToPage(MainPage.HOME.ordinal)
+        }
+    }
+
+    LaunchedEffect(openTrackingToken) {
+        if (openTrackingToken > 0) {
+            pagerState.animateScrollToPage(MainPage.TRACKING.ordinal)
         }
     }
 
@@ -41,6 +49,7 @@ internal fun HomePagerScreen(
     ) { page, bottomBarHeight ->
         when (page) {
             MainPage.FIND_APPS -> findAppsContent(bottomBarHeight)
+            MainPage.TRACKING -> trackingContent(bottomBarHeight)
             MainPage.HOME -> homeContent(bottomBarHeight)
             MainPage.SETTINGS -> settingsContent(bottomBarHeight)
         }

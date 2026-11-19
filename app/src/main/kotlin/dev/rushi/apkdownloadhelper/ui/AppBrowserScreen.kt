@@ -1,10 +1,15 @@
 ﻿package dev.rushi.apkdownloadhelper.ui
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
 import android.util.LruCache
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.expandHorizontally
@@ -44,11 +49,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -59,6 +67,7 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Refresh
@@ -77,6 +86,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -102,6 +112,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -121,6 +133,7 @@ import dev.rushi.apkdownloadhelper.updater.formatBundleRelease
 import dev.rushi.apkdownloadhelper.updater.formatReleaseDate
 import dev.rushi.apkdownloadhelper.updater.groupArchiveSources
 import dev.rushi.apkdownloadhelper.updater.newestReleaseDate
+import dev.rushi.apkdownloadhelper.tracking.TrackingCheckScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -143,6 +156,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.Role
+import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import java.util.concurrent.ConcurrentHashMap
 import androidx.compose.ui.graphics.drawOutline
@@ -198,6 +212,7 @@ internal enum class AppListTab(
 ) {
     All("All", Icons.Outlined.ViewList, "All"),
     Favourites("Liked", Icons.Outlined.FavoriteBorder, "Liked"),
+    Tracked("Tracked", Icons.Outlined.Notifications, "Tracked"),
     Installed("Installed", Icons.Outlined.CheckCircle, "Installed"),
     NotInstalled("Not installed", Icons.Outlined.Block, "Not installed")
 }
@@ -206,7 +221,9 @@ internal enum class AppSort(val label: String, val icon: ImageVector, val rotati
     AZ("A–Z", Icons.Outlined.SortByAlpha),
     ZA("Z–A", Icons.Outlined.SortByAlpha, 180f),
     Sources("Sources", Icons.Outlined.Extension),
-    Newest("Newest", Icons.Outlined.History)
+    Newest("Newest", Icons.Outlined.History),
+    Updates("Updates", Icons.Outlined.Notifications),
+    NewPatches("New patches", Icons.Outlined.Extension)
 }
 
 internal object MorpheFavourites {
@@ -345,6 +362,195 @@ internal fun AppDisclaimerBanner() {
 }
 
 @Composable
+private fun PendingTrackedPackagesCard(
+    packages: Set<String>,
+    onRemove: (String) -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val isDark = scheme.background.luminance() < 0.05f
+    val container = scheme.surfaceVariant.copy(alpha = if (isDark) 0.35f else 0.6f)
+    val sorted = remember(packages) { packages.sorted() }
+
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = container,
+        border = BorderStroke(1.dp, scheme.outline.copy(alpha = 0.25f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Notifications,
+                    contentDescription = null,
+                    tint = scheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    text = "Waiting for index",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = "${packages.size}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = scheme.onSurfaceVariant
+                )
+            }
+            Text(
+                text = "We'll notify you when these packages appear in the Morphe index.",
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant
+            )
+            sorted.forEach { packageName ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(scheme.surface.copy(alpha = if (isDark) 0.25f else 0.65f))
+                        .padding(start = 10.dp, end = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = packageName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .clickable(role = Role.Button) { onRemove(packageName) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Close,
+                            contentDescription = "Stop waiting for $packageName",
+                            tint = scheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrackPackageField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    enabled: Boolean,
+    notice: String?,
+    noticeIsError: Boolean,
+    onTrack: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val isDark = scheme.background.luminance() < 0.05f
+    val canTrack = enabled && value.isNotBlank()
+    val container = scheme.surfaceVariant.copy(alpha = if (isDark) 0.35f else 0.6f)
+
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = container,
+        border = BorderStroke(1.dp, scheme.outline.copy(alpha = 0.25f))
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Apps,
+                    contentDescription = null,
+                    tint = scheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    if (value.isEmpty()) {
+                        Text(
+                            text = "Package name (com.example.app)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = scheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    BasicTextField(
+                        value = value,
+                        onValueChange = onValueChange,
+                        enabled = enabled,
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                            color = if (enabled) {
+                                scheme.onSurface
+                            } else {
+                                scheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            }
+                        ),
+                        cursorBrush = SolidColor(scheme.primary),
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.None,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = { if (canTrack) onTrack() }
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(if (canTrack) scheme.primary else container)
+                        .clickable(enabled = canTrack, role = Role.Button, onClick = onTrack)
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Track",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (canTrack) scheme.onPrimary else scheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                }
+            }
+            Text(
+                text = notice ?: "Not in the index yet? It will be tracked when it appears.",
+                style = MaterialTheme.typography.bodySmall,
+                color = when {
+                    notice == null -> scheme.onSurfaceVariant.copy(alpha = 0.75f)
+                    noticeIsError -> scheme.error
+                    else -> scheme.primary
+                },
+                modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 10.dp)
+            )
+        }
+    }
+}
+
+@Composable
 private fun CompactFilterChip(
     label: String,
     icon: ImageVector,
@@ -410,6 +616,7 @@ private fun CompactFilterChip(
 
 @Composable
 internal fun AppBrowserScreen(
+    trackedOnly: Boolean = false,
     hideStats: Boolean = false,
     hideCommunityNotice: Boolean = false,
     useGradientCards: Boolean = true,
@@ -423,15 +630,27 @@ internal fun AppBrowserScreen(
     var freshness by remember { mutableStateOf<ArchiveFreshness?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
+    var trackPackageQuery by remember { mutableStateOf("") }
+    var trackPackageNotice by remember { mutableStateOf<String?>(null) }
+    var trackPackageNoticeIsError by remember { mutableStateOf(false) }
     var searchExpanded by remember { mutableStateOf(false) }
     var loadKey by remember { mutableIntStateOf(0) }
-    var tab by remember { mutableStateOf(AppListTab.All) }
+    var tab by remember(trackedOnly) {
+        mutableStateOf(if (trackedOnly) AppListTab.Tracked else AppListTab.All)
+    }
     var sort by remember { mutableStateOf(AppSort.AZ) }
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     var favourites by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var tracked by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var trackingSnapshots by remember {
+        mutableStateOf<Map<String, TrackedAppSnapshot>>(emptyMap())
+    }
     var installedPackages by remember { mutableStateOf<Set<String>>(emptySet()) }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
     val listState = rememberLazyListState()
     val searchFocusRequester = remember { FocusRequester() }
     val density = LocalDensity.current
@@ -445,13 +664,92 @@ internal fun AppBrowserScreen(
     }
     val scope = rememberCoroutineScope()
 
+    fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    fun trackPackage() {
+        val entered = trackPackageQuery.trim()
+        if (entered.isBlank()) {
+            trackPackageNotice = "Enter a package name."
+            trackPackageNoticeIsError = true
+            return
+        }
+        val packageKey = entered.lowercase(Locale.US)
+        val app = apps?.firstOrNull {
+            it.packageName.equals(entered, ignoreCase = true)
+        }
+        if (app == null) {
+            if (packageKey in tracked) {
+                trackPackageNotice = "$packageKey is already waiting for the index."
+                trackPackageNoticeIsError = false
+                tab = AppListTab.Tracked
+                return
+            }
+
+            tracked = MorpheTracking.trackPackage(context, packageKey)
+            trackingSnapshots = MorpheTracking.loadSnapshots(context, tracked)
+            TrackingCheckScheduler.sync(context)
+            requestNotificationPermission()
+            tab = AppListTab.Tracked
+            trackPackageQuery = ""
+            trackPackageNotice = "Waiting for $packageKey to appear in the Morphe index."
+            trackPackageNoticeIsError = false
+            focusManager.clearFocus(force = true)
+            keyboardController?.hide()
+            return
+        }
+        if (app.packageName in tracked) {
+            trackPackageNotice = "${app.name} is already tracked."
+            trackPackageNoticeIsError = false
+            tab = AppListTab.Tracked
+            return
+        }
+
+        tracked = MorpheTracking.toggle(context, app)
+        trackingSnapshots = MorpheTracking.loadSnapshots(context, tracked)
+        TrackingCheckScheduler.sync(context)
+        requestNotificationPermission()
+        tab = AppListTab.Tracked
+        trackPackageQuery = ""
+        trackPackageNotice = "Tracking ${app.name}."
+        trackPackageNoticeIsError = false
+        focusManager.clearFocus(force = true)
+        keyboardController?.hide()
+    }
+
+    fun removePendingPackage(packageName: String) {
+        tracked = MorpheTracking.untrack(context, packageName)
+        trackingSnapshots = MorpheTracking.loadSnapshots(context, tracked)
+        TrackingCheckScheduler.sync(context)
+        trackPackageNotice = "Stopped waiting for $packageName."
+        trackPackageNoticeIsError = false
+    }
+
     LaunchedEffect(Unit) {
         favourites = MorpheFavourites.load(context)
+        tracked = MorpheTracking.load(context)
+        trackingSnapshots = MorpheTracking.loadSnapshots(context, tracked)
         installedPackages = withContext(Dispatchers.IO) {
             context.packageManager.getInstalledApplications(0)
                 .mapNotNull { it.packageName.takeIf(String::isNotBlank) }
                 .toSet()
         }
+    }
+
+    DisposableEffect(context) {
+        val observer = MorpheTracking.observe(context) {
+            tracked = MorpheTracking.load(context)
+            trackingSnapshots = MorpheTracking.loadSnapshots(context, tracked)
+        }
+        onDispose { observer.close() }
     }
 
     LaunchedEffect(loadKey) {
@@ -498,17 +796,40 @@ internal fun AppBrowserScreen(
             .fillMaxSize()
     ) {
         val loaded = apps
-        val filtered = remember(loaded, query, tab, sort, favourites, installedPackages) {
+        val changesByPackage = remember(loaded, trackingSnapshots) {
+            loaded.orEmpty().associate { app ->
+                app.packageName to app.trackedChanges(trackingSnapshots[app.packageName])
+            }
+        }
+        val indexedPackages = remember(loaded) {
+            loaded.orEmpty().mapNotNull { it.packageName.takeIf(String::isNotBlank) }.toSet()
+        }
+        val pendingTracked = remember(tracked, indexedPackages) {
+            tracked - indexedPackages
+        }
+        val filtered = remember(
+            loaded,
+            query,
+            tab,
+            sort,
+            favourites,
+            installedPackages,
+            tracked,
+            trackedOnly,
+            changesByPackage
+        ) {
             loaded.orEmpty()
                 .filter { app ->
-                    query.isBlank() ||
+                    (!trackedOnly || app.packageName in tracked) &&
+                        (query.isBlank() ||
                             app.name.contains(query, ignoreCase = true) ||
-                            app.packageName.contains(query, ignoreCase = true)
+                            app.packageName.contains(query, ignoreCase = true))
                 }
                 .filter { app ->
                     when (tab) {
                         AppListTab.All -> true
                         AppListTab.Favourites -> app.packageName in favourites
+                        AppListTab.Tracked -> app.packageName in tracked
                         AppListTab.Installed -> app.packageName in installedPackages
                         AppListTab.NotInstalled -> app.packageName !in installedPackages
                     }
@@ -522,8 +843,21 @@ internal fun AppBrowserScreen(
                             .map { app -> app.newestReleaseDate().orEmpty() to app }
                             .sortedByDescending { it.first }
                             .map { it.second }
+                        AppSort.Updates -> matches.sortedWith(
+                            compareByDescending<ArchiveApp> {
+                                changesByPackage[it.packageName]?.updates ?: 0
+                            }.thenBy { it.name.lowercase(Locale.US) }
+                        )
+                        AppSort.NewPatches -> matches.sortedWith(
+                            compareByDescending<ArchiveApp> {
+                                changesByPackage[it.packageName]?.newPatches ?: 0
+                            }.thenBy { it.name.lowercase(Locale.US) }
+                        )
                     }
                 }
+        }
+        val availableTabs = remember(trackedOnly) {
+            if (trackedOnly) AppListTab.entries.filter { it != AppListTab.All } else AppListTab.entries
         }
 
         // CHILD 1: Full-screen LazyColumn
@@ -550,6 +884,25 @@ internal fun AppBrowserScreen(
                     }
                     if (!hideCommunityNotice) {
                         AppDisclaimerBanner()
+                    }
+                    if (trackedOnly) {
+                        TrackPackageField(
+                            value = trackPackageQuery,
+                            onValueChange = {
+                                trackPackageQuery = it
+                                trackPackageNotice = null
+                            },
+                            enabled = loaded != null,
+                            notice = trackPackageNotice,
+                            noticeIsError = trackPackageNoticeIsError,
+                            onTrack = { trackPackage() }
+                        )
+                        if (loaded != null && pendingTracked.isNotEmpty()) {
+                            PendingTrackedPackagesCard(
+                                packages = pendingTracked,
+                                onRemove = { removePendingPackage(it) }
+                            )
+                        }
                     }
 
                     var filterMenuOpen by remember { mutableStateOf(false) }
@@ -585,7 +938,7 @@ internal fun AppBrowserScreen(
                                 border = menuBorder,
                                 modifier = Modifier.width(with(density) { filterWidthPx.toDp() })
                             ) {
-                                AppListTab.entries.forEach { itemTab ->
+                                availableTabs.forEach { itemTab ->
                                     val isSelected = tab == itemTab
                                     DropdownMenuItem(
                                         text = {
@@ -711,13 +1064,25 @@ internal fun AppBrowserScreen(
                 filtered.isEmpty() -> {
                     item(key = "empty") {
                         InfoCard(
-                            when (tab) {
-                                AppListTab.Favourites ->
+                            when {
+                                trackedOnly && tracked.isEmpty() ->
+                                    "No tracked apps yet. Enter a package name above or tap the bell on any app."
+                                tab == AppListTab.Tracked && tracked.isEmpty() ->
+                                    "No tracked apps yet. Tap the bell on any app to follow its updates and patches."
+                                tab == AppListTab.Tracked &&
+                                    pendingTracked.isNotEmpty() && query.isBlank() ->
+                                    "Waiting for ${pendingTracked.size} tracked " +
+                                        (if (pendingTracked.size == 1) "package" else "packages") +
+                                        " to appear in the Morphe index."
+                                tab == AppListTab.Tracked ->
+                                    "No tracked apps match \"$query\"."
+                                tab == AppListTab.Favourites ->
                                     "No liked apps yet. Tap the heart on any app to pin it here."
-                                AppListTab.Installed -> "No patched apps in the index are installed."
-                                AppListTab.NotInstalled ->
+                                tab == AppListTab.Installed ->
+                                    "No patched apps in the index are installed."
+                                tab == AppListTab.NotInstalled ->
                                     "Every app in the index is installed on this device."
-                                AppListTab.All -> "No apps match \"$query\"."
+                                else -> "No apps match \"$query\"."
                             }
                         )
                     }
@@ -744,16 +1109,31 @@ internal fun AppBrowserScreen(
                             bottomEnd = if (isLast) outerRadius else innerRadius
                         )
 
+                        val changes = changesByPackage[app.packageName] ?: TrackedAppChanges()
                         AppBrowserRow(
                             app = app,
                             installed = app.packageName in installedPackages,
                             favourite = app.packageName in favourites,
+                            tracked = app.packageName in tracked,
+                            updates = changes.updates,
+                            newPatches = changes.newPatches,
                             shape = cardShape,
                             useGradient = useGradientCards,
                             onToggleFavourite = {
                                 favourites = MorpheFavourites.toggle(context, app.packageName)
                             },
+                            onToggleTracking = {
+                                val adding = app.packageName !in tracked
+                                tracked = MorpheTracking.toggle(context, app)
+                                trackingSnapshots = MorpheTracking.loadSnapshots(context, tracked)
+                                TrackingCheckScheduler.sync(context)
+                                if (adding) requestNotificationPermission()
+                            },
                             onClick = {
+                                if (app.packageName in tracked) {
+                                    MorpheTracking.markSeen(context, app)
+                                    trackingSnapshots = MorpheTracking.loadSnapshots(context, tracked)
+                                }
                                 focusManager.clearFocus(force = true)
                                 keyboardController?.hide()
                                 onOpenApp(app)
@@ -842,14 +1222,14 @@ internal fun AppBrowserScreen(
                 label = "header_search_transition",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 52.dp)
+                    .height(52.dp)
             ) { isSearchActive ->
                 if (isSearchActive) {
                     // 40.dp search bar vertically centered inside the 52.dp header row (zero height jump)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 52.dp),
+                            .height(52.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -940,7 +1320,7 @@ internal fun AppBrowserScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 52.dp),
+                            .height(52.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -957,7 +1337,7 @@ internal fun AppBrowserScreen(
                             verticalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = stringResource(R.string.find_new_apps),
+                                text = if (trackedOnly) "Tracking" else stringResource(R.string.find_new_apps),
                                 style = MaterialTheme.typography.headlineMedium.copy(
                                     platformStyle = androidx.compose.ui.text.PlatformTextStyle(
                                         includeFontPadding = false
@@ -971,8 +1351,13 @@ internal fun AppBrowserScreen(
                             val fresh = freshness
                             Text(
                                 text = when {
+                                    fresh != null && trackedOnly ->
+                                        "${tracked.size} tracked \u00b7 updated ${fresh.label}"
                                     fresh != null -> "Updated ${fresh.label}"
                                     apps == null -> "Loading…"
+                                    trackedOnly && tracked.isEmpty() ->
+                                        "Track updates and new patches"
+                                    trackedOnly -> "${tracked.size} tracked"
                                     else -> "Community patch index"
                                 },
                                 color = if (fresh?.stale == true) {
@@ -1096,6 +1481,10 @@ internal fun AppBrowserRow(
     shape: RoundedCornerShape,
     onToggleFavourite: () -> Unit,
     onClick: () -> Unit,
+    tracked: Boolean = false,
+    updates: Int = 0,
+    newPatches: Int = 0,
+    onToggleTracking: () -> Unit = {},
     modifier: Modifier = Modifier,
     useGradient: Boolean = true
 ) {
@@ -1202,6 +1591,32 @@ internal fun AppBrowserRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                if (updates > 0 || newPatches > 0) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (updates > 0) {
+                            TrackingChangeBadge(
+                                text = "$updates update" + if (updates == 1) "" else "s",
+                                container = if (effectiveGradient) {
+                                    Color.White.copy(alpha = 0.22f)
+                                } else {
+                                    scheme.primaryContainer
+                                },
+                                content = if (effectiveGradient) Color.White else scheme.onPrimaryContainer
+                            )
+                        }
+                        if (newPatches > 0) {
+                            TrackingChangeBadge(
+                                text = "$newPatches new patch" + if (newPatches == 1) "" else "es",
+                                container = if (effectiveGradient) {
+                                    Color.White.copy(alpha = 0.18f)
+                                } else {
+                                    scheme.tertiaryContainer
+                                },
+                                content = if (effectiveGradient) Color.White else scheme.onTertiaryContainer
+                            )
+                        }
+                    }
+                }
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -1218,7 +1633,7 @@ internal fun AppBrowserRow(
                                 tint = subtitleColor.copy(alpha = 0.75f)
                             )
                             Text(
-                                text = "Updated $released",
+                                text = released,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = subtitleColor.copy(alpha = 0.75f),
                                 maxLines = 1,
@@ -1236,34 +1651,95 @@ internal fun AppBrowserRow(
                 }
             }
 
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(
-                        when {
-                            favourite -> Color.White.copy(alpha = 0.92f)
-                            !effectiveGradient -> scheme.surfaceVariant.copy(alpha = 0.65f)
-                            else -> Color.White.copy(alpha = 0.16f)
-                        }
-                    )
-                    .clickable(role = Role.Button, onClick = onToggleFavourite),
-                contentAlignment = Alignment.Center
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = if (favourite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                    contentDescription = if (favourite) "Unlike" else "Like",
-                    tint = if (favourite) {
-                        Color(0xFFD32F2F)
-                    } else if (!effectiveGradient) {
-                        scheme.onSurface
-                    } else {
-                        Color.White
-                    },
-                    modifier = Modifier.size(20.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(
+                            when {
+                                tracked -> if (effectiveGradient) {
+                                    Color.White.copy(alpha = 0.22f)
+                                } else {
+                                    scheme.primaryContainer.copy(alpha = 0.85f)
+                                }
+                                !effectiveGradient -> scheme.surfaceVariant.copy(alpha = 0.65f)
+                                else -> Color.White.copy(alpha = 0.16f)
+                            }
+                        )
+                        .clickable(role = Role.Button, onClick = onToggleTracking),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (tracked) {
+                            Icons.Filled.Notifications
+                        } else {
+                            Icons.Outlined.Notifications
+                        },
+                        contentDescription = if (tracked) "Stop tracking" else "Track updates",
+                        tint = if (tracked) {
+                            if (!effectiveGradient) scheme.onPrimaryContainer else Color.White
+                        } else if (!effectiveGradient) {
+                            scheme.onSurface
+                        } else {
+                            Color.White
+                        },
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(
+                            when {
+                                favourite -> Color.White.copy(alpha = 0.92f)
+                                !effectiveGradient -> scheme.surfaceVariant.copy(alpha = 0.65f)
+                                else -> Color.White.copy(alpha = 0.16f)
+                            }
+                        )
+                        .clickable(role = Role.Button, onClick = onToggleFavourite),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (favourite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                        contentDescription = if (favourite) "Unlike" else "Like",
+                        tint = if (favourite) {
+                            Color(0xFFD32F2F)
+                        } else if (!effectiveGradient) {
+                            scheme.onSurface
+                        } else {
+                            Color.White
+                        },
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun TrackingChangeBadge(
+    text: String,
+    container: Color,
+    content: Color
+) {
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = container,
+        contentColor = content
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+        )
     }
 }
 
@@ -2013,48 +2489,6 @@ internal fun AppDetailView(
                 }
             }
 
-            // Standard neutral gray Play Store button matching Patches/Repo buttons
-            item(key = "play_store_action") {
-                Surface(
-                    onClick = {
-                        context.openPlayStoreListing(
-                            app.packageName,
-                            playStoreUrl(app.packageName)
-                        )
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp)
-                        .height(52.dp),
-                    shape = CircleShape,
-                    color = scheme.surfaceVariant.copy(alpha = 0.65f),
-                    contentColor = scheme.onSurface,
-
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 20.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_src_play),
-                            contentDescription = null,
-                            tint = Color.Unspecified,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            text = stringResource(R.string.open_in_play_store),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
         }
 
         // 2. Morphe Official ListDialogHeader Band (pure icon + title + subtitle + 1-row scrollable badges)
@@ -2184,7 +2618,7 @@ internal fun AppDetailView(
                         }
                         released?.let { date ->
                             MorpheStatusBadge(
-                                text = "Updated $date",
+                                text = date,
                                 icon = Icons.Outlined.History,
                                 containerColor = badgeFill,
                                 contentColor = scheme.onSurface
@@ -2214,53 +2648,97 @@ internal fun AppDetailView(
                 )
         )
 
-        // 3. Pinned Bottom "Close" Frosted Outlined Pill (exact port of Morphe AppDialogOutlinedButton)
-        if (onBack != null) {
-            val closeInteraction = remember { MutableInteractionSource() }
-            val closeBorderColor = if (monochrome) {
-                scheme.outlineVariant.copy(alpha = 0.5f)
-            } else {
-                sourceAccent.copy(alpha = 0.35f)
-            }
+        // 3. Pinned bottom actions: Play Store stays available while the list scrolls.
+        val closeInteraction = remember { MutableInteractionSource() }
+        val closeBorderColor = if (monochrome) {
+            scheme.outlineVariant.copy(alpha = 0.5f)
+        } else {
+            sourceAccent.copy(alpha = 0.35f)
+        }
 
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .onSizeChanged { size ->
-                        footerHeightDp = with(density) { size.height.toDp() }
-                    }
-                    .navigationBarsPadding()
-                    .padding(
-                        horizontal = MorpheDefaults.ContentPadding,
-                        vertical = 12.dp
-                    )
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .onSizeChanged { size ->
+                    footerHeightDp = with(density) { size.height.toDp() }
+                }
+                .navigationBarsPadding()
+                .padding(
+                    horizontal = MorpheDefaults.ContentPadding,
+                    vertical = 12.dp
+                )
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                androidx.compose.material3.OutlinedButton(
-                    onClick = onBack,
+                Surface(
+                    onClick = {
+                        context.openPlayStoreListing(
+                            app.packageName,
+                            playStoreUrl(app.packageName)
+                        )
+                    },
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .pressScale(closeInteraction)
-                        .glassFill(
-                            glass = Color.Transparent,
-                            shape = CircleShape,
-                            hazeState = detailHeaderHaze
-                        ),
-                    interactionSource = closeInteraction,
+                        .weight(if (onBack != null) 1.4f else 1f)
+                        .heightIn(min = 48.dp),
                     shape = CircleShape,
-                    colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
-                        containerColor = Color.Transparent,
-                        contentColor = scheme.onSurface.copy(alpha = 0.85f)
-                    ),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+                    color = scheme.surfaceVariant.copy(alpha = 0.65f),
+                    contentColor = scheme.onSurface
                 ) {
-                    Text(
-                        text = stringResource(R.string.close),
-                        style = MaterialTheme.typography.labelLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_src_play),
+                            contentDescription = null,
+                            tint = Color.Unspecified,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = stringResource(R.string.open_in_play_store),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                if (onBack != null) {
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = onBack,
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .pressScale(closeInteraction)
+                            .glassFill(
+                                glass = Color.Transparent,
+                                shape = CircleShape,
+                                hazeState = detailHeaderHaze
+                            ),
+                        interactionSource = closeInteraction,
+                        shape = CircleShape,
+                        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                            containerColor = Color.Transparent,
+                            contentColor = scheme.onSurface.copy(alpha = 0.85f)
+                        ),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.close),
+                            style = MaterialTheme.typography.labelLarge,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }
@@ -3054,13 +3532,13 @@ private fun SourcePatchesScreen(
                 label = "patches_search_transition",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 52.dp)
+                    .height(52.dp)
             ) { isSearchActive ->
                 if (isSearchActive) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 52.dp),
+                            .height(52.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -3148,7 +3626,7 @@ private fun SourcePatchesScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 52.dp),
+                            .height(52.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {

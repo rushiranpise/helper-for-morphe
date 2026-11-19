@@ -130,6 +130,13 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
 - The dashboard and warning scroll with the list, and the scrollbar sits in the right margin so the cards stay centred.
 - Includes the community disclaimer: the index is community-maintained, bundles are not individually verified, and neither Morphe nor this app's developer is responsible for third-party patches.
 
+### Tracked apps
+
+- **Track from the index or by package name.** Tap the bell on any app in Find New Apps, or enter an exact package name on the Tracking tab. Installed and uninstalled apps both work.
+- **Follow new versions and patches.** The background check runs every six hours while anything is tracked and posts one grouped notification for changes. Badges stay on the app until you open it, and a separate notification baseline prevents repeats.
+- **Track future packages.** Enter a package that is not in the Morphe index yet. It waits in a removable **Waiting for index** card; when the package appears, Helper notifies you and starts tracking it normally.
+- **Control what is tracked.** The Tracking tab keeps tracked apps and pending packages together, and stopping the last tracked package stops the background work.
+
 ### Appearance, DNS & logs
 
 - **Themes**: dark, light, or follow-the-system, plus optional **Material You** wallpaper-tinted accents and surfaces (Android 12+).

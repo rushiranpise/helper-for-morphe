@@ -344,10 +344,23 @@ internal fun SystemTabContent(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var locationDialog by remember { mutableStateOf(false) }
+    var retentionDialog by remember { mutableStateOf(false) }
     var fastModePolicyDialog by remember { mutableStateOf(false) }
     var connectionCountDialog by remember { mutableStateOf(false) }
     var pendingLocation by remember { mutableStateOf<DownloadLocation?>(null) }
+    var storageRefreshToken by remember { mutableIntStateOf(0) }
+    var storageSummary by remember { mutableStateOf("Calculating storage…") }
+    var showClearStorageDialog by remember { mutableStateOf(false) }
     val latestSettings by rememberUpdatedState(settings)
+
+    LaunchedEffect(storageRefreshToken) {
+        storageSummary = withContext(Dispatchers.IO) {
+            "Cache ${context.temporaryDownloadsSize().formatBytes()} · " +
+                "External ${context.externalDownloadsSize().formatBytes()} · " +
+                "Downloads ${context.downloadsCopySize().formatBytes()} · " +
+                "Custom ${context.customDownloadsSize().formatBytes()}"
+        }
+    }
 
     val locations = DownloadLocation.entries
     val fastPolicies = FastModePolicy.entries
@@ -393,6 +406,31 @@ internal fun SystemTabContent(
         )
     }
 
+    if (retentionDialog) {
+        SettingsChoiceDialog(
+            title = "Keep downloads",
+            choices = DownloadRetention.entries.map { retention ->
+                SettingsChoice(
+                    icon = when (retention) {
+                        DownloadRetention.KEEP -> Icons.Outlined.SdStorage
+                        DownloadRetention.AFTER_HANDOFF -> Icons.Outlined.Delete
+                        DownloadRetention.HOUR_1,
+                        DownloadRetention.HOUR_24,
+                        DownloadRetention.DAY_7 -> Icons.Outlined.CleaningServices
+                    },
+                    title = retention.title,
+                    description = retention.description
+                )
+            },
+            selectedIndex = DownloadRetention.entries.indexOf(settings.downloadRetention),
+            onSelect = { index ->
+                onSettingsChange(settings.copy(downloadRetention = DownloadRetention.entries[index]))
+                retentionDialog = false
+            },
+            onDismiss = { retentionDialog = false }
+        )
+    }
+
     if (fastModePolicyDialog) {
         SettingsChoiceDialog(
             title = stringResource(R.string.which_version_to_fetch),
@@ -419,6 +457,50 @@ internal fun SystemTabContent(
         )
     }
 
+    if (showClearStorageDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearStorageDialog = false },
+            title = { Text("Clear storage?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "This permanently deletes cached hand-off files, app external copies, " +
+                            "saved APKs in Downloads/Morphe Helper, and copies saved to your custom folder. " +
+                            "This cannot be undone."
+                    )
+                    Text(
+                        text = storageSummary,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showClearStorageDialog = false
+                        scope.launch {
+                            val freed = withContext(Dispatchers.IO) { context.clearAllDownloads() }
+                            storageRefreshToken++
+                            Toast.makeText(
+                                context,
+                                if (freed > 0L) "Cleared ${freed.formatBytes()}" else "Nothing to clear",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearStorageDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -433,10 +515,17 @@ internal fun SystemTabContent(
                     trailingContent = { Text(downloadLocationLabel(context, settings), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium) }
                 )
                 SettingsItem(
+                    icon = Icons.Outlined.Schedule,
+                    title = "Keep downloads",
+                    subtitle = settings.downloadRetention.description,
+                    onClick = { retentionDialog = true },
+                    trailingContent = { Text(settings.downloadRetention.title, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium) }
+                )
+                SettingsItem(
                     icon = Icons.Outlined.CleaningServices,
                     title = "Storage used",
-                    subtitle = "Clear temporary files",
-                    onClick = { scope.launch(Dispatchers.IO) { context.clearTemporaryDownloads() } },
+                    subtitle = storageSummary,
+                    onClick = { showClearStorageDialog = true },
                     trailingContent = { Text("Clear", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
                 )
                 SettingsItem(

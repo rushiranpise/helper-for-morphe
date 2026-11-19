@@ -322,9 +322,12 @@ internal class DownloadService : Service() {
         .dns(AdGuardDns)
         .cookieJar(SessionCookies)
         .addInterceptor { chain ->
+            // A captured link carries the WebView's user agent; that identity
+            // is part of the Cloudflare clearance it earned, so keep it.
+            val userAgent = chain.request().header("User-Agent") ?: browserUserAgent
             chain.proceed(
                 chain.request().newBuilder()
-                    .header("User-Agent", browserUserAgent)
+                    .header("User-Agent", userAgent)
                     .build()
             )
         }
@@ -337,9 +340,11 @@ internal class DownloadService : Service() {
         .dns(AdGuardDns)
         .cookieJar(SessionCookies)
         .addInterceptor { chain ->
+            val userAgent = chain.request().header("User-Agent")
+                ?: "APKPure/3.19.39 (Aegon)"
             chain.proceed(
                 chain.request().newBuilder()
-                    .header("User-Agent", "APKPure/3.19.39 (Aegon)")
+                    .header("User-Agent", userAgent)
                     .build()
             )
         }

@@ -6,6 +6,30 @@ matches the tag (see `tools/release-notes.sh`), so a new version needs a section
 before it is tagged. Commit subjects are only used as a fallback when a section is
 missing.
 
+## 6.1.0 - 2026-11-19
+
+Track apps from inside Helper and get notified when they change.
+
+### New
+
+- **Tracking tab**: tap the bell on any app in Find New Apps, or enter an
+exact package name on the Tracking tab.
+- **Background checks**: while anything is tracked, Helper checks the Morphe
+index every six hours and posts one grouped notification for new versions or
+patches. In-app badges stay until the app is opened.
+- **Future packages**: enter a package that is not in the index yet. It waits
+under Waiting for index, then is tracked automatically when it appears, with a
+notification when it becomes available.
+
+### Fixed
+
+- App cards now show only the release date, without the "Updated" prefix.
+
+### Changed
+
+- **Tracking controls**: pending packages can be removed from the Tracking tab,
+and the periodic check stays scheduled while tracked or pending packages exist.
+
 ## 6.0.1 - 2026-11-18
 
 A smoother and clearer Find New Apps screen.

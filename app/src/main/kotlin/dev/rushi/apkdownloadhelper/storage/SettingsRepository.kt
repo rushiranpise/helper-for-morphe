@@ -580,9 +580,10 @@ internal fun Context.temporaryDownloadsSize(): Long =
 internal fun Context.clearTemporaryDownloads(): Long {
     val dir = temporaryDownloadsDir()
     val files = dir.listFiles()?.filter { it.isFile }.orEmpty()
-    val freed = files.sumOf { it.length() }
-    files.forEach { file -> runCatching { file.delete() } }
-    return freed
+    return files.sumOf { file ->
+        val size = file.length()
+        if (runCatching { file.delete() }.getOrDefault(false)) size else 0L
+    }
 }
 
 /** Path of the visible copy folder inside Downloads. */
@@ -620,32 +621,36 @@ internal fun Context.clearDownloadsCopies(): Long {
         var freed = 0L
         contentResolver.query(
             MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-            arrayOf(MediaStore.Downloads._ID),
+            arrayOf(MediaStore.Downloads._ID, MediaStore.Downloads.SIZE),
             "${MediaStore.Downloads.RELATIVE_PATH} LIKE ?",
             arrayOf("${downloadsCopyRelativePath()}/%"),
             null
         )?.use { cursor ->
             val idIndex = cursor.getColumnIndexOrThrow(MediaStore.Downloads._ID)
+            val sizeIndex = cursor.getColumnIndexOrThrow(MediaStore.Downloads.SIZE)
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idIndex)
-                freed += runCatching {
+                val size = cursor.getLong(sizeIndex).coerceAtLeast(0L)
+                val deleted = runCatching {
                     contentResolver.delete(
                         MediaStore.Downloads.EXTERNAL_CONTENT_URI,
                         "${MediaStore.Downloads._ID}=?",
                         arrayOf(id.toString())
                     )
                 }.getOrDefault(0)
+                if (deleted > 0) freed += size
             }
         }
         return freed
     }
-        val dir = File(
+    val dir = File(
         Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
         "Morphe Helper"
     )
     val files = dir.listFiles()?.filter { it.isFile }.orEmpty()
-    val freed = files.sumOf { it.length() }
-    files.forEach { file -> runCatching { file.delete() } }
-    return freed
+    return files.sumOf { file ->
+        val size = file.length()
+        if (runCatching { file.delete() }.getOrDefault(false)) size else 0L
+    }
 }
 
