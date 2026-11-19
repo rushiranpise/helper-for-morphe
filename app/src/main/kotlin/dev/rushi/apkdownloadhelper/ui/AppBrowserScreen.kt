@@ -1348,7 +1348,7 @@ internal fun AppBrowserRow(
                                 tint = subtitleColor.copy(alpha = 0.75f)
                             )
                             Text(
-                                text = "Updated $released",
+                                text = released,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = subtitleColor.copy(alpha = 0.75f),
                                 maxLines = 1,
@@ -2333,7 +2333,7 @@ internal fun AppDetailView(
                         }
                         released?.let { date ->
                             MorpheStatusBadge(
-                                text = "Updated $date",
+                                text = date,
                                 icon = Icons.Outlined.History,
                                 containerColor = badgeFill,
                                 contentColor = scheme.onSurface
