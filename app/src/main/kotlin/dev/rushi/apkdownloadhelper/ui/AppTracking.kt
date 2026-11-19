@@ -46,6 +46,7 @@ internal object MorpheTracking {
     private const val PREFS = "morphe_tracking"
     private const val KEY_PACKAGES = "packages"
     private const val SNAPSHOT_PREFIX = "snapshot:"
+    private const val NOTIFIED_PREFIX = "notified:"
 
     fun load(context: Context): Set<String> =
         prefs(context).getStringSet(KEY_PACKAGES, emptySet()).orEmpty().toSet()
@@ -76,10 +77,14 @@ internal object MorpheTracking {
             val snapshot = app.trackingSnapshot()
             editor.putStringSet(versionsKey(app.packageName), snapshot.versions)
             editor.putStringSet(patchesKey(app.packageName), snapshot.patches)
+            editor.putStringSet(notifiedVersionsKey(app.packageName), snapshot.versions)
+            editor.putStringSet(notifiedPatchesKey(app.packageName), snapshot.patches)
         } else {
             current.remove(app.packageName)
             editor.remove(versionsKey(app.packageName))
             editor.remove(patchesKey(app.packageName))
+            editor.remove(notifiedVersionsKey(app.packageName))
+            editor.remove(notifiedPatchesKey(app.packageName))
         }
         editor.putStringSet(KEY_PACKAGES, current)
         editor.apply()
@@ -93,7 +98,45 @@ internal object MorpheTracking {
         prefs(context).edit()
             .putStringSet(versionsKey(app.packageName), snapshot.versions)
             .putStringSet(patchesKey(app.packageName), snapshot.patches)
+            .putStringSet(notifiedVersionsKey(app.packageName), snapshot.versions)
+            .putStringSet(notifiedPatchesKey(app.packageName), snapshot.patches)
             .apply()
+    }
+
+    /**
+     * State covered by the last background notification. It is separate from
+     * the seen snapshot so a repeated check does not notify for changes the
+     * user has not opened yet.
+     */
+    fun loadNotifiedSnapshots(
+        context: Context,
+        packages: Set<String> = load(context)
+    ): Map<String, TrackedAppSnapshot> {
+        val prefs = prefs(context)
+        return packages.mapNotNull { packageName ->
+            val versionsKey = notifiedVersionsKey(packageName)
+            val patchesKey = notifiedPatchesKey(packageName)
+            if (!prefs.contains(versionsKey) && !prefs.contains(patchesKey)) {
+                return@mapNotNull null
+            }
+            packageName to TrackedAppSnapshot(
+                versions = prefs.getStringSet(versionsKey, emptySet()).orEmpty().toSet(),
+                patches = prefs.getStringSet(patchesKey, emptySet()).orEmpty().toSet()
+            )
+        }.toMap()
+    }
+
+    /** Advances the notification baseline after a notification was posted. */
+    fun markNotified(context: Context, apps: Iterable<ArchiveApp>) {
+        val editor = prefs(context).edit()
+        apps.forEach { app ->
+            val snapshot = app.trackingSnapshot()
+            editor.putStringSet(notifiedVersionsKey(app.packageName), snapshot.versions)
+            editor.putStringSet(notifiedPatchesKey(app.packageName), snapshot.patches)
+        }
+        // The worker can be stopped right after this returns, so write the
+        // dedupe baseline synchronously instead of leaving it to an async flush.
+        editor.commit()
     }
 
     /** Keeps a second AppBrowserScreen in sync when tracking changes elsewhere. */
@@ -114,4 +157,10 @@ internal object MorpheTracking {
     private fun versionsKey(packageName: String) = "$SNAPSHOT_PREFIX$packageName:versions"
 
     private fun patchesKey(packageName: String) = "$SNAPSHOT_PREFIX$packageName:patches"
+
+    private fun notifiedVersionsKey(packageName: String) =
+        "$NOTIFIED_PREFIX$packageName:versions"
+
+    private fun notifiedPatchesKey(packageName: String) =
+        "$NOTIFIED_PREFIX$packageName:patches"
 }

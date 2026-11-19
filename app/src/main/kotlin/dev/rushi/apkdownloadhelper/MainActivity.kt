@@ -115,6 +115,8 @@ import dev.rushi.apkdownloadhelper.storage.restoreAndPersistRateLimiter
 import dev.rushi.apkdownloadhelper.storage.saveHelperSettings
 import dev.rushi.apkdownloadhelper.storage.scheduleHandoffCleanup
 import dev.rushi.apkdownloadhelper.storage.temporaryDownloadsDir
+import dev.rushi.apkdownloadhelper.tracking.EXTRA_OPEN_TRACKING
+import dev.rushi.apkdownloadhelper.tracking.TrackingCheckScheduler
 import dev.rushi.apkdownloadhelper.ui.AboutTabContent
 import dev.rushi.apkdownloadhelper.ui.AdvancedTabContent
 import dev.rushi.apkdownloadhelper.ui.AppBrowserScreen
@@ -404,6 +406,7 @@ class MainActivity : ComponentActivity() {
     private var helperSettings by mutableStateOf(HelperSettings())
     private var installedPackageRefreshToken by mutableIntStateOf(0)
     private var requestResetToken by mutableIntStateOf(0)
+    private var openTrackingToken by mutableIntStateOf(0)
     private var showUpdates by mutableStateOf(false)
     private var updatePrompt by mutableStateOf<UpdateInfo?>(null)
     private var updateRefreshToken by mutableIntStateOf(0)
@@ -471,6 +474,12 @@ class MainActivity : ComponentActivity() {
         if (intent?.getBooleanExtra(UpdateManager.EXTRA_OPEN_UPDATES, false) == true) {
             showUpdates = true
         }
+        val launchIntent = intent
+        if (launchIntent?.getBooleanExtra(EXTRA_OPEN_TRACKING, false) == true) {
+            openTrackingToken++
+            launchIntent.removeExtra(EXTRA_OPEN_TRACKING)
+        }
+        TrackingCheckScheduler.sync(applicationContext)
         // A Morphe request takes over the screen as soon as it arrives. Its
         // update check still runs and can post a notification, but it must not
         // put an update popup on top of the download flow.
@@ -527,6 +536,15 @@ class MainActivity : ComponentActivity() {
                     selectedArchiveApp = null
                 }
             }
+            LaunchedEffect(openTrackingToken) {
+                if (openTrackingToken > 0) {
+                    activeSettingsCategory = null
+                    selectedArchiveApp = null
+                    showSourcesScreen = false
+                    showUpdates = false
+                    updatePrompt = null
+                }
+            }
 
             val focusManager = LocalFocusManager.current
             LaunchedEffect(showUpdates) {
@@ -566,6 +584,7 @@ class MainActivity : ComponentActivity() {
                         ) {
                             HomePagerScreen(
                                 requestResetToken = requestResetToken,
+                                openTrackingToken = openTrackingToken,
                                 animatedBackground = helperSettings.animatedBackground,
                                 findAppsContent = { bottomBarHeight ->
                                     AppBrowserScreen(
@@ -831,6 +850,14 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_OPEN_TRACKING, false)) {
+            intent.removeExtra(EXTRA_OPEN_TRACKING)
+            openTrackingToken++
+            showUpdates = false
+            updatePrompt = null
+            installedPackageRefreshToken++
+            return
+        }
         if (intent.getBooleanExtra(UpdateManager.EXTRA_OPEN_UPDATES, false)) {
             showUpdates = true
             updatePrompt = null

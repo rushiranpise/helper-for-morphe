@@ -1,10 +1,15 @@
 ﻿package dev.rushi.apkdownloadhelper.ui
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
 import android.util.LruCache
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.expandHorizontally
@@ -124,6 +129,7 @@ import dev.rushi.apkdownloadhelper.updater.formatBundleRelease
 import dev.rushi.apkdownloadhelper.updater.formatReleaseDate
 import dev.rushi.apkdownloadhelper.updater.groupArchiveSources
 import dev.rushi.apkdownloadhelper.updater.newestReleaseDate
+import dev.rushi.apkdownloadhelper.tracking.TrackingCheckScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -146,6 +152,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.Role
+import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import java.util.concurrent.ConcurrentHashMap
 import androidx.compose.ui.graphics.drawOutline
@@ -445,6 +452,9 @@ internal fun AppBrowserScreen(
         mutableStateOf<Map<String, TrackedAppSnapshot>>(emptyMap())
     }
     var installedPackages by remember { mutableStateOf<Set<String>>(emptySet()) }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
     val listState = rememberLazyListState()
     val searchFocusRequester = remember { FocusRequester() }
     val density = LocalDensity.current
@@ -818,8 +828,21 @@ internal fun AppBrowserScreen(
                                 favourites = MorpheFavourites.toggle(context, app.packageName)
                             },
                             onToggleTracking = {
+                                val adding = app.packageName !in tracked
                                 tracked = MorpheTracking.toggle(context, app)
                                 trackingSnapshots = MorpheTracking.loadSnapshots(context, tracked)
+                                TrackingCheckScheduler.sync(context)
+                                if (adding &&
+                                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                    ContextCompat.checkSelfPermission(
+                                        context,
+                                        Manifest.permission.POST_NOTIFICATIONS
+                                    ) != PackageManager.PERMISSION_GRANTED
+                                ) {
+                                    notificationPermissionLauncher.launch(
+                                        Manifest.permission.POST_NOTIFICATIONS
+                                    )
+                                }
                             },
                             onClick = {
                                 if (app.packageName in tracked) {
