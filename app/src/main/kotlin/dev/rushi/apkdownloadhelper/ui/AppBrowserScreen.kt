@@ -400,6 +400,9 @@ private fun CompactFilterChip(
 
 @Composable
 internal fun AppBrowserScreen(
+    hideStats: Boolean = false,
+    hideCommunityNotice: Boolean = false,
+    useGradientCards: Boolean = true,
     onBack: (() -> Unit)? = null,
     onOpenApp: (ArchiveApp) -> Unit = {},
     modifier: Modifier = Modifier
@@ -531,8 +534,12 @@ internal fun AppBrowserScreen(
                     modifier = Modifier.padding(bottom = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    FindAppsStatsStrip(archiveIndex)
-                    AppDisclaimerBanner()
+                    if (!hideStats) {
+                        FindAppsStatsStrip(archiveIndex)
+                    }
+                    if (!hideCommunityNotice) {
+                        AppDisclaimerBanner()
+                    }
 
                     var filterMenuOpen by remember { mutableStateOf(false) }
                     var sortMenuOpen by remember { mutableStateOf(false) }
@@ -684,6 +691,7 @@ internal fun AppBrowserScreen(
                         FindAppCardLoading(
                             index = index,
                             shape = cardShape,
+                            useGradient = useGradientCards,
                             modifier = Modifier.padding(bottom = if (isLast) 0.dp else 3.dp)
                         )
                     }
@@ -730,6 +738,7 @@ internal fun AppBrowserScreen(
                             installed = app.packageName in installedPackages,
                             favourite = app.packageName in favourites,
                             shape = cardShape,
+                            useGradient = useGradientCards,
                             onToggleFavourite = {
                                 favourites = MorpheFavourites.toggle(context, app.packageName)
                             },
@@ -930,11 +939,15 @@ internal fun AppBrowserScreen(
 
                         Column(
                             modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                            verticalArrangement = Arrangement.Center
                         ) {
                             Text(
                                 text = stringResource(R.string.find_new_apps),
-                                style = MaterialTheme.typography.headlineMedium,
+                                style = MaterialTheme.typography.headlineMedium.copy(
+                                    platformStyle = androidx.compose.ui.text.PlatformTextStyle(
+                                        includeFontPadding = false
+                                    )
+                                ),
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onBackground,
                                 maxLines = 1,
@@ -952,7 +965,11 @@ internal fun AppBrowserScreen(
                                 } else {
                                     MaterialTheme.colorScheme.onSurfaceVariant
                                 },
-                                style = MaterialTheme.typography.bodySmall,
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    platformStyle = androidx.compose.ui.text.PlatformTextStyle(
+                                        includeFontPadding = false
+                                    )
+                                ),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -1064,25 +1081,27 @@ internal fun AppBrowserRow(
     shape: RoundedCornerShape,
     onToggleFavourite: () -> Unit,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    useGradient: Boolean = true
 ) {
     val monochrome = LocalMonochromeTheme.current
+    val effectiveGradient = useGradient && !monochrome
     val palette = remember(app.iconColor, app.packageName) { app.findAppCardColors() }
     val scheme = MaterialTheme.colorScheme
-    val titleColor = if (monochrome) scheme.onSurface else palette.title
-    val subtitleColor = if (monochrome) scheme.onSurfaceVariant else palette.subtitle
+    val titleColor = if (!effectiveGradient) scheme.onSurface else palette.title
+    val subtitleColor = if (!effectiveGradient) scheme.onSurfaceVariant else palette.subtitle
     val interactionSource = remember { MutableInteractionSource() }
 
     val titleStyle = MaterialTheme.typography.titleMedium.copy(
         fontWeight = FontWeight.SemiBold,
-        shadow = if (monochrome) {
+        shadow = if (!effectiveGradient) {
             null
         } else {
             Shadow(Color.Black.copy(alpha = 0.4f), Offset(0f, 2f), 4f)
         }
     )
     val subtitleStyle = MaterialTheme.typography.bodySmall.copy(
-        shadow = if (monochrome) {
+        shadow = if (!effectiveGradient) {
             null
         } else {
             Shadow(Color.Black.copy(alpha = 0.35f), Offset(0f, 1f), 2f)
@@ -1115,7 +1134,7 @@ internal fun AppBrowserRow(
                     )
                 )
 
-                val fill: Brush = if (monochrome) {
+                val fill: Brush = if (!effectiveGradient) {
                     SolidColor(scheme.surfaceContainerHigh)
                 } else {
                     Brush.linearGradient(
@@ -1207,7 +1226,11 @@ internal fun AppBrowserRow(
                     .size(40.dp)
                     .clip(CircleShape)
                     .background(
-                        if (favourite) Color.White.copy(alpha = 0.92f) else Color.White.copy(alpha = 0.16f)
+                        when {
+                            favourite -> Color.White.copy(alpha = 0.92f)
+                            !effectiveGradient -> scheme.surfaceVariant.copy(alpha = 0.65f)
+                            else -> Color.White.copy(alpha = 0.16f)
+                        }
                     )
                     .clickable(role = Role.Button, onClick = onToggleFavourite),
                 contentAlignment = Alignment.Center
@@ -1217,7 +1240,7 @@ internal fun AppBrowserRow(
                     contentDescription = if (favourite) "Unlike" else "Like",
                     tint = if (favourite) {
                         Color(0xFFD32F2F)
-                    } else if (monochrome) {
+                    } else if (!effectiveGradient) {
                         scheme.onSurface
                     } else {
                         Color.White
@@ -1241,12 +1264,14 @@ private val FindAppPlaceholderGradients = listOf(
 private fun FindAppCardLoading(
     index: Int,
     shape: RoundedCornerShape,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    useGradient: Boolean = true
 ) {
     val monochrome = LocalMonochromeTheme.current
+    val effectiveGradient = useGradient && !monochrome
     val scheme = MaterialTheme.colorScheme
     val palette = FindAppPlaceholderGradients[index % FindAppPlaceholderGradients.size]
-    val skeletonColor = if (monochrome) scheme.onSurface else Color.White
+    val skeletonColor = if (!effectiveGradient) scheme.onSurface else Color.White
 
     val transition = rememberInfiniteTransition(label = "skeleton_shimmer_$index")
     val shimmerAlpha by transition.animateFloat(
@@ -1265,7 +1290,7 @@ private fun FindAppCardLoading(
             .height(88.dp)
             .clip(shape)
             .background(
-                if (monochrome) {
+                if (!effectiveGradient) {
                     SolidColor(scheme.surfaceContainerHigh)
                 } else {
                     Brush.linearGradient(
@@ -1565,16 +1590,21 @@ private fun ExpandableVersionRow(
     containerColorFor: @Composable (String) -> Color,
     contentColorFor: @Composable (String) -> Color,
     borderColorFor: ((String) -> Color)? = null,
+    expanded: Boolean? = null,
+    onExpandedChange: ((Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    var expanded by remember(versions) { mutableStateOf(false) }
+    var internalExpanded by remember(versions) { mutableStateOf(false) }
+    val isExpanded = expanded ?: internalExpanded
+    val setExpanded: (Boolean) -> Unit = onExpandedChange ?: { internalExpanded = it }
+
     val scrollState = rememberScrollState()
     val hasOverflow by remember {
         derivedStateOf { scrollState.maxValue > 0 }
     }
-    val showToggle = expanded || hasOverflow
+    val showToggle = isExpanded || hasOverflow
 
-    if (expanded) {
+    if (isExpanded) {
         Row(
             modifier = modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1599,7 +1629,7 @@ private fun ExpandableVersionRow(
             }
             VersionExpandToggleButton(
                 expanded = true,
-                onClick = { expanded = false }
+                onClick = { setExpanded(false) }
             )
         }
     } else {
@@ -1630,7 +1660,7 @@ private fun ExpandableVersionRow(
             if (showToggle) {
                 VersionExpandToggleButton(
                     expanded = false,
-                    onClick = { expanded = true }
+                    onClick = { setExpanded(true) }
                 )
             }
         }
@@ -1742,6 +1772,10 @@ private class DetailHeaderCollapse {
         }
     }
 
+    suspend fun unfold() {
+        if (folded > 0f) easeTo(0f)
+    }
+
     fun measured(height: Int) {
         range = height
         if (folded > height) folded = height.toFloat()
@@ -1763,6 +1797,7 @@ private fun Modifier.foldsWith(collapse: DetailHeaderCollapse): Modifier =
 internal fun AppDetailView(
     app: ArchiveApp,
     installed: Boolean = false,
+    useGradientHeader: Boolean = true,
     onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -1791,6 +1826,17 @@ internal fun AppDetailView(
     val detailListState = rememberLazyListState()
     val detailHeaderHaze = remember { HazeState() }
     val collapse = remember(app.packageName) { DetailHeaderCollapse() }
+    val expandedMirrorRepos = remember(app.packageName) { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
+    val expandedVersionKeys = remember(app.packageName) { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
+
+    val isAtTop by remember(detailListState) {
+        derivedStateOf {
+            detailListState.firstVisibleItemIndex == 0 && detailListState.firstVisibleItemScrollOffset == 0
+        }
+    }
+    LaunchedEffect(isAtTop) {
+        if (isAtTop) collapse.unfold()
+    }
     var unfoldedHeaderHeightDp by remember { mutableStateOf(0.dp) }
     var footerHeightDp by remember { mutableStateOf(0.dp) }
 
@@ -1822,14 +1868,21 @@ internal fun AppDetailView(
     }
     val sourceGroups = remember(app.sources) { groupArchiveSources(app.sources) }
     val appPalette = remember(app.iconColor, app.packageName) { app.findAppCardColors() }
-    val sourceAccent = if (monochrome) scheme.primary else appPalette.gradient[1]
+    val useAppAccent = useGradientHeader && !monochrome
+    val sourceAccent = if (useAppAccent) appPalette.gradient[1] else scheme.primary
     val released = formatReleaseDate(app.newestReleaseDate())
 
     val headerBandShape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp)
-    val bandTint = if (monochrome) {
-        scheme.surfaceColorAtElevation(3.dp).copy(alpha = 0.92f)
-    } else {
-        lerp(scheme.surfaceColorAtElevation(2.dp), sourceAccent, 0.16f).copy(alpha = 0.92f)
+    val isDetailScrolled by remember(detailListState) {
+        derivedStateOf {
+            detailListState.firstVisibleItemIndex > 0 || detailListState.firstVisibleItemScrollOffset > 0
+        }
+    }
+    val tintAlpha = if (isDetailScrolled) 0.48f else 0.72f
+    val bandTint = when {
+        monochrome -> scheme.surfaceColorAtElevation(3.dp).copy(alpha = tintAlpha)
+        !useGradientHeader -> lerp(scheme.surfaceColorAtElevation(2.dp), scheme.primary, 0.24f).copy(alpha = tintAlpha)
+        else -> lerp(scheme.surfaceColorAtElevation(2.dp), sourceAccent, 0.22f).copy(alpha = tintAlpha)
     }
 
     Box(
@@ -1870,6 +1923,9 @@ internal fun AppDetailView(
                         accentColor = sourceAccent,
                         mirrors = group.mirrors,
                         appVersions = app.versions,
+                        mirrorsExpanded = expandedMirrorRepos[group.primary.repo] == true,
+                        onMirrorsExpandedChange = { expandedMirrorRepos[group.primary.repo] = it },
+                        expandedVersionKeys = expandedVersionKeys,
                         onOpenUrl = openUrl,
                         onAddToMorphe = { openAddSource(context, it) },
                         onViewPatches = { activePatchGroup = group },
@@ -2169,9 +2225,11 @@ internal fun AppSourceCard(
     onViewPatches: () -> Unit,
     onViewMirrorPatches: (ArchiveSource) -> Unit,
     mirrors: List<ArchiveSource> = emptyList(),
-    appVersions: List<String> = emptyList()
+    appVersions: List<String> = emptyList(),
+    mirrorsExpanded: Boolean = false,
+    onMirrorsExpandedChange: (Boolean) -> Unit = {},
+    expandedVersionKeys: MutableMap<String, Boolean> = remember { androidx.compose.runtime.mutableStateMapOf() }
 ) {
-    var mirrorsExpanded by remember(source.repo) { mutableStateOf(false) }
     var liveVersions by remember(source.repo, packageName) {
         mutableStateOf<Map<String, List<String>>?>(null)
     }
@@ -2197,16 +2255,20 @@ internal fun AppSourceCard(
             .distinct()
     }
 
+    val outerPillRadius = 20.dp
+    val innerPillRadius = 6.dp
+    fun segmentedShape(index: Int, count: Int) = RoundedCornerShape(
+        topStart = if (index == 0) outerPillRadius else innerPillRadius,
+        bottomStart = if (index == 0) outerPillRadius else innerPillRadius,
+        topEnd = if (index == count - 1) outerPillRadius else innerPillRadius,
+        bottomEnd = if (index == count - 1) outerPillRadius else innerPillRadius
+    )
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
             .background(surface)
-            .border(
-                width = 1.dp,
-                color = colors.outlineVariant.copy(alpha = 0.25f),
-                shape = RoundedCornerShape(24.dp)
-            )
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -2256,45 +2318,31 @@ internal fun AppSourceCard(
                 }
             }
 
-            // 2. Metadata Strip: Patch Count | Bundle Version | Latest Update Date
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(colors.surfaceVariant.copy(alpha = 0.35f))
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                SourceMetaItem(
-                    icon = Icons.Outlined.Extension,
-                    text = "${source.patches.size} " + if (source.patches.size == 1) "patch" else "patches",
-                    modifier = Modifier.weight(1f)
+            // 2. Soft-Tinted Segmented Metadata Pills (Dead-centered icons & text)
+            val metaItems = buildList {
+                add(
+                    Icons.Outlined.Extension to (
+                            "${source.patches.size} " + if (source.patches.size == 1) "patch" else "patches"
+                            )
                 )
                 bundleVersion?.let { ver ->
-                    Box(
-                        modifier = Modifier
-                            .width(1.dp)
-                            .height(14.dp)
-                            .background(colors.outlineVariant.copy(alpha = 0.4f))
-                    )
-                    SourceMetaItem(
-                        icon = Icons.Outlined.Dns,
-                        text = ver,
-                        modifier = Modifier.weight(1f)
-                    )
+                    add(Icons.Outlined.Dns to ver)
                 }
                 updatedDate?.let { date ->
-                    Box(
-                        modifier = Modifier
-                            .width(1.dp)
-                            .height(14.dp)
-                            .background(colors.outlineVariant.copy(alpha = 0.4f))
-                    )
+                    add(Icons.Outlined.History to date)
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                metaItems.forEachIndexed { idx, (icon, text) ->
                     SourceMetaItem(
-                        icon = Icons.Outlined.History,
-                        text = date,
-                        modifier = Modifier.weight(1.15f)
+                        icon = icon,
+                        text = text,
+                        shape = segmentedShape(idx, metaItems.size),
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
@@ -2311,6 +2359,8 @@ internal fun AppSourceCard(
                 chipHorizontalPadding = 10.dp,
                 chipVerticalPadding = 4.dp,
                 chipSpacing = 6.dp,
+                expanded = expandedVersionKeys[source.repo] == true,
+                onExpandedChange = { expandedVersionKeys[source.repo] = it },
                 containerColorFor = { ver ->
                     if (ver == "Any version" || ver == "Loading…") {
                         colors.surfaceVariant.copy(alpha = 0.45f)
@@ -2327,69 +2377,157 @@ internal fun AppSourceCard(
                 }
             )
 
-            // 4. Action Buttons: Repo | Patches | Add
+            // 4. Segmented Action Pills: Repo | Patches | Add (Dead-centered icons & text)
+            data class SourceActionSpec(
+                val label: String,
+                val icon: ImageVector,
+                val contentDescription: String,
+                val isPrimary: Boolean,
+                val onClick: () -> Unit
+            )
+            val repoDesc = stringResource(R.string.open_repo)
+            val addDesc = stringResource(R.string.add_to_morphe)
+            val actionSpecs = buildList {
+                source.webUrl?.takeIf { it.isNotBlank() }?.let { webUrl ->
+                    add(SourceActionSpec("Repo", Icons.Outlined.OpenInNew, repoDesc, false) { onOpenUrl(webUrl) })
+                }
+                add(SourceActionSpec("Patches", Icons.Outlined.Extension, "Patches", false, onViewPatches))
+                source.addUrl?.takeIf { it.isNotBlank() }?.let { addUrl ->
+                    add(SourceActionSpec("Add", Icons.Outlined.Add, addDesc, true) { onAddToMorphe(addUrl) })
+                }
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                source.webUrl?.takeIf { it.isNotBlank() }?.let { webUrl ->
-                    MorphePillButton(
-                        onClick = { onOpenUrl(webUrl) },
-                        icon = Icons.Outlined.OpenInNew,
-                        contentDescription = stringResource(R.string.open_repo),
-                        label = "Repo",
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                MorphePillButton(
-                    onClick = onViewPatches,
-                    icon = Icons.Outlined.Extension,
-                    contentDescription = "Patches",
-                    label = "Patches",
-                    modifier = Modifier.weight(1f)
-                )
-                source.addUrl?.takeIf { it.isNotBlank() }?.let { addUrl ->
-                    MorphePillButton(
-                        onClick = { onAddToMorphe(addUrl) },
-                        icon = Icons.Outlined.Add,
-                        contentDescription = stringResource(R.string.add_to_morphe),
-                        label = "Add",
-                        tone = SemanticTone.Primary,
-                        modifier = Modifier.weight(1f)
-                    )
+                actionSpecs.forEachIndexed { idx, spec ->
+                    val pillShape = segmentedShape(idx, actionSpecs.size)
+                    val containerColor = if (spec.isPrimary) {
+                        SemanticTone.Primary.container
+                    } else {
+                        colors.surfaceVariant.copy(alpha = 0.55f)
+                    }
+                    val contentColor = if (spec.isPrimary) {
+                        SemanticTone.Primary.content
+                    } else {
+                        colors.onSurface
+                    }
+                    Surface(
+                        onClick = spec.onClick,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(42.dp),
+                        shape = pillShape,
+                        color = containerColor,
+                        contentColor = contentColor
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = spec.icon,
+                                    contentDescription = spec.contentDescription,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = spec.label,
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        platformStyle = androidx.compose.ui.text.PlatformTextStyle(
+                                            includeFontPadding = false
+                                        )
+                                    ),
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
-            // 5. Compact Mirror Repos ("Same patches in N other repos")
+            // 5. Redesigned Compact Mirror Bar ("Same patches in N other repos")
             if (mirrors.isNotEmpty()) {
+                val chevronRotation by animateFloatAsState(
+                    targetValue = if (mirrorsExpanded) 180f else 0f,
+                    animationSpec = tween(200),
+                    label = "mirror_chevron_rotation"
+                )
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { mirrorsExpanded = !mirrorsExpanded }
-                            .padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Surface(
+                        onClick = { onMirrorsExpandedChange(!mirrorsExpanded) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        color = colors.surfaceVariant.copy(alpha = 0.26f),
+                        contentColor = colors.onSurfaceVariant
                     ) {
-                        Text(
-                            text = "Same patches in ${mirrors.size} other " +
-                                    (if (mirrors.size == 1) "repo" else "repos"),
-                            color = colors.onSurfaceVariant,
-                            style = MaterialTheme.typography.labelMedium,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Icon(
-                            imageVector = if (mirrorsExpanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                            contentDescription = if (mirrorsExpanded) "Collapse mirrors" else "Expand mirrors",
-                            tint = colors.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 9.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Dns,
+                                contentDescription = null,
+                                tint = colors.onSurfaceVariant.copy(alpha = 0.8f),
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = "Same patches from other " +
+                                        (if (mirrors.size == 1) "repo" else "repos"),
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    platformStyle = androidx.compose.ui.text.PlatformTextStyle(
+                                        includeFontPadding = false
+                                    )
+                                ),
+                                fontWeight = FontWeight.Medium,
+                                color = colors.onSurfaceVariant,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(colors.surfaceVariant.copy(alpha = 0.55f))
+                                    .padding(horizontal = 7.dp, vertical = 2.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "+${mirrors.size}",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 10.sp,
+                                        platformStyle = androidx.compose.ui.text.PlatformTextStyle(
+                                            includeFontPadding = false
+                                        )
+                                    ),
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.onSurface
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.Outlined.ExpandMore,
+                                contentDescription = if (mirrorsExpanded) "Collapse mirrors" else "Expand mirrors",
+                                tint = colors.onSurfaceVariant,
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .rotate(chevronRotation)
+                            )
+                        }
                     }
 
                     AnimatedExpand(visible = mirrorsExpanded) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            MorpheDivider(fullWidth = true)
                             mirrors.forEach { mirror ->
                                 val mirrorVersion = bundleVersionOf(mirror.latestChanges)
                                 val mirrorDate = formatReleaseDate(releaseDateOf(mirror.latestChanges))
@@ -2415,8 +2553,8 @@ internal fun AppSourceCard(
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .background(colors.surfaceVariant.copy(alpha = 0.28f))
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(colors.surfaceVariant.copy(alpha = 0.22f))
                                         .padding(horizontal = 12.dp, vertical = 10.dp),
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
@@ -2454,13 +2592,14 @@ internal fun AppSourceCard(
                                         }
                                     }
 
-                                    // Compact version pills matching the primary source card
                                     ExpandableVersionRow(
                                         versions = mirrorVersionsToDisplay,
                                         chipShape = CircleShape,
                                         chipHorizontalPadding = 8.dp,
                                         chipVerticalPadding = 3.dp,
                                         chipSpacing = 5.dp,
+                                        expanded = expandedVersionKeys["${source.repo}->${mirror.repo}"] == true,
+                                        onExpandedChange = { expandedVersionKeys["${source.repo}->${mirror.repo}"] = it },
                                         containerColorFor = { ver ->
                                             if (ver == "Any version" || ver == "Loading…") {
                                                 colors.surfaceVariant.copy(alpha = 0.45f)
@@ -2477,35 +2616,70 @@ internal fun AppSourceCard(
                                         }
                                     )
 
+                                    val mirrorActions = buildList {
+                                        mirror.webUrl?.takeIf { it.isNotBlank() }?.let { webUrl ->
+                                            add(SourceActionSpec("Repo", Icons.Outlined.OpenInNew, "Open ${mirror.repo}", false) { onOpenUrl(webUrl) })
+                                        }
+                                        add(SourceActionSpec("Patches", Icons.Outlined.Extension, "View ${mirror.repo} patches", false) { onViewMirrorPatches(mirror) })
+                                        mirror.addUrl?.takeIf { it.isNotBlank() }?.let { addUrl ->
+                                            add(SourceActionSpec("Add", Icons.Outlined.Add, "Add ${mirror.repo} to Morphe", true) { onAddToMorphe(addUrl) })
+                                        }
+                                    }
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        mirror.webUrl?.takeIf { it.isNotBlank() }?.let { webUrl ->
-                                            MorphePillButton(
-                                                onClick = { onOpenUrl(webUrl) },
-                                                icon = Icons.Outlined.OpenInNew,
-                                                contentDescription = "Open ${mirror.repo}",
-                                                label = "Repo",
-                                                modifier = Modifier.weight(1f)
-                                            )
-                                        }
-                                        MorphePillButton(
-                                            onClick = { onViewMirrorPatches(mirror) },
-                                            icon = Icons.Outlined.Extension,
-                                            contentDescription = "View ${mirror.repo} patches",
-                                            label = "Patches",
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        mirror.addUrl?.takeIf { it.isNotBlank() }?.let { addUrl ->
-                                            MorphePillButton(
-                                                onClick = { onAddToMorphe(addUrl) },
-                                                icon = Icons.Outlined.Add,
-                                                contentDescription = "Add ${mirror.repo} to Morphe",
-                                                label = "Add",
-                                                tone = SemanticTone.Primary,
-                                                modifier = Modifier.weight(1f)
-                                            )
+                                        mirrorActions.forEachIndexed { idx, spec ->
+                                            val pillShape = segmentedShape(idx, mirrorActions.size)
+                                            val containerColor = if (spec.isPrimary) {
+                                                SemanticTone.Primary.container
+                                            } else {
+                                                colors.surfaceVariant.copy(alpha = 0.55f)
+                                            }
+                                            val contentColor = if (spec.isPrimary) {
+                                                SemanticTone.Primary.content
+                                            } else {
+                                                colors.onSurface
+                                            }
+                                            Surface(
+                                                onClick = spec.onClick,
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(34.dp),
+                                                shape = pillShape,
+                                                color = containerColor,
+                                                contentColor = contentColor
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .padding(horizontal = 6.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Row(
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = spec.icon,
+                                                            contentDescription = spec.contentDescription,
+                                                            modifier = Modifier.size(14.dp)
+                                                        )
+                                                        Text(
+                                                            text = spec.label,
+                                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                                platformStyle = androidx.compose.ui.text.PlatformTextStyle(
+                                                                    includeFontPadding = false
+                                                                )
+                                                            ),
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -2522,28 +2696,41 @@ internal fun AppSourceCard(
 private fun SourceMetaItem(
     icon: ImageVector,
     text: String,
+    shape: RoundedCornerShape,
     modifier: Modifier = Modifier
 ) {
     val colors = MaterialTheme.colorScheme
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically
+    Box(
+        modifier = modifier
+            .height(34.dp)
+            .clip(shape)
+            .background(colors.surfaceVariant.copy(alpha = 0.24f))
+            .padding(horizontal = 8.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = colors.onSurfaceVariant,
-            modifier = Modifier.size(13.dp)
-        )
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Medium,
-            color = colors.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = colors.onSurfaceVariant.copy(alpha = 0.85f),
+                modifier = Modifier.size(13.dp)
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    platformStyle = androidx.compose.ui.text.PlatformTextStyle(
+                        includeFontPadding = false
+                    )
+                ),
+                fontWeight = FontWeight.Medium,
+                color = colors.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -2575,6 +2762,10 @@ private fun SourcePatchesScreen(
     var footerHeightDp by remember { mutableStateOf(0.dp) }
     val colors = MaterialTheme.colorScheme
     val monochrome = LocalMonochromeTheme.current
+
+    val expandedPatchVersionKeys = remember(source.repo, packageName) {
+        androidx.compose.runtime.mutableStateMapOf<String, Boolean>()
+    }
 
     val isScrolled by remember(listState) {
         derivedStateOf {
@@ -2709,12 +2900,15 @@ private fun SourcePatchesScreen(
                                 else -> resolvedVersions.orEmpty()
                             }
 
+                            val patchKey = "${patch.name}_$originalNumber"
                             ExpandableVersionRow(
                                 versions = versionsToShow,
                                 chipShape = CircleShape,
                                 chipHorizontalPadding = 10.dp,
                                 chipVerticalPadding = 4.dp,
                                 chipSpacing = 6.dp,
+                                expanded = expandedPatchVersionKeys[patchKey] == true,
+                                onExpandedChange = { expandedPatchVersionKeys[patchKey] = it },
                                 containerColorFor = { ver ->
                                     if (ver == "Any version") {
                                         colors.surfaceVariant.copy(alpha = 0.45f)

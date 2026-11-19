@@ -212,6 +212,7 @@ import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.layout.height
+import dev.rushi.apkdownloadhelper.ui.CustomizationTabContent
 
 
 internal const val AURORA_AUTH_URL = "https://auroraoss.com/api/auth"
@@ -567,6 +568,9 @@ class MainActivity : ComponentActivity() {
                                 animatedBackground = helperSettings.animatedBackground,
                                 findAppsContent = { _ ->
                                     AppBrowserScreen(
+                                        hideStats = helperSettings.hideFindAppsStats,
+                                        hideCommunityNotice = helperSettings.hideCommunityNotice,
+                                        useGradientCards = helperSettings.useGradientCardColors,
                                         onBack = null,
                                         onOpenApp = { selectedArchiveApp = it }
                                     )
@@ -679,6 +683,10 @@ class MainActivity : ComponentActivity() {
                                             settings = helperSettings,
                                             onSettingsChange = ::updateHelperSettings
                                         )
+                                        SettingsCategory.CUSTOMIZATION -> CustomizationTabContent(
+                                            settings = helperSettings,
+                                            onSettingsChange = ::updateHelperSettings
+                                        )
                                         SettingsCategory.DOWNLOADS -> AdvancedTabContent(
                                             settings = helperSettings,
                                             onSettingsChange = ::updateHelperSettings
@@ -724,6 +732,7 @@ class MainActivity : ComponentActivity() {
                                 AppDetailView(
                                     app = appDetail,
                                     installed = isInstalled,
+                                    useGradientHeader = helperSettings.useGradientCardColors,
                                     onBack = { selectedArchiveApp = null },
                                     modifier = Modifier.fillMaxSize()
                                 )
