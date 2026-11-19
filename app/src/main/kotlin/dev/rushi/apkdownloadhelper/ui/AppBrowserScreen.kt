@@ -1,4 +1,4 @@
-﻿package dev.rushi.apkdownloadhelper.ui
+package dev.rushi.apkdownloadhelper.ui
 
 import android.Manifest
 import android.content.Context
@@ -753,17 +753,26 @@ internal fun AppBrowserScreen(
     }
 
     LaunchedEffect(loadKey) {
-        apps = null
-        archiveIndex = null
-        error = null
+        val cached = MorpheArchive.loadCachedIndex(context)
+        if (cached != null && apps == null) {
+            apps = cached.apps.sortedBy { it.name.lowercase(Locale.US) }
+            archiveIndex = cached
+            freshness = archiveFreshness(cached.generatedAt)
+        } else if (cached == null && apps == null) {
+            archiveIndex = null
+            error = null
+        }
         try {
-            val index = MorpheArchive.fetchIndex()
+            val index = MorpheArchive.fetchIndex(context)
             MorpheArchive.invalidatePatchListCache()
             apps = index.apps.sortedBy { it.name.lowercase(Locale.US) }
             archiveIndex = index
             freshness = archiveFreshness(index.generatedAt)
+            error = null
         } catch (e: Exception) {
-            error = e.message ?: "Failed to load the app index"
+            if (apps == null) {
+                error = e.message ?: "Failed to load the app index"
+            }
         }
     }
 
@@ -807,7 +816,9 @@ internal fun AppBrowserScreen(
         val pendingTracked = remember(tracked, indexedPackages) {
             tracked - indexedPackages
         }
-        val filtered = remember(
+        var filtered by remember { mutableStateOf<List<ArchiveApp>>(emptyList()) }
+
+        LaunchedEffect(
             loaded,
             query,
             tab,
@@ -818,43 +829,60 @@ internal fun AppBrowserScreen(
             trackedOnly,
             changesByPackage
         ) {
-            loaded.orEmpty()
-                .filter { app ->
-                    (!trackedOnly || app.packageName in tracked) &&
-                        (query.isBlank() ||
-                            app.name.contains(query, ignoreCase = true) ||
-                            app.packageName.contains(query, ignoreCase = true))
-                }
-                .filter { app ->
-                    when (tab) {
-                        AppListTab.All -> true
-                        AppListTab.Favourites -> app.packageName in favourites
-                        AppListTab.Tracked -> app.packageName in tracked
-                        AppListTab.Installed -> app.packageName in installedPackages
-                        AppListTab.NotInstalled -> app.packageName !in installedPackages
+            val q = query.trim()
+            if (q.isNotEmpty()) {
+                delay(50)
+            }
+            withContext(Dispatchers.Default) {
+                val qLower = q.lowercase(Locale.US)
+                val matches = loaded.orEmpty()
+                    .filter { app ->
+                        (!trackedOnly || app.packageName in tracked) &&
+                            (q.isBlank() || app.matchesQuery(qLower))
                     }
-                }
-                .let { matches ->
-                    when (sort) {
-                        AppSort.AZ -> matches.sortedBy { it.name.lowercase(Locale.US) }
-                        AppSort.ZA -> matches.sortedByDescending { it.name.lowercase(Locale.US) }
-                        AppSort.Sources -> matches.sortedByDescending { it.sourceCount }
-                        AppSort.Newest -> matches
-                            .map { app -> app.newestReleaseDate().orEmpty() to app }
-                            .sortedByDescending { it.first }
-                            .map { it.second }
-                        AppSort.Updates -> matches.sortedWith(
-                            compareByDescending<ArchiveApp> {
-                                changesByPackage[it.packageName]?.updates ?: 0
-                            }.thenBy { it.name.lowercase(Locale.US) }
-                        )
-                        AppSort.NewPatches -> matches.sortedWith(
-                            compareByDescending<ArchiveApp> {
-                                changesByPackage[it.packageName]?.newPatches ?: 0
-                            }.thenBy { it.name.lowercase(Locale.US) }
-                        )
+                    .filter { app ->
+                        when (tab) {
+                            AppListTab.All -> true
+                            AppListTab.Favourites -> app.packageName in favourites
+                            AppListTab.Tracked -> app.packageName in tracked
+                            AppListTab.Installed -> app.packageName in installedPackages
+                            AppListTab.NotInstalled -> app.packageName !in installedPackages
+                        }
                     }
-                }
+                    .let { list ->
+                        if (q.isNotBlank()) {
+                            list
+                                .map { it to it.scoreMatch(qLower) }
+                                .sortedWith(
+                                    compareByDescending<Pair<ArchiveApp, Int>> { it.second }
+                                        .thenByDescending { it.first.patchCount }
+                                        .thenBy { it.first.name.lowercase(Locale.US) }
+                                )
+                                .map { it.first }
+                        } else {
+                            when (sort) {
+                                AppSort.AZ -> list.sortedBy { it.name.lowercase(Locale.US) }
+                                AppSort.ZA -> list.sortedByDescending { it.name.lowercase(Locale.US) }
+                                AppSort.Sources -> list.sortedByDescending { it.sourceCount }
+                                AppSort.Newest -> list
+                                    .map { app -> app.newestReleaseDate().orEmpty() to app }
+                                    .sortedByDescending { it.first }
+                                    .map { it.second }
+                                AppSort.Updates -> list.sortedWith(
+                                    compareByDescending<ArchiveApp> {
+                                        changesByPackage[it.packageName]?.updates ?: 0
+                                    }.thenBy { it.name.lowercase(Locale.US) }
+                                )
+                                AppSort.NewPatches -> list.sortedWith(
+                                    compareByDescending<ArchiveApp> {
+                                        changesByPackage[it.packageName]?.newPatches ?: 0
+                                    }.thenBy { it.name.lowercase(Locale.US) }
+                                )
+                            }
+                        }
+                    }
+                filtered = matches
+            }
         }
         val availableTabs = remember(trackedOnly) {
             if (trackedOnly) AppListTab.entries.filter { it != AppListTab.All } else AppListTab.entries
