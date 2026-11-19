@@ -842,14 +842,14 @@ internal fun AppBrowserScreen(
                 label = "header_search_transition",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 52.dp)
+                    .height(52.dp)
             ) { isSearchActive ->
                 if (isSearchActive) {
                     // 40.dp search bar vertically centered inside the 52.dp header row (zero height jump)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 52.dp),
+                            .height(52.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -864,7 +864,7 @@ internal fun AppBrowserScreen(
                         Surface(
                             modifier = Modifier
                                 .weight(1f)
-                                .heightIn(min = 40.dp),
+                                .height(40.dp),
                             shape = CircleShape,
                             color = fieldContainer
                         ) {
@@ -940,7 +940,7 @@ internal fun AppBrowserScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 52.dp),
+                            .height(52.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -3048,13 +3048,13 @@ private fun SourcePatchesScreen(
                 label = "patches_search_transition",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 52.dp)
+                    .height(52.dp)
             ) { isSearchActive ->
                 if (isSearchActive) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 52.dp),
+                            .height(52.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -3069,7 +3069,7 @@ private fun SourcePatchesScreen(
                         Surface(
                             modifier = Modifier
                                 .weight(1f)
-                                .heightIn(min = 40.dp),
+                                .height(40.dp),
                             shape = CircleShape,
                             color = fieldContainer
                         ) {
@@ -3142,7 +3142,7 @@ private fun SourcePatchesScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 52.dp),
+                            .height(52.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
