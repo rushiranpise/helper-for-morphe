@@ -126,9 +126,10 @@ internal fun Context.clearExternalDownloads(): Long {
         ?.listFiles()
         ?.filter { it.isFile }
         .orEmpty()
-    val freed = files.sumOf { it.length() }
-    files.forEach { file -> runCatching { file.delete() } }
-    return freed
+    return files.sumOf { file ->
+        val size = file.length()
+        if (runCatching { file.delete() }.getOrDefault(false)) size else 0L
+    }
 }
 
 private const val KEY_CUSTOM_DOWNLOAD_URIS = "custom_download_uris"

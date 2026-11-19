@@ -350,6 +350,7 @@ internal fun SystemTabContent(
     var pendingLocation by remember { mutableStateOf<DownloadLocation?>(null) }
     var storageRefreshToken by remember { mutableIntStateOf(0) }
     var storageSummary by remember { mutableStateOf("Calculating storage…") }
+    var showClearStorageDialog by remember { mutableStateOf(false) }
     val latestSettings by rememberUpdatedState(settings)
 
     LaunchedEffect(storageRefreshToken) {
@@ -456,6 +457,50 @@ internal fun SystemTabContent(
         )
     }
 
+    if (showClearStorageDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearStorageDialog = false },
+            title = { Text("Clear storage?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "This permanently deletes cached hand-off files, app external copies, " +
+                            "saved APKs in Downloads/Morphe Helper, and copies saved to your custom folder. " +
+                            "This cannot be undone."
+                    )
+                    Text(
+                        text = storageSummary,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showClearStorageDialog = false
+                        scope.launch {
+                            val freed = withContext(Dispatchers.IO) { context.clearAllDownloads() }
+                            storageRefreshToken++
+                            Toast.makeText(
+                                context,
+                                if (freed > 0L) "Cleared ${freed.formatBytes()}" else "Nothing to clear",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearStorageDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -480,17 +525,7 @@ internal fun SystemTabContent(
                     icon = Icons.Outlined.CleaningServices,
                     title = "Storage used",
                     subtitle = storageSummary,
-                    onClick = {
-                        scope.launch {
-                            val freed = withContext(Dispatchers.IO) { context.clearAllDownloads() }
-                            storageRefreshToken++
-                            Toast.makeText(
-                                context,
-                                "Cleared ${freed.formatBytes()}",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    },
+                    onClick = { showClearStorageDialog = true },
                     trailingContent = { Text("Clear", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
                 )
                 SettingsItem(
