@@ -344,10 +344,22 @@ internal fun SystemTabContent(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var locationDialog by remember { mutableStateOf(false) }
+    var retentionDialog by remember { mutableStateOf(false) }
     var fastModePolicyDialog by remember { mutableStateOf(false) }
     var connectionCountDialog by remember { mutableStateOf(false) }
     var pendingLocation by remember { mutableStateOf<DownloadLocation?>(null) }
+    var storageRefreshToken by remember { mutableIntStateOf(0) }
+    var storageSummary by remember { mutableStateOf("Calculating storage…") }
     val latestSettings by rememberUpdatedState(settings)
+
+    LaunchedEffect(storageRefreshToken) {
+        storageSummary = withContext(Dispatchers.IO) {
+            "Cache ${context.temporaryDownloadsSize().formatBytes()} · " +
+                "External ${context.externalDownloadsSize().formatBytes()} · " +
+                "Downloads ${context.downloadsCopySize().formatBytes()} · " +
+                "Custom ${context.customDownloadsSize().formatBytes()}"
+        }
+    }
 
     val locations = DownloadLocation.entries
     val fastPolicies = FastModePolicy.entries
@@ -393,6 +405,31 @@ internal fun SystemTabContent(
         )
     }
 
+    if (retentionDialog) {
+        SettingsChoiceDialog(
+            title = "Keep downloads",
+            choices = DownloadRetention.entries.map { retention ->
+                SettingsChoice(
+                    icon = when (retention) {
+                        DownloadRetention.KEEP -> Icons.Outlined.SdStorage
+                        DownloadRetention.AFTER_HANDOFF -> Icons.Outlined.Delete
+                        DownloadRetention.HOUR_1,
+                        DownloadRetention.HOUR_24,
+                        DownloadRetention.DAY_7 -> Icons.Outlined.CleaningServices
+                    },
+                    title = retention.title,
+                    description = retention.description
+                )
+            },
+            selectedIndex = DownloadRetention.entries.indexOf(settings.downloadRetention),
+            onSelect = { index ->
+                onSettingsChange(settings.copy(downloadRetention = DownloadRetention.entries[index]))
+                retentionDialog = false
+            },
+            onDismiss = { retentionDialog = false }
+        )
+    }
+
     if (fastModePolicyDialog) {
         SettingsChoiceDialog(
             title = stringResource(R.string.which_version_to_fetch),
@@ -433,10 +470,27 @@ internal fun SystemTabContent(
                     trailingContent = { Text(downloadLocationLabel(context, settings), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium) }
                 )
                 SettingsItem(
+                    icon = Icons.Outlined.Schedule,
+                    title = "Keep downloads",
+                    subtitle = settings.downloadRetention.description,
+                    onClick = { retentionDialog = true },
+                    trailingContent = { Text(settings.downloadRetention.title, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium) }
+                )
+                SettingsItem(
                     icon = Icons.Outlined.CleaningServices,
                     title = "Storage used",
-                    subtitle = "Clear temporary files",
-                    onClick = { scope.launch(Dispatchers.IO) { context.clearTemporaryDownloads() } },
+                    subtitle = storageSummary,
+                    onClick = {
+                        scope.launch {
+                            val freed = withContext(Dispatchers.IO) { context.clearAllDownloads() }
+                            storageRefreshToken++
+                            Toast.makeText(
+                                context,
+                                "Cleared ${freed.formatBytes()}",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    },
                     trailingContent = { Text("Clear", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
                 )
                 SettingsItem(
