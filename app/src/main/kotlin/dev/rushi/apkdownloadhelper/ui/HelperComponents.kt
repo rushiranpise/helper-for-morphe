@@ -718,18 +718,25 @@ internal fun AppInfoArchCard(abis: List<String>) {
 @Composable
 internal fun AppAvatar(packageName: String, initial: Char) {
     val context = LocalContext.current
-    // Fetch the installed app's real icon; when the app isn't installed use the
-    // Android default app icon; the letter tile is the last-resort fallback.
+    // Fetch the installed app's real icon; when the app isn't installed ask the
+    // Play metadata service for its store icon; the Android default app icon is
+    // the fallback for packages without a listing, and the letter tile the last.
     var iconBitmap by remember(packageName) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(packageName) {
         iconBitmap = withContext(Dispatchers.IO) {
             val installed = runCatching {
                 context.packageManager.getApplicationIcon(packageName)
-            }.getOrNull()
-            val drawable = installed
-                ?: context.packageManager.getDefaultActivityIcon()
-            runCatching {
-                drawable.toBitmap(width = 176, height = 176).asImageBitmap()
+            }.getOrNull()?.let { drawable ->
+                runCatching {
+                    drawable.toBitmap(width = 176, height = 176).asImageBitmap()
+                }.getOrNull()
+            }
+            if (installed != null) return@withContext installed
+
+            fetchArchiveIcon(publicMetadataIconUrl(packageName)) ?: runCatching {
+                context.packageManager.getDefaultActivityIcon()
+                    .toBitmap(width = 176, height = 176)
+                    .asImageBitmap()
             }.getOrNull()
         }
     }

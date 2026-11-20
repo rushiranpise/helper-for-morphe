@@ -2008,13 +2008,13 @@ private fun FindAppIcon(
         }
         return
     }
-    val iconUrl = app.iconUrl?.takeIf { it.isNotBlank() }
+    val archiveIconUrl = app.iconUrl?.takeIf { it.isNotBlank() }
     AsyncAvatar(
-        url = iconUrl,
+        url = archiveIconUrl ?: publicMetadataIconUrl(app.packageName),
         fallbackText = initial.toString(),
         size = size,
         cornerRadius = cornerRadius,
-        fallbackGradient = gradient.takeIf { iconUrl == null }
+        fallbackGradient = gradient.takeIf { archiveIconUrl == null }
     )
 }
 
@@ -2040,8 +2040,15 @@ private fun decodeArchiveIcon(bytes: ByteArray): ImageBitmap? {
     return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.asImageBitmap()
 }
 
+/**
+ * Play Store icon lookup by package name. The service redirects to the store's
+ * 128px WebP and answers 404 for packages with no Play listing.
+ */
+internal fun publicMetadataIconUrl(packageName: String): String =
+    "https://publicmetadata.co.uk/$packageName"
+
 /** Icon fetch that is cancelled when the row leaves the viewport. */
-private suspend fun fetchArchiveIcon(iconUrl: String): ImageBitmap? {
+internal suspend fun fetchArchiveIcon(iconUrl: String): ImageBitmap? {
     val request = runCatching {
         Request.Builder()
             .url(iconUrl)
