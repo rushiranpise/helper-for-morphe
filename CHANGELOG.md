@@ -6,6 +6,24 @@ matches the tag (see `tools/release-notes.sh`), so a new version needs a section
 before it is tagged. Commit subjects are only used as a fallback when a section is
 missing.
 
+## 6.2.0 - 2026-11-20
+
+A faster Find New Apps and a rebuilt Settings screen.
+
+### New
+
+- **Settings home**: Sources, Appearance, More customization, Downloads, Security & network, System & logs, and About each open a dedicated page instead of one long tabbed screen. The Sources page keeps provider toggles and drag-to-reorder; Appearance collects the theme, colors and app icon.
+- **Play Store icons for missing apps**: uninstalled apps and archive entries without an icon now fall back to their Play listing, with the existing placeholder when there is no listing.
+
+### Performance
+
+- **Faster Find New Apps**: search is debounced, scored off the UI thread, and covers app names, packages, bundles, patch names and descriptions.
+- **Instant catalog launch**: the last index is cached on disk, validated before use, and swapped atomically, so the list opens immediately and still works offline.
+
+### Changed
+
+- Settings titles are sentence case, and the Sources list no longer repeats the reorder hint on every row.
+
 ## 6.1.0 - 2026-11-19
 
 Track apps from inside Helper and get notified when they change.

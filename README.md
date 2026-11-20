@@ -58,7 +58,7 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
 ### Request handling
 
 - Handles `app.morphe.manager.action.DOWNLOAD_ORIGINAL_APK` requests, including split-archive requests (APK/APKM/APKS/XAPK), ABI hints, compatible version lists, and stock-install requirements.
-- Shows the requested app's **real icon** (Android default when not installed), name, package, version, build, format, and ABI in a compact stat-card header. File-format and architecture hints are shown as `+N` pills when multiple values are allowed.
+- Shows the requested app's **real icon** (the Play Store icon when it is not installed, Android default when it has no listing), name, package, version, build, format, and ABI in a compact stat-card header. File-format and architecture hints are shown as `+N` pills when multiple values are allowed.
 - Lets you choose one or more file kinds (APK / APKM / APKS / XAPK); Fast Mode tries them in the order you select.
 - **Reuse instead of re-download**: when a matching file from a previous run still exists (and auto-clear is off), Helper offers it — listing every candidate by source and file size, with the VirusTotal verdict if one exists — so a failed patch or an identical re-request is instant. The offer also works in Fast Mode (which pauses until you decide). "Download new" always wins if you prefer a fresh copy.
 
@@ -124,8 +124,9 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
 - **Game data (OBB) is reported, never installed.** Android serves expansion files only from `Android/obb/<package>/`, which no other app may write on Android 11 and later, so no helper can place them for you. When the file handed over carries them, the history entry says `Includes game data (2 files · 1.2 GB)` and the request log records it. Copy those files into `Android/obb/<package>/` if a patched game closes on launch. A bare `APK` never contains expansion data, so pick a container format (`XAPK`, `APKS`) for games that need it.
 ### Find New Apps
 
-- A **live community patch index** (fetched fresh from the morphe-archive JSON on every open) with an archive dashboard showing app and patch totals.
-- Searchable app list with real installed-app icons (Android default when not installed), per-app **bundle count**, install-state filters (All / Installed / Not installed), **favourites** that survive refreshes, and sort options (A-Z, Z-A, recently added, recently updated, most bundles).
+- A **live community patch index** with an archive dashboard showing app and patch totals. The last index is cached on disk for an instant launch, refreshed from the morphe-archive JSON in the background, and still available offline.
+- Searchable app list with real installed-app icons, Play Store icons for apps that are not installed, per-app **bundle count**, install-state filters (All / Installed / Not installed), **favourites** that survive refreshes, and sort options (A-Z, Z-A, recently added, recently updated, most bundles).
+- **Fast search**: a precomputed index across app names, packages, bundles, patch names and descriptions powers weighted results, with a short typing debounce and the work kept off the UI thread.
 - Each app opens a redesigned detail screen with a compact version picker, patches grouped **per bundle** in collapsible lists, "Add to Morphe" actions that deep-link into the manager, and an Open in Play Store shortcut.
 - The dashboard and warning scroll with the list, and the scrollbar sits in the right margin so the cards stay centred.
 - Includes the community disclaimer: the index is community-maintained, bundles are not individually verified, and neither Morphe nor this app's developer is responsible for third-party patches.
@@ -137,30 +138,29 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
 - **Track future packages.** Enter a package that is not in the Morphe index yet. It waits in a removable **Waiting for index** card; when the package appears, Helper notifies you and starts tracking it normally.
 - **Control what is tracked.** The Tracking tab keeps tracked apps and pending packages together, and stopping the last tracked package stops the background work.
 
-### Appearance, DNS & logs
+### Settings, appearance & logs
 
 - **Themes**: dark, light, or follow-the-system, plus optional **Material You** wallpaper-tinted accents and surfaces (Android 12+).
 - **AdGuard DNS**: resolve app traffic through AdGuard DNS to block ads/trackers on download pages and in the captcha browser, with automatic fallback to the system resolver on failure. On by default.
-- **Tabs in Settings** (Appearance / System / Advanced / Logs), with the Logs tab split into **History**, **Logging** and **Request logs** sub-tabs. History records every past hand-off (with scan verdicts), and Request logs show the full in-app request + HTTP log - every URL, status code, redirect, and timing - with a **Share** button exporting it for bug reports (app version and device info included). Logcat mirroring is optional.
+- **Category-based Settings**: Sources, Appearance, More customization, Downloads, Security & network, System & logs, and About each open a focused page instead of one long tab strip.
+- **Logs** live under System & logs, split into **History**, **Logging** and **Request logs** sub-tabs. History records every past hand-off (with scan verdicts), and Request logs show the full in-app request + HTTP log - every URL, status code, redirect, and timing - with a **Share** button exporting it for bug reports (app version and device info included). Logcat mirroring is optional.
 
 ## Helper Settings
 
-- **Save downloads**: private storage, a visible copy in `Downloads/Morphe Helper`, or a custom folder; retention can clear files after 1 hour, 24 hours, 7 days, or keep them until you clear storage. A storage card shows cache and Downloads sizes and clears both with one tap.
-- **Connection**: Wi-Fi only, mobile data only, or both.
-- **Sources**: enable, disable, reorder or set a **default source**.
-- **Fast Mode**: enable auto-resolve and choose the version policy (Requested / Latest / Always ask).
+- **Settings home**: seven categories - Sources, Appearance, More customization, Downloads, Security & network, System & logs, and About - each opening its own page.
+- **Sources**: enable, disable, reorder or set a **default source** on the dedicated Sources page.
+- **Appearance**: System / Dark / Light, Material You colors, true black backgrounds, and the app icon.
+- **More customization**: Find apps layout and visibility controls for the stats, disclaimer, cards and preview.
+- **Downloads**: private storage, a visible copy in `Downloads/Morphe Helper`, or a custom folder; retention can clear files after 1 hour, 24 hours, 7 days, or keep them until you clear storage. A storage card shows cache and Downloads sizes and clears both with one tap. Also holds Fast Mode and the APKMirror density preference.
+- **Security & network**: Wi-Fi only, mobile data only, or both; network routing; AdGuard DNS (on by default, can be turned off); and VirusTotal scanning with API key and scan mode.
+- **System & logs**: mirror request/HTTP details to Logcat, plus history, request logs and diagnostics.
 - **About**: update channel (stable or beta), update notifications, and optional automatic install through Shizuku.
-- **Downloads and storage**: choose the folder, retention, and APKMirror density preference.
-- **Security**: VirusTotal scanning with API key and scan mode.
-- **AdGuard DNS**: on by default; can be turned off.
-- **Appearance**: System / Dark / Light and Material You colors.
-- **Logging**: mirror request/HTTP details to Logcat.
 
 Temporary hand-off is the default because Morphe Manager copies the returned APK URI into its own private workspace before patching.
 
 ## Debugging & Bug Reports
 
-When a source fails to resolve or a download stalls, the **Logs** tab shows the full story — the request data, every URL fetched, HTTP status codes, redirects, and timing — with no adb needed. Use **Share** to export the log (including the app/device info) to any app.
+When a source fails to resolve or a download stalls, the **System & logs** page shows the full story — the request data, every URL fetched, HTTP status codes, redirects, and timing — with no adb needed. Use **Share** to export the log (including the app/device info) to any app.
 
 GitHub issues use a bug report template that asks for this exported log, so reports arrive with the exact failing request and HTTP trace. A feature-request template is also provided.
 
