@@ -204,7 +204,7 @@ internal fun CustomizationTabContent(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        SettingsSection(title = "Find Apps Layout", icon = Icons.Outlined.ViewList) {
+        SettingsSection(title = "Find apps layout", icon = Icons.Outlined.ViewList) {
             SettingsGroup {
                 SettingsSwitchItem(
                     icon = Icons.Outlined.Dns,
@@ -511,7 +511,7 @@ internal fun SystemTabContent(
             }
         }
 
-        SettingsSection(title = "Download Behavior", icon = Icons.Outlined.Tune) {
+        SettingsSection(title = "Download behavior", icon = Icons.Outlined.Tune) {
             SettingsGroup {
                 SettingsSwitchItem(
                     icon = Icons.Outlined.PhoneAndroid,
@@ -523,11 +523,11 @@ internal fun SystemTabContent(
             }
         }
 
-        SettingsSection(title = "Fast Mode", icon = Icons.Outlined.Explore) {
+        SettingsSection(title = "Fast mode", icon = Icons.Outlined.Explore) {
             SettingsGroup {
                 SettingsSwitchItem(
                     icon = Icons.Outlined.Bolt,
-                    title = "Enable Fast Mode",
+                    title = "Enable Fast mode",
                     subtitle = "Auto-fetch a version across sources and return it automatically.",
                     checked = settings.fastMode,
                     onToggle = { onSettingsChange(settings.copy(fastMode = !settings.fastMode)) }
@@ -573,7 +573,7 @@ internal fun AdvancedTabContent(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        SettingsSection(title = "Network Routing", icon = Icons.Outlined.NetworkCheck) {
+        SettingsSection(title = "Network routing", icon = Icons.Outlined.NetworkCheck) {
             SettingsGroup {
                 SettingsItem(
                     icon = settings.networkPolicy.icon(),
@@ -599,7 +599,7 @@ internal fun AdvancedTabContent(
             }
         }
 
-        SettingsSection(title = "VirusTotal Scanning", icon = Icons.Outlined.Shield) {
+        SettingsSection(title = "VirusTotal scanning", icon = Icons.Outlined.Shield) {
             SettingsGroup {
                 SettingsSwitchItem(
                     icon = Icons.Outlined.Shield,
@@ -668,7 +668,7 @@ internal fun LogsTabContent(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        SettingsSection(title = "Logs & History", icon = Icons.AutoMirrored.Outlined.ViewList) {
+        SettingsSection(title = "Logs & history", icon = Icons.AutoMirrored.Outlined.ViewList) {
             MorpheSelectorRow(
                 options = LogsSubTab.entries.map { MorpheSelectorOption(label = it.label, icon = it.icon) },
                 selectedIndex = LogsSubTab.entries.indexOf(subTab),
@@ -716,7 +716,7 @@ internal fun AboutTabContent(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        SettingsSection(title = "App Info", icon = Icons.Outlined.Info) {
+        SettingsSection(title = "App info", icon = Icons.Outlined.Info) {
             SettingsGroup {
                 SettingsItem(
                     icon = Icons.Outlined.PhoneAndroid,
@@ -726,7 +726,7 @@ internal fun AboutTabContent(
                 )
                 SettingsItem(
                     icon = Icons.Outlined.OpenInNew,
-                    title = "GitHub Repository",
+                    title = "GitHub repository",
                     subtitle = "View source code and report issues",
                     onClick = {
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/rushiranpise/helper-for-morphe"))
@@ -886,7 +886,7 @@ internal fun SourcesSettingsScreen(
             }
         }
 
-        SettingsSection(title = "Providers & Priority", icon = Icons.Outlined.Dns) {
+        SettingsSection(title = "Providers & priority", icon = Icons.Outlined.Dns) {
             SettingsGroup {
                 val draggedHeight = if (startIndex in localOrder.indices) {
                     (rowHeights[localOrder[startIndex]] ?: 180).toFloat()
@@ -949,8 +949,8 @@ internal fun SourcesSettingsScreen(
                                 title = source.label,
                                 subtitle = when {
                                     !enabled -> "Disabled"
-                                    index == 0 && draggingSource == null -> "Tried first · Hold ≡ to reorder"
-                                    else -> "Hold ≡ to reorder"
+                                    index == 0 && draggingSource == null -> "Tried first"
+                                    else -> null
                                 },
                                 onClick = {
                                     onSettingsChange(

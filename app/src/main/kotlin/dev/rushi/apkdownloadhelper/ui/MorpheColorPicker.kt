@@ -18,6 +18,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -317,9 +318,13 @@ private fun AccentSwatch(
     onClick: () -> Unit,
     icon: ImageVector? = null
 ) {
-    val shape = animateCornersAsState(
-        if (selected) MorpheDefaults.PillShape
-        else RoundedCornerShape(MorpheDefaults.CompactCornerRadius)
+    val interactionSource = remember { MutableInteractionSource() }
+    val shape = rememberPressShape(
+        interactionSource,
+        animateCornersAsState(
+            if (selected) MorpheDefaults.PillShape
+            else RoundedCornerShape(MorpheDefaults.CompactCornerRadius)
+        )
     )
     val scheme = MaterialTheme.colorScheme
 
@@ -335,7 +340,7 @@ private fun AccentSwatch(
             .clip(shape)
             .background(fillColor, shape)
             .border(borderWidth, borderColor, shape)
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = interactionSource, onClick = onClick)
             .semantics(mergeDescendants = true) {
                 role = Role.RadioButton
                 contentDescription = if (selected) "$description, selected" else description

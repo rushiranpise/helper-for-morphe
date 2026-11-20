@@ -304,7 +304,7 @@ private fun rememberPressProgress(
 
 /** [shape] with its corners rounding down while pressed. */
 @Composable
-private fun rememberPressShape(
+internal fun rememberPressShape(
     interactionSource: InteractionSource,
     shape: Shape,
     enabled: Boolean = true
