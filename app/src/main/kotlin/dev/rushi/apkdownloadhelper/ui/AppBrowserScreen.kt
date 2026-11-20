@@ -753,7 +753,7 @@ internal fun AppBrowserScreen(
     }
 
     LaunchedEffect(loadKey) {
-        val cached = MorpheArchive.loadCachedIndex(context)
+        val cached = withContext(Dispatchers.IO) { MorpheArchive.loadCachedIndex(context) }
         if (cached != null && apps == null) {
             apps = cached.apps.sortedBy { it.name.lowercase(Locale.US) }
             archiveIndex = cached
@@ -833,7 +833,7 @@ internal fun AppBrowserScreen(
             if (q.isNotEmpty()) {
                 delay(50)
             }
-            withContext(Dispatchers.Default) {
+            val matches = withContext(Dispatchers.Default) {
                 val qLower = q.lowercase(Locale.US)
                 val matches = loaded.orEmpty()
                     .filter { app ->
@@ -881,8 +881,9 @@ internal fun AppBrowserScreen(
                             }
                         }
                     }
-                filtered = matches
+                matches
             }
+            filtered = matches
         }
         val availableTabs = remember(trackedOnly) {
             if (trackedOnly) AppListTab.entries.filter { it != AppListTab.All } else AppListTab.entries

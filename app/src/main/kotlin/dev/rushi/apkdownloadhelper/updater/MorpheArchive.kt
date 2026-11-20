@@ -1,6 +1,7 @@
 package dev.rushi.apkdownloadhelper.updater
 
 import android.content.Context
+import android.util.Log
 import com.google.gson.annotations.SerializedName
 import dev.rushi.apkdownloadhelper.gson
 import kotlinx.coroutines.Dispatchers
@@ -83,6 +84,9 @@ internal data class ArchiveApp(
             val detailNames = patchDetails.map { it.name.lowercase(Locale.US) }
             val detailDesc = patchDetails.mapNotNull { it.description?.lowercase(Locale.US) }
             val repoNames = sources.map { it.repo.lowercase(Locale.US) }
+            val sourcePatchNames = sources.flatMap { it.patches }.map { it.name.lowercase(Locale.US) }
+            val sourcePatchDesc = sources.flatMap { it.patches }
+                .mapNotNull { it.description?.lowercase(Locale.US) }
             searchBlob = buildString {
                 append(nameLower).append(' ')
                 append(packageLower).append(' ')
@@ -90,6 +94,8 @@ internal data class ArchiveApp(
                 patchNames.forEach { append(it).append(' ') }
                 detailNames.forEach { append(it).append(' ') }
                 detailDesc.forEach { append(it).append(' ') }
+                sourcePatchNames.forEach { append(it).append(' ') }
+                sourcePatchDesc.forEach { append(it).append(' ') }
             }
             isIndexed = true
         }
@@ -111,10 +117,17 @@ internal data class ArchiveApp(
             nameLower.contains(queryLower) -> 600
             packageLower.contains(queryLower) -> 400
             sources.any { it.repo.lowercase(Locale.US).contains(queryLower) } -> 300
-            patches.any { it.lowercase(Locale.US).contains(queryLower) } -> 200
+            patches.any { it.lowercase(Locale.US).contains(queryLower) } ||
+                sources.any { source ->
+                    source.patches.any { it.name.lowercase(Locale.US).contains(queryLower) }
+                } -> 200
             patchDetails.any {
                 it.name.lowercase(Locale.US).contains(queryLower) ||
                     it.description?.lowercase(Locale.US)?.contains(queryLower) == true
+            } || sources.any { source ->
+                source.patches.any {
+                    it.description?.lowercase(Locale.US)?.contains(queryLower) == true
+                }
             } -> 150
             else -> 100
         }
@@ -438,6 +451,23 @@ internal object MorpheArchive {
         }.getOrNull()
     }
 
+    /**
+     * Replaces the cache in one step: a failed or interrupted write leaves the
+     * previous index in place instead of truncating it.
+     */
+    private fun writeCacheFile(context: Context, body: String) {
+        val directory = context.filesDir
+        val temporary = File(directory, "$CACHE_FILE_NAME.tmp")
+        try {
+            temporary.writeText(body)
+            check(temporary.renameTo(File(directory, CACHE_FILE_NAME))) {
+                "Could not replace $CACHE_FILE_NAME"
+            }
+        } finally {
+            temporary.delete()
+        }
+    }
+
     private fun hydrateIndex(parsed: MorpheArchiveData): MorpheArchiveIndex {
         val listUrlByRepo = parsed.repos
             .filter { it.repo.isNotBlank() && !it.listUrl.isNullOrBlank() }
@@ -501,14 +531,17 @@ internal object MorpheArchive {
                     error("Index request failed: HTTP ${response.code}")
                 }
                 val body = response.body?.string().orEmpty()
-                if (context != null && body.isNotBlank()) {
-                    runCatching {
-                        val file = File(context.filesDir, CACHE_FILE_NAME)
-                        file.writeText(body)
-                    }
-                }
                 val parsed = gson.fromJson(body, MorpheArchiveData::class.java)
-                hydrateIndex(parsed)
+                    ?: error("Index response was empty")
+                if (parsed.apps.isEmpty()) {
+                    error("Index response contained no apps")
+                }
+                val index = hydrateIndex(parsed)
+                if (context != null) {
+                    runCatching { writeCacheFile(context, body) }
+                        .onFailure { Log.w(TAG, "Could not cache the app index", it) }
+                }
+                index
             }
         } catch (e: Exception) {
             if (context != null) {
