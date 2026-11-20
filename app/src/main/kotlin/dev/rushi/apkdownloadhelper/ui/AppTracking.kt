@@ -5,6 +5,10 @@ import android.content.SharedPreferences
 import dev.rushi.apkdownloadhelper.updater.ArchiveApp
 import java.util.Locale
 
+/** One identity for a package everywhere: trimmed and lowercased. */
+internal fun trackingPackageKey(packageName: String): String =
+    packageName.trim().lowercase(Locale.US)
+
 /** What an app looked like when the user last saw it. */
 internal data class TrackedAppSnapshot(
     val versions: Set<String> = emptySet(),
@@ -54,7 +58,7 @@ internal object MorpheTracking {
 
     /** Adds a package that may not be in the index yet, without a baseline. */
     fun trackPackage(context: Context, packageName: String): Set<String> {
-        val normalized = packageName.trim().lowercase(Locale.US)
+        val normalized = trackingPackageKey(packageName)
         if (normalized.isEmpty()) return load(context)
 
         val current = load(context).toMutableSet()
@@ -68,11 +72,12 @@ internal object MorpheTracking {
     }
 
     fun untrack(context: Context, packageName: String): Set<String> {
+        val key = trackingPackageKey(packageName)
         val current = load(context).toMutableSet()
-        current.remove(packageName)
+        current.remove(key)
         prefs(context).edit()
             .putStringSet(KEY_PACKAGES, current)
-            .clearTrackingState(packageName)
+            .clearTrackingState(key)
             .apply()
         return current
     }
@@ -97,17 +102,18 @@ internal object MorpheTracking {
 
     fun toggle(context: Context, app: ArchiveApp): Set<String> {
         val prefs = prefs(context)
+        val packageName = trackingPackageKey(app.packageName)
         val current = load(context).toMutableSet()
         val editor = prefs.edit()
-        if (current.add(app.packageName)) {
+        if (current.add(packageName)) {
             val snapshot = app.trackingSnapshot()
-            editor.putStringSet(versionsKey(app.packageName), snapshot.versions)
-            editor.putStringSet(patchesKey(app.packageName), snapshot.patches)
-            editor.putStringSet(notifiedVersionsKey(app.packageName), snapshot.versions)
-            editor.putStringSet(notifiedPatchesKey(app.packageName), snapshot.patches)
+            editor.putStringSet(versionsKey(packageName), snapshot.versions)
+            editor.putStringSet(patchesKey(packageName), snapshot.patches)
+            editor.putStringSet(notifiedVersionsKey(packageName), snapshot.versions)
+            editor.putStringSet(notifiedPatchesKey(packageName), snapshot.patches)
         } else {
-            current.remove(app.packageName)
-            editor.clearTrackingState(app.packageName)
+            current.remove(packageName)
+            editor.clearTrackingState(packageName)
         }
         editor.putStringSet(KEY_PACKAGES, current)
         editor.apply()
@@ -119,22 +125,24 @@ internal object MorpheTracking {
         if (apps.none()) return
         val editor = prefs(context).edit()
         apps.forEach { app ->
+            val packageName = trackingPackageKey(app.packageName)
             val snapshot = app.trackingSnapshot()
-            editor.putStringSet(versionsKey(app.packageName), snapshot.versions)
-            editor.putStringSet(patchesKey(app.packageName), snapshot.patches)
+            editor.putStringSet(versionsKey(packageName), snapshot.versions)
+            editor.putStringSet(patchesKey(packageName), snapshot.patches)
         }
         editor.commit()
     }
 
     /** Records the app's current state as seen, clearing its badges. */
     fun markSeen(context: Context, app: ArchiveApp) {
-        if (app.packageName !in load(context)) return
+        val packageName = trackingPackageKey(app.packageName)
+        if (packageName !in load(context)) return
         val snapshot = app.trackingSnapshot()
         prefs(context).edit()
-            .putStringSet(versionsKey(app.packageName), snapshot.versions)
-            .putStringSet(patchesKey(app.packageName), snapshot.patches)
-            .putStringSet(notifiedVersionsKey(app.packageName), snapshot.versions)
-            .putStringSet(notifiedPatchesKey(app.packageName), snapshot.patches)
+            .putStringSet(versionsKey(packageName), snapshot.versions)
+            .putStringSet(patchesKey(packageName), snapshot.patches)
+            .putStringSet(notifiedVersionsKey(packageName), snapshot.versions)
+            .putStringSet(notifiedPatchesKey(packageName), snapshot.patches)
             .apply()
     }
 
@@ -165,9 +173,10 @@ internal object MorpheTracking {
     fun markNotified(context: Context, apps: Iterable<ArchiveApp>) {
         val editor = prefs(context).edit()
         apps.forEach { app ->
+            val packageName = trackingPackageKey(app.packageName)
             val snapshot = app.trackingSnapshot()
-            editor.putStringSet(notifiedVersionsKey(app.packageName), snapshot.versions)
-            editor.putStringSet(notifiedPatchesKey(app.packageName), snapshot.patches)
+            editor.putStringSet(notifiedVersionsKey(packageName), snapshot.versions)
+            editor.putStringSet(notifiedPatchesKey(packageName), snapshot.patches)
         }
         // The worker can be stopped right after this returns, so write the
         // dedupe baseline synchronously instead of leaving it to an async flush.

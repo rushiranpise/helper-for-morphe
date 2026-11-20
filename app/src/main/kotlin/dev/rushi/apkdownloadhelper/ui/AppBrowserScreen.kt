@@ -706,7 +706,7 @@ internal fun AppBrowserScreen(
             keyboardController?.hide()
             return
         }
-        if (app.packageName in tracked) {
+        if (trackingPackageKey(app.packageName) in tracked) {
             trackPackageNotice = "${app.name} is already tracked."
             trackPackageNoticeIsError = false
             tab = AppListTab.Tracked
@@ -807,11 +807,15 @@ internal fun AppBrowserScreen(
         val loaded = apps
         val changesByPackage = remember(loaded, trackingSnapshots) {
             loaded.orEmpty().associate { app ->
-                app.packageName to app.trackedChanges(trackingSnapshots[app.packageName])
+                app.packageName to app.trackedChanges(
+                    trackingSnapshots[trackingPackageKey(app.packageName)]
+                )
             }
         }
         val indexedPackages = remember(loaded) {
-            loaded.orEmpty().mapNotNull { it.packageName.takeIf(String::isNotBlank) }.toSet()
+            loaded.orEmpty()
+                .mapNotNull { it.packageName.takeIf(String::isNotBlank)?.let(::trackingPackageKey) }
+                .toSet()
         }
         val pendingTracked = remember(tracked, indexedPackages) {
             tracked - indexedPackages
@@ -837,14 +841,14 @@ internal fun AppBrowserScreen(
                 val qLower = q.lowercase(Locale.US)
                 val matches = loaded.orEmpty()
                     .filter { app ->
-                        (!trackedOnly || app.packageName in tracked) &&
+                        (!trackedOnly || trackingPackageKey(app.packageName) in tracked) &&
                             (q.isBlank() || app.matchesQuery(qLower))
                     }
                     .filter { app ->
                         when (tab) {
                             AppListTab.All -> true
                             AppListTab.Favourites -> app.packageName in favourites
-                            AppListTab.Tracked -> app.packageName in tracked
+                            AppListTab.Tracked -> trackingPackageKey(app.packageName) in tracked
                             AppListTab.Installed -> app.packageName in installedPackages
                             AppListTab.NotInstalled -> app.packageName !in installedPackages
                         }
@@ -1143,7 +1147,7 @@ internal fun AppBrowserScreen(
                             app = app,
                             installed = app.packageName in installedPackages,
                             favourite = app.packageName in favourites,
-                            tracked = app.packageName in tracked,
+                            tracked = trackingPackageKey(app.packageName) in tracked,
                             updates = changes.updates,
                             newPatches = changes.newPatches,
                             shape = cardShape,
@@ -1152,14 +1156,14 @@ internal fun AppBrowserScreen(
                                 favourites = MorpheFavourites.toggle(context, app.packageName)
                             },
                             onToggleTracking = {
-                                val adding = app.packageName !in tracked
+                                val adding = trackingPackageKey(app.packageName) !in tracked
                                 tracked = MorpheTracking.toggle(context, app)
                                 trackingSnapshots = MorpheTracking.loadSnapshots(context, tracked)
                                 TrackingCheckScheduler.sync(context)
                                 if (adding) requestNotificationPermission()
                             },
                             onClick = {
-                                if (app.packageName in tracked) {
+                                if (trackingPackageKey(app.packageName) in tracked) {
                                     MorpheTracking.markSeen(context, app)
                                     trackingSnapshots = MorpheTracking.loadSnapshots(context, tracked)
                                 }
@@ -1513,7 +1517,7 @@ internal fun AppBrowserRow(
     tracked: Boolean = false,
     updates: Int = 0,
     newPatches: Int = 0,
-    onToggleTracking: () -> Unit = {},
+    onToggleTracking: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     useGradient: Boolean = true
 ) {
@@ -1684,40 +1688,42 @@ internal fun AppBrowserRow(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(
-                            when {
-                                tracked -> if (effectiveGradient) {
-                                    Color.White.copy(alpha = 0.22f)
-                                } else {
-                                    scheme.primaryContainer.copy(alpha = 0.85f)
+                onToggleTracking?.let { toggleTracking ->
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(
+                                when {
+                                    tracked -> if (effectiveGradient) {
+                                        Color.White.copy(alpha = 0.22f)
+                                    } else {
+                                        scheme.primaryContainer.copy(alpha = 0.85f)
+                                    }
+                                    !effectiveGradient -> scheme.surfaceVariant.copy(alpha = 0.65f)
+                                    else -> Color.White.copy(alpha = 0.16f)
                                 }
-                                !effectiveGradient -> scheme.surfaceVariant.copy(alpha = 0.65f)
-                                else -> Color.White.copy(alpha = 0.16f)
-                            }
+                            )
+                            .clickable(role = Role.Button, onClick = toggleTracking),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (tracked) {
+                                Icons.Filled.Notifications
+                            } else {
+                                Icons.Outlined.Notifications
+                            },
+                            contentDescription = if (tracked) "Stop tracking" else "Track updates",
+                            tint = if (tracked) {
+                                if (!effectiveGradient) scheme.onPrimaryContainer else Color.White
+                            } else if (!effectiveGradient) {
+                                scheme.onSurface
+                            } else {
+                                Color.White
+                            },
+                            modifier = Modifier.size(20.dp)
                         )
-                        .clickable(role = Role.Button, onClick = onToggleTracking),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (tracked) {
-                            Icons.Filled.Notifications
-                        } else {
-                            Icons.Outlined.Notifications
-                        },
-                        contentDescription = if (tracked) "Stop tracking" else "Track updates",
-                        tint = if (tracked) {
-                            if (!effectiveGradient) scheme.onPrimaryContainer else Color.White
-                        } else if (!effectiveGradient) {
-                            scheme.onSurface
-                        } else {
-                            Color.White
-                        },
-                        modifier = Modifier.size(20.dp)
-                    )
+                    }
                 }
                 Box(
                     modifier = Modifier
@@ -2819,8 +2825,13 @@ internal fun AppSourceCard(
     var liveVersions by remember(source.repo, packageName) {
         mutableStateOf<Map<String, List<String>>?>(null)
     }
+    var liveVersionsUnavailable by remember(source.repo, packageName) {
+        mutableStateOf(false)
+    }
     LaunchedEffect(source.repo, packageName) {
-        liveVersions = MorpheArchive.fetchPatchVersions(source, packageName)
+        val fetched = MorpheArchive.fetchPatchVersions(source, packageName)
+        liveVersionsUnavailable = fetched == null
+        liveVersions = fetched.orEmpty()
     }
 
     val colors = MaterialTheme.colorScheme
@@ -2833,7 +2844,11 @@ internal fun AppSourceCard(
     }
 
     val supportedAppVersions = remember(source.patches, liveVersions) {
-        val fromLive = liveVersions?.values?.flatten().orEmpty()
+        val patchNames = source.patches.map { it.name.trim() }.toSet()
+        val fromLive = liveVersions.orEmpty()
+            .filterKeys { it.trim() in patchNames }
+            .values
+            .flatten()
         val fromPatchIndex = source.patches.flatMap { it.versions }
         (fromLive + fromPatchIndex)
             .map { it.trim() }
@@ -2935,9 +2950,10 @@ internal fun AppSourceCard(
 
             // 3. Supported App Versions from patches-list.json (falls back to "Any version")
             val versionsToDisplay = when {
-                liveVersions == null && supportedAppVersions.isEmpty() -> listOf("Loading…")
-                supportedAppVersions.isEmpty() -> listOf("Any version")
-                else -> supportedAppVersions
+                supportedAppVersions.isNotEmpty() -> supportedAppVersions
+                liveVersions == null -> listOf("Loading…")
+                liveVersionsUnavailable -> listOf("Unavailable")
+                else -> listOf("Any version")
             }
             ExpandableVersionRow(
                 versions = versionsToDisplay,
@@ -3125,11 +3141,20 @@ internal fun AppSourceCard(
                                 var liveMirrorVersions by remember(mirror.repo, packageName) {
                                     mutableStateOf<Map<String, List<String>>?>(null)
                                 }
+                                var mirrorVersionsUnavailable by remember(mirror.repo, packageName) {
+                                    mutableStateOf(false)
+                                }
                                 LaunchedEffect(mirror.repo, packageName) {
-                                    liveMirrorVersions = MorpheArchive.fetchPatchVersions(mirror, packageName)
+                                    val fetched = MorpheArchive.fetchPatchVersions(mirror, packageName)
+                                    mirrorVersionsUnavailable = fetched == null
+                                    liveMirrorVersions = fetched.orEmpty()
                                 }
                                 val mirrorSupportedVersions = remember(mirror.patches, liveMirrorVersions) {
-                                    val fromLive = liveMirrorVersions?.values?.flatten().orEmpty()
+                                    val patchNames = mirror.patches.map { it.name.trim() }.toSet()
+                                    val fromLive = liveMirrorVersions.orEmpty()
+                                        .filterKeys { it.trim() in patchNames }
+                                        .values
+                                        .flatten()
                                     val fromPatchIndex = mirror.patches.flatMap { it.versions }
                                     (fromLive + fromPatchIndex)
                                         .map { it.trim() }
@@ -3137,9 +3162,12 @@ internal fun AppSourceCard(
                                         .distinct()
                                 }
                                 val mirrorVersionsToDisplay = when {
-                                    liveMirrorVersions == null && mirrorSupportedVersions.isEmpty() -> listOf("Loading…")
-                                    mirrorSupportedVersions.isEmpty() -> listOf("Any version")
-                                    else -> mirrorSupportedVersions
+                                    mirrorSupportedVersions.isNotEmpty() -> mirrorSupportedVersions
+                                    liveMirrorVersions == null -> listOf("Loading…")
+                                    mirrorVersionsUnavailable && supportedAppVersions.isNotEmpty() ->
+                                        supportedAppVersions
+                                    mirrorVersionsUnavailable -> listOf("Unavailable")
+                                    else -> listOf("Any version")
                                 }
 
                                 Column(
@@ -3193,14 +3221,14 @@ internal fun AppSourceCard(
                                         expanded = expandedVersionKeys["${source.repo}->${mirror.repo}"] == true,
                                         onExpandedChange = { expandedVersionKeys["${source.repo}->${mirror.repo}"] = it },
                                         containerColorFor = { ver ->
-                                            if (ver == "Any version" || ver == "Loading…") {
+                                            if (ver == "Any version" || ver == "Loading…" || ver == "Unavailable") {
                                                 colors.surfaceVariant.copy(alpha = 0.45f)
                                             } else {
                                                 colors.primaryContainer
                                             }
                                         },
                                         contentColorFor = { ver ->
-                                            if (ver == "Any version" || ver == "Loading…") {
+                                            if (ver == "Any version" || ver == "Loading…" || ver == "Unavailable") {
                                                 colors.onSurfaceVariant
                                             } else {
                                                 colors.onPrimaryContainer
@@ -3339,8 +3367,13 @@ private fun SourcePatchesScreen(
     var liveVersions by remember(source.repo, packageName) {
         mutableStateOf<Map<String, List<String>>?>(null)
     }
+    var liveVersionsUnavailable by remember(source.repo, packageName) {
+        mutableStateOf(false)
+    }
     LaunchedEffect(source.repo, packageName) {
-        liveVersions = MorpheArchive.fetchPatchVersions(source, packageName)
+        val fetched = MorpheArchive.fetchPatchVersions(source, packageName)
+        liveVersionsUnavailable = fetched == null
+        liveVersions = fetched.orEmpty()
     }
     var patchQuery by remember { mutableStateOf("") }
     var searchExpanded by remember { mutableStateOf(false) }
@@ -3491,9 +3524,10 @@ private fun SourcePatchesScreen(
                                 ?: patch.versions.takeIf { it.isNotEmpty() }
 
                             val versionsToShow = when {
-                                liveVersions == null && resolvedVersions.isNullOrEmpty() -> listOf("Loading…")
-                                resolvedVersions.isNullOrEmpty() -> listOf("Any version")
-                                else -> resolvedVersions.orEmpty()
+                                !resolvedVersions.isNullOrEmpty() -> resolvedVersions.orEmpty()
+                                liveVersions == null -> listOf("Loading…")
+                                liveVersionsUnavailable -> listOf("Unavailable")
+                                else -> listOf("Any version")
                             }
 
                             val patchKey = "${patch.name}_$originalNumber"
@@ -3506,14 +3540,14 @@ private fun SourcePatchesScreen(
                                 expanded = expandedPatchVersionKeys[patchKey] == true,
                                 onExpandedChange = { expandedPatchVersionKeys[patchKey] = it },
                                 containerColorFor = { ver ->
-                                    if (ver == "Any version") {
+                                    if (ver == "Any version" || ver == "Loading…" || ver == "Unavailable") {
                                         colors.surfaceVariant.copy(alpha = 0.45f)
                                     } else {
                                         colors.primaryContainer
                                     }
                                 },
                                 contentColorFor = { ver ->
-                                    if (ver == "Any version") {
+                                    if (ver == "Any version" || ver == "Loading…" || ver == "Unavailable") {
                                         colors.onSurfaceVariant
                                     } else {
                                         colors.onPrimaryContainer

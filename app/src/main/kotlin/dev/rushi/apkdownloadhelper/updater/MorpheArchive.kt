@@ -366,7 +366,7 @@ internal object MorpheArchive {
     suspend fun fetchPatchVersions(
         source: ArchiveSource,
         packageName: String
-    ): Map<String, List<String>> = withContext(Dispatchers.IO) {
+    ): Map<String, List<String>>? = withContext(Dispatchers.IO) {
         val candidateUrls = buildList {
             source.listUrl?.takeIf { it.isNotBlank() }?.let(::add)
             if (source.repo.contains('/')) {
@@ -380,7 +380,7 @@ internal object MorpheArchive {
             }
         }.distinct()
 
-        if (candidateUrls.isEmpty()) return@withContext emptyMap()
+        if (candidateUrls.isEmpty()) return@withContext null
 
         val cache = patchListCache
         var listPatches: List<ArchivePatch> = emptyList()
@@ -424,9 +424,16 @@ internal object MorpheArchive {
             }
         }
 
-        listPatches.associate { patch ->
-            val matchingPackages = patch.compatiblePackages.orEmpty().filter {
+        if (listPatches.isEmpty()) return@withContext null
+
+        listPatches.mapNotNull { patch ->
+            val compatiblePackages = patch.compatiblePackages.orEmpty()
+            val matchingPackages = compatiblePackages.filter {
                 it.packageName.isNullOrBlank() || it.packageName.equals(packageName, ignoreCase = true)
+            }
+            // A patch that only names other packages is not part of this app's set.
+            if (compatiblePackages.isNotEmpty() && matchingPackages.isEmpty()) {
+                return@mapNotNull null
             }
             val targetVersions = matchingPackages.flatMap { it.targets.orEmpty() }
                 .mapNotNull { it.version?.trim()?.takeIf { v -> v.isNotEmpty() && v != "null" } }
@@ -436,7 +443,7 @@ internal object MorpheArchive {
                 .mapNotNull { it.trim().takeIf { v -> v.isNotEmpty() && v != "null" } }
 
             patch.name.trim() to (directVersions + targetVersions + compatVersions).distinct()
-        }
+        }.toMap()
     }
 
     private const val CACHE_FILE_NAME = "morphe_archive_cache.json"

@@ -17,6 +17,7 @@ import dev.rushi.apkdownloadhelper.MainActivity
 import dev.rushi.apkdownloadhelper.ui.MorpheTracking
 import dev.rushi.apkdownloadhelper.ui.TrackedAppChanges
 import dev.rushi.apkdownloadhelper.ui.trackedChanges
+import dev.rushi.apkdownloadhelper.ui.trackingPackageKey
 import dev.rushi.apkdownloadhelper.updater.ArchiveApp
 import dev.rushi.apkdownloadhelper.updater.MorpheArchive
 import kotlinx.coroutines.CancellationException
@@ -61,7 +62,7 @@ class TrackingCheckWorker(
             return Result.retry()
         }
 
-        val apps = index.apps.associateBy { it.packageName }
+        val apps = index.apps.associateBy { trackingPackageKey(it.packageName) }
         val seen = MorpheTracking.loadSnapshots(context, tracked)
         val notified = MorpheTracking.loadNotifiedSnapshots(context, tracked)
         val changes = tracked.mapNotNull { packageName ->
