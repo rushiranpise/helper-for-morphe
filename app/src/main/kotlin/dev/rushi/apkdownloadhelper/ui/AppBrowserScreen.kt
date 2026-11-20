@@ -2040,15 +2040,28 @@ private fun decodeArchiveIcon(bytes: ByteArray): ImageBitmap? {
     return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.asImageBitmap()
 }
 
+private const val PUBLIC_METADATA_ICON_BASE = "https://publicmetadata.co.uk/"
+
 /**
  * Play Store icon lookup by package name. The service redirects to the store's
  * 128px WebP and answers 404 for packages with no Play listing.
  */
 internal fun publicMetadataIconUrl(packageName: String): String =
-    "https://publicmetadata.co.uk/$packageName"
+    PUBLIC_METADATA_ICON_BASE + packageName
+
+/** Public metadata 404s, kept so a missing Play listing is looked up once per process. */
+private val failedPublicMetadataLookups = object : LruCache<String, Boolean>(512) {
+    override fun sizeOf(key: String, value: Boolean): Int = 1
+}
+
+private sealed interface IconFetchResult {
+    class Loaded(val bitmap: ImageBitmap) : IconFetchResult
+    object NotFound : IconFetchResult
+    object Failed : IconFetchResult
+}
 
 /** Icon fetch that is cancelled when the row leaves the viewport. */
-internal suspend fun fetchArchiveIcon(iconUrl: String): ImageBitmap? {
+private suspend fun fetchIcon(iconUrl: String): IconFetchResult {
     val request = runCatching {
         Request.Builder()
             .url(iconUrl)
@@ -2057,25 +2070,49 @@ internal suspend fun fetchArchiveIcon(iconUrl: String): ImageBitmap? {
                 "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Mobile Safari/537.36"
             )
             .build()
-    }.getOrNull() ?: return null
+    }.getOrNull() ?: return IconFetchResult.Failed
     val call = MorpheArchive.http.newCall(request)
     return suspendCancellableCoroutine { continuation ->
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                if (continuation.isActive) continuation.resume(null)
+                if (continuation.isActive) continuation.resume(IconFetchResult.Failed)
             }
 
             override fun onResponse(call: Call, response: Response) {
-                val bitmap = runCatching {
+                val result = runCatching {
                     response.use {
-                        if (!it.isSuccessful) return@use null
-                        it.body.bytes().let { bytes -> decodeArchiveIcon(bytes) }
+                        when {
+                            it.code == 404 -> IconFetchResult.NotFound
+                            !it.isSuccessful -> IconFetchResult.Failed
+                            else -> it.body.bytes()
+                                .let(::decodeArchiveIcon)
+                                ?.let { bitmap -> IconFetchResult.Loaded(bitmap) }
+                                ?: IconFetchResult.Failed
+                        }
                     }
-                }.getOrNull()
-                if (continuation.isActive) continuation.resume(bitmap)
+                }.getOrDefault(IconFetchResult.Failed)
+                if (continuation.isActive) continuation.resume(result)
             }
         })
+    }
+}
+
+/**
+ * Decoded icons from the shared cache, fetched once per URL. A public metadata
+ * 404 is remembered so rows without a Play listing do not retry while scrolling.
+ */
+internal suspend fun loadArchiveIcon(iconUrl: String): ImageBitmap? {
+    archiveIconCache.get(iconUrl)?.let { return it }
+    val isPublicMetadata = iconUrl.startsWith(PUBLIC_METADATA_ICON_BASE)
+    if (isPublicMetadata && failedPublicMetadataLookups.get(iconUrl) != null) return null
+    return when (val result = fetchIcon(iconUrl)) {
+        is IconFetchResult.Loaded -> result.bitmap.also { archiveIconCache.put(iconUrl, it) }
+        IconFetchResult.NotFound -> {
+            if (isPublicMetadata) failedPublicMetadataLookups.put(iconUrl, true)
+            null
+        }
+        IconFetchResult.Failed -> null
     }
 }
 
@@ -2099,9 +2136,7 @@ internal fun AsyncAvatar(
             return@LaunchedEffect
         }
         delay(120)
-        val loaded = fetchArchiveIcon(iconUrl) ?: return@LaunchedEffect
-        archiveIconCache.put(iconUrl, loaded)
-        bitmap = loaded
+        bitmap = loadArchiveIcon(iconUrl) ?: return@LaunchedEffect
     }
     if (bitmap != null) {
         Image(

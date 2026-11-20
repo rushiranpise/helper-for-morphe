@@ -733,7 +733,7 @@ internal fun AppAvatar(packageName: String, initial: Char) {
             }
             if (installed != null) return@withContext installed
 
-            fetchArchiveIcon(publicMetadataIconUrl(packageName)) ?: runCatching {
+            loadArchiveIcon(publicMetadataIconUrl(packageName)) ?: runCatching {
                 context.packageManager.getDefaultActivityIcon()
                     .toBitmap(width = 176, height = 176)
                     .asImageBitmap()
