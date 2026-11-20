@@ -87,64 +87,34 @@ internal fun AppearanceTabContent(
 ) {
     var showAccentPicker by rememberSaveable { mutableStateOf(false) }
     val supportsDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val styles = ThemeStyle.entries.filter { it != ThemeStyle.MATERIAL_YOU || supportsDynamicColor }
     val accent = settings.customAccentColor.toAccentColorOrNull()
 
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // THEME SECTION (Restored spacing)
-        SettingsSection(title = "Theme", icon = Icons.Outlined.DarkMode) {
+
+        SettingsSection(title = "Theme", icon = Icons.Outlined.Palette) {
+            ThemeSelectorCard(
+                themeMode = settings.themeMode,
+                onThemeModeSelected = { onSettingsChange(settings.copy(themeMode = it)) },
+                themeStyle = settings.themeStyle,
+                supportsDynamicColor = supportsDynamicColor,
+                onThemeStyleSelected = { onSettingsChange(settings.copy(themeStyle = it)) }
+            )
+
             SettingsGroup {
-                ThemeMode.entries.forEach { mode ->
-                    SettingsItem(
-                        icon = mode.icon(),
-                        title = mode.title,
-                        subtitle = mode.description,
-                        onClick = { onSettingsChange(settings.copy(themeMode = mode)) },
-                        trailingContent = { RadioDot(selected = settings.themeMode == mode) }
-                    )
-                }
-            }
-        }
-
-        // COLOR STYLE SECTION
-        SettingsSection(title = "Color Style", icon = Icons.Outlined.Palette) {
-            SettingsGroup {
-                styles.forEach { style ->
-                    SettingsItem(
-                        icon = style.icon(),
-                        title = style.title,
-                        subtitle = style.description,
-                        onClick = { onSettingsChange(settings.copy(themeStyle = style)) },
-                        trailingContent = { RadioDot(selected = settings.themeStyle == style) }
-                    )
-                }
-            }
-        }
-
-        // PURE BLACK SECTION
-        if (settings.themeMode != ThemeMode.LIGHT) {
-            SettingsSection(title = "Dark Theme", icon = Icons.Outlined.Contrast) {
-                SettingsGroup {
-                    SettingsSwitchItem(
-                        icon = Icons.Outlined.Contrast,
-                        title = stringResource(R.string.pure_black),
-                        subtitle = "Paint backgrounds fully black. Saves power on OLED screens.",
-                        checked = settings.pureBlackTheme,
-                        onToggle = { onSettingsChange(settings.copy(pureBlackTheme = !settings.pureBlackTheme)) }
-                    )
-                }
-            }
-        }
-
-        // ACCENT COLOR SECTION (Restored grid + reset button)
-        if (settings.themeStyle == ThemeStyle.MORPHE) {
-            SettingsSection(title = "Accent Color", icon = Icons.Outlined.Colorize) {
-                SettingsGroup {
+                if (settings.themeStyle == ThemeStyle.MORPHE) {
                     SettingsItemCard(onClick = null) {
-                        AccentGridSection {
+                        Column(
+                            modifier = Modifier.padding(MorpheDefaults.ContentPadding),
+                            verticalArrangement = Arrangement.spacedBy(MorpheDefaults.ContentPaddingSmall)
+                        ) {
+                            Text(
+                                text = "Accent color",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
                             AccentSwatchGrid(
                                 colors = MorpheAccentPresets,
                                 selected = accent,
@@ -156,12 +126,15 @@ internal fun AppearanceTabContent(
                             )
                         }
                     }
-                    SettingsItem(
-                        icon = Icons.Outlined.Refresh,
-                        title = "Reset to default",
-                        subtitle = "Restore the app's default blue accent",
-                        onClick = { onSettingsChange(settings.copy(customAccentColor = "")) },
-                        trailingContent = { Text("Reset", color = MaterialTheme.colorScheme.primary) }
+                }
+
+                if (settings.themeMode != ThemeMode.LIGHT) {
+                    SettingsSwitchItem(
+                        icon = Icons.Outlined.Contrast,
+                        title = stringResource(R.string.pure_black),
+                        subtitle = "Uses true black backgrounds",
+                        checked = settings.pureBlackTheme,
+                        onToggle = { onSettingsChange(settings.copy(pureBlackTheme = !settings.pureBlackTheme)) }
                     )
                 }
             }
@@ -1180,7 +1153,6 @@ internal fun SettingsOptionCard(
         color = if (selected) colors.surfaceVariant else colors.surfaceColorAtElevation(3.dp),
         contentColor = colors.onSurface,
         tonalElevation = if (selected) 0.dp else 1.dp,
-        border = if (selected) BorderStroke(1.5.dp, colors.onSurface.copy(alpha = 0.5f)) else null
     ) {
         Row(modifier = Modifier.fillMaxWidth().padding(MorpheDefaults.ContentPadding), horizontalArrangement = Arrangement.spacedBy(MorpheDefaults.ItemSpacing), verticalAlignment = Alignment.CenterVertically) {
             if (source != null) SourceAvatar(source = source, size = MorpheDefaults.IconSize)
@@ -1259,7 +1231,6 @@ internal fun VirusTotalQuotaCard(apiKey: String) {
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(MorpheDefaults.CardCornerRadius),
         color = sourceCardFill(),
-        border = BorderStroke(1.dp, sourceCardBorder())
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {

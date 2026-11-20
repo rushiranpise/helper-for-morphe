@@ -1279,7 +1279,7 @@ internal fun AppBrowserScreen(
                         ) {
                             Row(
                                 modifier = Modifier
-                                    .fillMaxSize()
+                                    .fillMaxWidth()
                                     .padding(horizontal = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -2712,9 +2712,14 @@ internal fun AppDetailView(
                     },
                     modifier = Modifier
                         .weight(if (onBack != null) 1.4f else 1f)
-                        .heightIn(min = 48.dp),
+                        .heightIn(min = 48.dp)
+                        .glassFill(
+                            glass = scheme.surfaceVariant.copy(alpha = 0.65f),
+                            shape = CircleShape,
+                            hazeState = detailHeaderHaze
+                        ),
                     shape = CircleShape,
-                    color = scheme.surfaceVariant.copy(alpha = 0.65f),
+                    color = Color.Transparent,
                     contentColor = scheme.onSurface
                 ) {
                     Row(
@@ -2829,8 +2834,8 @@ internal fun AppSourceCard(
 
     val supportedAppVersions = remember(source.patches, liveVersions) {
         val fromLive = liveVersions?.values?.flatten().orEmpty()
-        val fromIndex = source.patches.flatMap { it.versions }
-        (fromLive + fromIndex)
+        val fromPatchIndex = source.patches.flatMap { it.versions }
+        (fromLive + fromPatchIndex)
             .map { it.trim() }
             .filter { it.isNotEmpty() && !it.equals("null", ignoreCase = true) }
             .distinct()
@@ -3117,18 +3122,24 @@ internal fun AppSourceCard(
                                     mirrorVersion,
                                     mirrorDate
                                 ).joinToString(" · ")
-
-                                val mirrorIndexVersions = remember(mirror.patches) {
-                                    mirror.patches.flatMap { it.versions }
+                                var liveMirrorVersions by remember(mirror.repo, packageName) {
+                                    mutableStateOf<Map<String, List<String>>?>(null)
+                                }
+                                LaunchedEffect(mirror.repo, packageName) {
+                                    liveMirrorVersions = MorpheArchive.fetchPatchVersions(mirror, packageName)
+                                }
+                                val mirrorSupportedVersions = remember(mirror.patches, liveMirrorVersions) {
+                                    val fromLive = liveMirrorVersions?.values?.flatten().orEmpty()
+                                    val fromPatchIndex = mirror.patches.flatMap { it.versions }
+                                    (fromLive + fromPatchIndex)
                                         .map { it.trim() }
                                         .filter { it.isNotEmpty() && !it.equals("null", ignoreCase = true) }
                                         .distinct()
                                 }
                                 val mirrorVersionsToDisplay = when {
-                                    mirrorIndexVersions.isNotEmpty() -> mirrorIndexVersions
-                                    liveVersions == null && supportedAppVersions.isEmpty() -> listOf("Loading…")
-                                    supportedAppVersions.isEmpty() -> listOf("Any version")
-                                    else -> supportedAppVersions
+                                    liveMirrorVersions == null && mirrorSupportedVersions.isEmpty() -> listOf("Loading…")
+                                    mirrorSupportedVersions.isEmpty() -> listOf("Any version")
+                                    else -> mirrorSupportedVersions
                                 }
 
                                 Column(
@@ -3582,7 +3593,7 @@ private fun SourcePatchesScreen(
                         ) {
                             Row(
                                 modifier = Modifier
-                                    .fillMaxSize()
+                                    .fillMaxWidth()
                                     .padding(horizontal = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
