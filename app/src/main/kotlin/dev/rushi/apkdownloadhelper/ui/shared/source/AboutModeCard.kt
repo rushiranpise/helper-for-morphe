@@ -35,7 +35,7 @@ internal fun AboutModeCard(tab: SourceSubTab) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     val title = when (tab) {
         SourceSubTab.Manual -> "About manual mode"
-        SourceSubTab.Recommended -> "About recommended mode"
+        SourceSubTab.Recommended -> "About requested mode"
         SourceSubTab.Latest -> "About latest mode"
         SourceSubTab.History -> "About version history"
     }

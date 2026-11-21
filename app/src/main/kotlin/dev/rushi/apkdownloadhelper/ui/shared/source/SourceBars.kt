@@ -41,6 +41,17 @@ import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.SemanticTone
 import dev.rushi.apkdownloadhelper.ui.theme.pressScale
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import dev.chrisbanes.haze.HazeState
+import dev.rushi.apkdownloadhelper.ui.theme.AppColors
+import dev.rushi.apkdownloadhelper.ui.theme.glassFill
+import androidx.compose.material3.Surface
 
 @Composable
 internal fun SelectedSourceBar(source: DownloadSource) {
@@ -88,44 +99,76 @@ internal fun SelectedSourceBar(source: DownloadSource) {
 internal fun SourceBottomBar(
     action: PrimaryAction,
     onRefresh: () -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+    hazeState: HazeState? = null,
+    onHeightChanged: (Dp) -> Unit = {}
 ) {
-    Column {
-        AppDivider(fullWidth = true)
+    val density = LocalDensity.current
+    val scheme = MaterialTheme.colorScheme
+    val cancelInteraction = remember { MutableInteractionSource() }
+    val primaryInteraction = remember { MutableInteractionSource() }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .onSizeChanged { size ->
+                onHeightChanged(with(density) { size.height.toDp() })
+            }
+            .navigationBarsPadding()
+            .padding(horizontal = AppDefaults.ContentPadding, vertical = 12.dp)
+    ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = AppDefaults.ContentPadding, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            SourceSquareButton(
-                icon = Icons.Outlined.Refresh,
-                contentDescription = stringResource(R.string.refresh),
-                onClick = onRefresh
-            )
-            SourceSquareButton(
-                icon = Icons.Outlined.Close,
-                contentDescription = stringResource(R.string.cancel),
-                onClick = onCancel
-            )
-            val primaryInteractionSource = remember { MutableInteractionSource() }
+            Surface(
+                onClick = onCancel,
+                modifier = Modifier
+                    .size(48.dp)
+                    .pressScale(cancelInteraction)
+                    .glassFill(
+                        glass = AppColors.glassContainerColor(),
+                        shape = CircleShape,
+                        hazeState = hazeState
+                    ),
+                interactionSource = cancelInteraction,
+                shape = CircleShape,
+                color = Color.Transparent,
+                contentColor = scheme.onSurface
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Outlined.Close,
+                        contentDescription = stringResource(R.string.cancel),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
             Button(
                 onClick = action.run,
                 enabled = action.enabled,
                 modifier = Modifier
                     .weight(1f)
-                    .height(AppDefaults.DialogButtonHeight)
-                    .pressScale(primaryInteractionSource, enabled = action.enabled),
-                interactionSource = primaryInteractionSource,
-                shape = RoundedCornerShape(AppDefaults.CardCornerRadius),
+                    .height(48.dp)
+                    .pressScale(primaryInteraction, enabled = action.enabled)
+                    .glassFill(
+                        glass = AppColors.glassContainerColor(selected = true),
+                        shape = CircleShape,
+                        hazeState = hazeState
+                    ),
+                interactionSource = primaryInteraction,
+                shape = CircleShape,
+                border = null,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f),
-                    contentColor = MaterialTheme.colorScheme.onSurface
+                    containerColor = Color.Transparent,
+                    contentColor = AppColors.glassContentColor(selected = true),
+                    disabledContainerColor = Color.Transparent,
+                    disabledContentColor = scheme.onSurfaceVariant.copy(alpha = 0.5f)
                 ),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.48f)),
-                contentPadding = PaddingValues(horizontal = AppDefaults.ContentPadding)
+                contentPadding = PaddingValues(horizontal = 16.dp)
             ) {
                 if (action.loading) {
                     CircularProgressIndicator(
@@ -136,13 +179,14 @@ internal fun SourceBottomBar(
                     Icon(
                         imageVector = action.icon,
                         contentDescription = null,
-                        modifier = Modifier.size(AppDefaults.IconSizeSmall)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
-                Spacer(Modifier.width(AppDefaults.ContentPaddingSmall))
+                Spacer(Modifier.width(8.dp))
                 Text(
-                    action.label,
+                    text = action.label,
                     style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )

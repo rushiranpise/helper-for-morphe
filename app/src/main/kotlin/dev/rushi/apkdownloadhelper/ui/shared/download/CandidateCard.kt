@@ -40,6 +40,29 @@ import dev.rushi.apkdownloadhelper.ui.model.identityKey
 import dev.rushi.apkdownloadhelper.ui.model.matchSummary
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.SemanticTone
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
+import dev.rushi.apkdownloadhelper.ui.theme.AppColors
+import dev.rushi.apkdownloadhelper.ui.theme.glassFill
+import dev.rushi.apkdownloadhelper.ui.theme.pressScale
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import dev.rushi.apkdownloadhelper.ui.theme.pressScale
 
 @Composable
 internal fun CandidateCard(
@@ -95,26 +118,37 @@ internal fun CandidateCard(
                 modifier = Modifier.fillMaxWidth()
             )
         } else if (candidate.option == CandidateOption.MANUAL) {
-            HelperButton(
-                text = "Open in app",
-                onClick = { onSolveCaptcha(candidate) },
-                icon = Icons.Outlined.OpenInBrowser,
-                modifier = Modifier.fillMaxWidth()
-            )
-            HelperOutlinedButton(
-                text = "Pick downloaded APK",
+            val pickInteraction = remember { MutableInteractionSource() }
+            Button(
                 onClick = onPickDownloadedFile,
-                icon = Icons.Outlined.FolderOpen,
-                modifier = Modifier.fillMaxWidth()
-            )
-            if (showUseInstalledApp) {
-                HelperButton(
-                    text = "Use installed app",
-                    onClick = onUseInstalledApp,
-                    icon = Icons.Outlined.CheckCircle,
-                    modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .pressScale(pickInteraction),
+                interactionSource = pickInteraction,
+                shape = CircleShape,
+                border = null,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                ),
+                contentPadding = PaddingValues(horizontal = 16.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.FolderOpen,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "Pick downloaded APK",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
+
         } else {
             // Resolved candidates (Recommended/Latest/History) from every source
             // except Aurora and Play can fall back to the in-app captcha

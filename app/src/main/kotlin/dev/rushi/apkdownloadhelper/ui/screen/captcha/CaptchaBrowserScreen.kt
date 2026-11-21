@@ -59,6 +59,7 @@ import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import java.io.ByteArrayInputStream
 import java.util.Locale
 import kotlinx.coroutines.delay
+import dev.rushi.apkdownloadhelper.ui.model.CandidateOption
 
 @Composable
 internal fun CaptchaBrowserScreen(
@@ -72,6 +73,7 @@ internal fun CaptchaBrowserScreen(
     onChallengeTimeout: () -> Unit
 ) {
     val context = LocalContext.current
+    val isManualMode = candidate.option == CandidateOption.MANUAL
     var progress by remember { mutableIntStateOf(0) }
     var verificationHintVisible by remember { mutableStateOf(false) }
     var challengeActive by remember { mutableStateOf(false) }
@@ -222,7 +224,8 @@ internal fun CaptchaBrowserScreen(
         browserPageUrl.value = startUrl
         webView.loadUrl(startUrl)
     }
-    LaunchedEffect(webView) {
+    LaunchedEffect(webView, isManualMode) {
+        if (isManualMode) return@LaunchedEffect
         while (true) {
             delay(1_200)
             webView.evaluateJavascript(BROWSER_CHALLENGE_PROBE_JS) { value ->
@@ -245,8 +248,9 @@ internal fun CaptchaBrowserScreen(
             }
         }
     }
-    LaunchedEffect(webView, pageFinishedCount, challengeActive, challengeProbeKnown) {
-        if (pageFinishedCount == 0 ||
+    LaunchedEffect(webView, pageFinishedCount, challengeActive, challengeProbeKnown, isManualMode) {
+        if (isManualMode ||
+            pageFinishedCount == 0 ||
             challengeActive ||
             !challengeProbeKnown ||
             injectedPage == pageFinishedCount
@@ -275,17 +279,18 @@ internal fun CaptchaBrowserScreen(
             else -> webView.evaluateJavascript(CAPTCHA_AUTOPRESS_JS, null)
         }
     }
-    LaunchedEffect(challengeActive, challengeStartedAt) {
-        if (!challengeActive || challengeStartedAt <= 0L) return@LaunchedEffect
+    LaunchedEffect(challengeActive, challengeStartedAt, isManualMode) {
+        if (isManualMode || !challengeActive || challengeStartedAt <= 0L) return@LaunchedEffect
         delay(BROWSER_CHALLENGE_TIMEOUT_MS)
         if (challengeActive) {
             logWebFlowState("CHALLENGE_TIMEOUT")
             onChallengeTimeout()
         }
     }
-    LaunchedEffect(webView, pageFinishedCount, challengeActive) {
+    LaunchedEffect(webView, pageFinishedCount, challengeActive, isManualMode) {
         val browserSource = candidate.viaSource ?: candidate.source
-        if (browserSource != DownloadSource.UPTODOWN ||
+        if (isManualMode ||
+            browserSource != DownloadSource.UPTODOWN ||
             pageFinishedCount == 0 ||
             challengeActive ||
             reloadAttempts >= 2
@@ -342,11 +347,12 @@ internal fun CaptchaBrowserScreen(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     val browserTitle = when {
+                        isManualMode -> "Open in app · ${candidate.source.label}"
                         candidate.source == DownloadSource.APK_MIRROR ||
                             candidate.source == DownloadSource.APK_PURE -> candidate.source.label
                         candidate.captchaUrl != null && !candidate.directDownload ->
-                            "Solve captcha  ${candidate.source.label}"
-                        else -> "Open in app  ${candidate.source.label}"
+                            "Solve captcha · ${candidate.source.label}"
+                        else -> "Open in app · ${candidate.source.label}"
                     }
                     Text(
                         text = browserTitle,
@@ -384,8 +390,8 @@ internal fun CaptchaBrowserScreen(
                     modifier = Modifier.widthIn(min = AppDefaults.CompactButtonWidth)
                 )
             }
-            if (candidate.source == DownloadSource.APK_MIRROR ||
-                candidate.source == DownloadSource.APK_PURE
+            if (!isManualMode && (candidate.source == DownloadSource.APK_MIRROR ||
+                candidate.source == DownloadSource.APK_PURE)
             ) {
                 InfoBox(title = "Download from ${candidate.source.label}", icon = Icons.Outlined.OpenInBrowser) {
                     Text(

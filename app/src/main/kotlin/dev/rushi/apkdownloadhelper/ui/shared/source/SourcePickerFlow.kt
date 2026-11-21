@@ -43,6 +43,31 @@ import dev.rushi.apkdownloadhelper.ui.model.DownloadCandidate
 import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
 import dev.rushi.apkdownloadhelper.ui.model.HelperRequest
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.outlined.HelpOutline
+import androidx.compose.material3.Surface
+import androidx.compose.material3.surfaceColorAtElevation
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.SettingsChoice
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.SettingsChoiceDialog
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.AppAlertDialog
+import dev.rushi.apkdownloadhelper.ui.shared.selection.RadioDot
+import dev.rushi.apkdownloadhelper.ui.shared.settings.SettingsGroup
+import dev.rushi.apkdownloadhelper.ui.shared.settings.SettingsItem
+import androidx.compose.foundation.border
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.ui.graphics.Color
 
 @Composable
 internal fun SourcePickerFlow(
@@ -120,81 +145,158 @@ internal fun SourcePickerFlow(
     SideEffect { onPrimaryActionChanged(action) }
 
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        SelectedSourceBar(source = currentGroup.source)
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(
+        val scheme = MaterialTheme.colorScheme
+        val chevronRotation by animateFloatAsState(
+            targetValue = if (sourcesExpanded) 180f else 0f,
+            animationSpec = tween(200),
+            label = "source_dropdown_chevron"
+        )
+
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            // Top segment: Source Switcher
+            Surface(
+                onClick = { sourcesExpanded = true },
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(AppDefaults.ItemSpacing),
-                verticalAlignment = Alignment.CenterVertically
+                shape = RoundedCornerShape(
+                    topStart = 20.dp,
+                    topEnd = 20.dp,
+                    bottomStart = 6.dp,
+                    bottomEnd = 6.dp
+                ),
+                color = scheme.surfaceColorAtElevation(2.dp),
+                contentColor = scheme.onSurface
             ) {
-                // Tapping the title toggles the source cards.
                 Row(
                     modifier = Modifier
-                        .clip(AppDefaults.PillShape)
-                        .clickable { sourcesExpanded = !sourcesExpanded }
-                        .padding(horizontal = 4.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    SectionTitle(text = "Download source", icon = Icons.Outlined.Dns)
-                    if (!sourcesExpanded) {
+                    SourceAvatar(source = currentGroup.source, size = 38.dp)
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
                         Text(
-                            text = "· ${groups.size}",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold
+                            text = "Download source · ${groups.size} available",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = scheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                        Text(
+                            text = currentGroup.source.label,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = scheme.onSurface,
+                            maxLines = 1
                         )
                     }
                     Icon(
-                        imageVector = if (sourcesExpanded) {
-                            Icons.Outlined.ExpandLess
-                        } else {
-                            Icons.Outlined.ExpandMore
-                        },
-                        contentDescription = if (sourcesExpanded) "Collapse sources" else "Expand sources",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        imageVector = Icons.Outlined.ExpandMore,
+                        contentDescription = "Choose source",
+                        tint = scheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .size(22.dp)
+                            .rotate(chevronRotation)
+                    )
+                }
+            }
+
+            // Bottom segment: "How it works" collapsible strip
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(
+                        RoundedCornerShape(
+                            topStart = 6.dp,
+                            topEnd = 6.dp,
+                            bottomStart = 20.dp,
+                            bottomEnd = 20.dp
+                        )
+                    )
+                    .background(scheme.surfaceColorAtElevation(2.dp))
+                    .clickable { showHowItWorks = !showHowItWorks }
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.HelpOutline,
+                        contentDescription = null,
+                        tint = scheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = stringResource(R.string.how_it_works),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = scheme.onSurface,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Icon(
+                        imageVector = if (showHowItWorks) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                        contentDescription = null,
+                        tint = scheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp)
                     )
                 }
-                Spacer(Modifier.weight(1f))
-                Text(
-                    text = stringResource(R.string.how_it_works),
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier
-                        .clip(AppDefaults.PillShape)
-                        .clickable { showHowItWorks = !showHowItWorks }
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                )
-            }
-            // Two separate expand blocks: the "How it works" card and the source
-            // grid used to share one AnimatedExpand, and when the card toggled while
-            // the grid was already expanded, its content stayed at the container's
-            // top and the paragraph rendered over the grid (overlapping text).
-            // Keeping each in its own block means no block's content height changes
-            // mid-animation, so the layout can never go stale.
-            AnimatedExpand(visible = showHowItWorks) {
-                InfoCard(stringResource(R.string.request_how_it_works))
-            }
-            Box {
-                DropdownMenu(
-                    expanded = sourcesExpanded,
-                    onDismissRequest = { sourcesExpanded = false },
-                    modifier = Modifier.fillMaxWidth(0.85f)
-                ) {
-                    groups.forEachIndexed { index, group ->
-                        SourceMenuItem(
-                            source = group.source,
-                            selected = index == currentPage,
-                            onClick = {
-                                currentPage = index
-                                sourcesExpanded = false
-                            }
-                        )
-                    }
+                AnimatedExpand(visible = showHowItWorks) {
+                    Text(
+                        text = stringResource(R.string.request_how_it_works),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant
+                    )
                 }
             }
+        }
+
+        if (sourcesExpanded) {
+            AppAlertDialog(
+                onDismissRequest = { sourcesExpanded = false },
+                title = {
+                    Text(
+                        text = "Select download source",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 420.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        SettingsGroup {
+                            groups.forEachIndexed { index, group ->
+                                val isSelected = index == currentPage
+                                SettingsItem(
+                                    onClick = {
+                                        currentPage = index
+                                        sourcesExpanded = false
+                                    },
+                                    leadingContent = {
+                                        SourceAvatar(source = group.source, size = AppDefaults.IconSize)
+                                    },
+                                    title = group.source.label,
+                                    subtitle = null,
+                                    trailingContent = {
+                                        SourceSelectCircle(selected = isSelected)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {}
+            )
         }
 
         SourcePageContent(
@@ -213,5 +315,36 @@ internal fun SourcePickerFlow(
             onDownloadVersion = onDownloadVersion,
             installedPackageRefreshToken = installedPackageRefreshToken
         )
+    }
+}
+
+@Composable
+private fun SourceSelectCircle(selected: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .size(24.dp)
+            .clip(CircleShape)
+            .then(
+                if (selected) {
+                    Modifier.background(Color(0xFF22C55E))
+                } else {
+                    Modifier.border(
+                        width = 2.dp,
+                        color = scheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        shape = CircleShape
+                    )
+                }
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        if (selected) {
+            Icon(
+                imageVector = Icons.Outlined.Check,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(16.dp)
+            )
+        }
     }
 }

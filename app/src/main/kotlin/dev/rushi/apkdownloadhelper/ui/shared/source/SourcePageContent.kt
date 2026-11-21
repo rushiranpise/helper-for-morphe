@@ -19,6 +19,21 @@ import dev.rushi.apkdownloadhelper.ui.model.DownloadCandidate
 import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
 import dev.rushi.apkdownloadhelper.ui.model.HelperRequest
 import dev.rushi.apkdownloadhelper.ui.model.SourceCandidateGroup
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import dev.rushi.apkdownloadhelper.ui.shared.selection.IconOptionCard
+import dev.rushi.apkdownloadhelper.ui.shared.selection.OptionGroup
 
 @Composable
 internal fun SourcePageContent(
@@ -41,7 +56,7 @@ internal fun SourcePageContent(
 
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            SectionTitle(text = "Version type", icon = Icons.Outlined.Tune)
+            SectionTitle(text = "Version selection", icon = Icons.Outlined.Tune)
             VersionTypeRow(
                 tabs = subTabs,
                 selected = safeTab,
@@ -118,13 +133,16 @@ internal fun VersionTypeRow(
     selected: SourceSubTab,
     onSelect: (SourceSubTab) -> Unit
 ) {
-    SelectorRow(
-        options = tabs.map { SelectorOption(label = it.label, icon = it.icon) },
-        selectedIndex = tabs.indexOf(selected),
-        onSelect = { onSelect(tabs[it]) },
-        // labelLarge keeps four-in-a-row tab labels on one line at phone widths.
-        labelStyle = MaterialTheme.typography.labelLarge,
-        // Version type is a two-way choice, so horizontal tabs are enough.
-        compact = true
-    )
+    OptionGroup(items = tabs) { tab, shape, interactionSource, itemModifier ->
+        val displayLabel = if (tab == SourceSubTab.Recommended) "Requested" else tab.label
+        IconOptionCard(
+            selected = tab == selected,
+            onClick = { onSelect(tab) },
+            icon = tab.icon,
+            label = displayLabel,
+            modifier = itemModifier,
+            shape = shape,
+            interactionSource = interactionSource
+        )
+    }
 }

@@ -1386,9 +1386,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun updateHelperSettings(settings: HelperSettings) {
+        val fastModeChanged = helperSettings.fastMode != settings.fastMode
         val sourcesChanged = helperSettings.disabledSources != settings.disabledSources ||
-            helperSettings.sourceOrder != settings.sourceOrder ||
-            helperSettings.preferredSource != settings.preferredSource
+                helperSettings.sourceOrder != settings.sourceOrder ||
+                helperSettings.preferredSource != settings.preferredSource
         val densityPreferenceChanged =
             helperSettings.preferDensitySpecificVariants != settings.preferDensitySpecificVariants
         helperSettings = settings
@@ -1398,13 +1399,40 @@ class MainActivity : ComponentActivity() {
                 preferDensitySpecificVariants = settings.preferDensitySpecificVariants
             )
         }
+
+        val activeRequest = request
+        if (fastModeChanged && activeRequest != null) {
+            // Stop any in-flight prefetch, decision gate, or background download job
+            sourcePrefetch.cancel()
+            autoRetryActive = false
+            autoRetryQueue = null
+            autoRetryTarget = null
+            fastModeActive = false
+            fastModeQueue = null
+            fastModeDecision?.complete(null)
+            fastModeDecision = null
+            fastModeVersionDecision?.complete(null)
+            fastModeVersionDecision = null
+            if (DownloadJobManager.activeJob != null) {
+                cancelDownload()
+            }
+            DownloadJobManager.clearEvent()
+
+            if (settings.fastMode) {
+                startFastModeIfEnabled(activeRequest)
+            } else {
+                uiState = UiState.Ready(initialCandidateResult(activeRequest))
+            }
+            return
+        }
+
         // Rebuild the picker so enabled/disabled sources take effect immediately.
         if (
             (sourcesChanged || densityPreferenceChanged) &&
-            request != null &&
+            activeRequest != null &&
             uiState is UiState.Ready
         ) {
-            uiState = UiState.Ready(initialCandidateResult(request!!))
+            uiState = UiState.Ready(initialCandidateResult(activeRequest))
         }
     }
 
