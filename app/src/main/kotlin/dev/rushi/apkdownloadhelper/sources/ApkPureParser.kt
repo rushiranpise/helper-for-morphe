@@ -1,4 +1,4 @@
-﻿package dev.rushi.apkdownloadhelper.sources
+package dev.rushi.apkdownloadhelper.sources
 
 import android.net.Uri
 import android.util.Log
@@ -14,18 +14,18 @@ import dev.rushi.apkdownloadhelper.download.sourceVersionFromText
 import dev.rushi.apkdownloadhelper.download.trailingVersionCode
 import dev.rushi.apkdownloadhelper.download.withoutTrailingVersionCode
 import dev.rushi.apkdownloadhelper.gson
-import dev.rushi.apkdownloadhelper.ui.CandidateDownloadFile
-import dev.rushi.apkdownloadhelper.ui.CandidateOption
-import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
-import dev.rushi.apkdownloadhelper.ui.DownloadSource
-import dev.rushi.apkdownloadhelper.ui.HelperRequest
-import dev.rushi.apkdownloadhelper.ui.VersionStatus
+import dev.rushi.apkdownloadhelper.ui.model.CandidateDownloadFile
+import dev.rushi.apkdownloadhelper.ui.model.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.model.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.model.HelperRequest
+import dev.rushi.apkdownloadhelper.ui.model.VersionStatus
 import org.jsoup.nodes.Document
 import java.net.URLEncoder
 import java.util.Locale
 
 private const val APKPURE_BROWSER_NOTE =
-    "APKPure did not return a direct file. Use the in-app browser to download it."
+    "APKPure did not return a direct file. Use the in-app findapps to download it."
 
 internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourceParser {
     override val source: DownloadSource = DownloadSource.APK_PURE
@@ -472,14 +472,14 @@ internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourcePa
 
     /**
      * The last resort after APKPure's direct endpoint, update API, and web pages
-     * all fail: open APKPure in the in-app browser and let its own download
+     * all fail: open APKPure in the in-app findapps and let its own download
      * button produce the file.
      */
     private fun apkPureBrowserCandidate(
         request: HelperRequest,
         option: CandidateOption
     ): DownloadCandidate? {
-        // APKPure's browser download is an APK or its XAPK bundle. A request
+        // APKPure's findapps download is an APK or its XAPK bundle. A request
         // for split archives can still use the same page when split archives
         // are allowed, as in the reference WebView flow.
         if (!request.acceptsFormat("apk") &&

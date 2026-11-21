@@ -1,10 +1,6 @@
 package dev.rushi.apkdownloadhelper
 
 import dev.rushi.apkdownloadhelper.download.*
-import dev.rushi.apkdownloadhelper.sources.*
-import dev.rushi.apkdownloadhelper.storage.*
-import dev.rushi.apkdownloadhelper.ui.*
-import dev.rushi.apkdownloadhelper.updater.*
 
 import okhttp3.Cookie
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -86,11 +82,11 @@ class SessionCookiesTest {
         val download = "https://www.apkmirror.com/wp-content/themes/APKMirror/download.php?id=1"
             .toHttpUrl()
 
-        SessionCookies.importCookieHeader(download, "cf_clearance=browser; session=abc")
+        SessionCookies.importCookieHeader(download, "cf_clearance=findapps; session=abc")
 
         val sent = SessionCookies.loadForRequest(download)
         assertEquals(listOf("cf_clearance", "session"), sent.map { it.name })
-        assertEquals("browser", sent.first().value)
+        assertEquals("findapps", sent.first().value)
     }
 
     @Test

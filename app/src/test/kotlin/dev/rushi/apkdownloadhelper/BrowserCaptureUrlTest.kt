@@ -1,10 +1,8 @@
 package dev.rushi.apkdownloadhelper
 
 import dev.rushi.apkdownloadhelper.download.*
-import dev.rushi.apkdownloadhelper.sources.*
-import dev.rushi.apkdownloadhelper.storage.*
-import dev.rushi.apkdownloadhelper.ui.*
-import dev.rushi.apkdownloadhelper.updater.*
+import dev.rushi.apkdownloadhelper.ui.model.*
+import dev.rushi.apkdownloadhelper.ui.screen.captcha.*
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -13,7 +11,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * What the in-app browser treats as the file it was opened to capture.
+ * What the in-app findapps treats as the file it was opened to capture.
  *
  * Uptodown's links carry no extension (`dw.uptodown.com/dwn/<token>`), so the extension
  * test alone let the page handle the download itself and nothing was captured.

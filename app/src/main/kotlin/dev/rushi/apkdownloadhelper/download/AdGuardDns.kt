@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
  *
  * - Downloads ([lookup]) treat that answer as a failure and fall back to the
  *   system resolver, so a filtered domain can never kill a download.
- * - The in-app browser ([isBlocked]) treats it as a block signal, so ad and
+ * - The in-app findapps ([isBlocked]) treats it as a block signal, so ad and
  *   tracker subresources are dropped before they load.
  * - Any failure reaching the DoH endpoint also falls back to system DNS /
  *   no blocking, per the "fallback to default when it fails" rule.
@@ -45,7 +45,7 @@ internal object AdGuardDns : Dns {
             .build()
     }
 
-    /** Last known blocked/not-blocked state per host, for the in-app browser. */
+    /** Last known blocked/not-blocked state per host, for the in-app findapps. */
     private val blockedCache = ConcurrentHashMap<String, Boolean>()
 
     // [isBlocked] runs on the WebView's request thread inside

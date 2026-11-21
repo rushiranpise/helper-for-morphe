@@ -1,7 +1,7 @@
-﻿package dev.rushi.apkdownloadhelper.download
+package dev.rushi.apkdownloadhelper.download
 
 import dev.rushi.apkdownloadhelper.download.*
-import dev.rushi.apkdownloadhelper.ui.CandidateDownloadFile
+import dev.rushi.apkdownloadhelper.ui.model.CandidateDownloadFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -97,7 +97,7 @@ internal class ApkDownloader(
     ) {
         val url = download.url.normalizedHttpUrlOrNull()
             ?: error("Source returned an invalid download URL.".withManualModeHint())
-        // The in-app browser keeps its session in CookieManager rather than in
+        // The in-app findapps keeps its session in CookieManager rather than in
         // this HTTP client, so import it before the first request. A cleared
         // challenge is only valid for the cookies that solved it.
         url.toHttpUrlOrNull()?.let { SessionCookies.importCookieHeader(it, download.cookieHeader) }

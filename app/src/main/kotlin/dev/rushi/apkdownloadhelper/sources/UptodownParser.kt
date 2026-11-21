@@ -1,4 +1,4 @@
-﻿package dev.rushi.apkdownloadhelper.sources
+package dev.rushi.apkdownloadhelper.sources
 
 import android.net.Uri
 import android.util.Log
@@ -13,16 +13,16 @@ import dev.rushi.apkdownloadhelper.download.sanitizeFileName
 import dev.rushi.apkdownloadhelper.download.slugForUrl
 import dev.rushi.apkdownloadhelper.download.variantFileSuffix
 import dev.rushi.apkdownloadhelper.gson
-import dev.rushi.apkdownloadhelper.ui.CandidateDownloadFile
-import dev.rushi.apkdownloadhelper.ui.CandidateOption
-import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
-import dev.rushi.apkdownloadhelper.ui.DownloadSource
-import dev.rushi.apkdownloadhelper.ui.HelperRequest
-import dev.rushi.apkdownloadhelper.ui.UptodownVariantFile
-import dev.rushi.apkdownloadhelper.ui.UptodownVariantResponse
-import dev.rushi.apkdownloadhelper.ui.UptodownVersionEntry
-import dev.rushi.apkdownloadhelper.ui.UptodownVersionResponse
-import dev.rushi.apkdownloadhelper.ui.identityKey
+import dev.rushi.apkdownloadhelper.ui.model.CandidateDownloadFile
+import dev.rushi.apkdownloadhelper.ui.model.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.model.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.model.HelperRequest
+import dev.rushi.apkdownloadhelper.ui.model.UptodownVariantFile
+import dev.rushi.apkdownloadhelper.ui.model.UptodownVariantResponse
+import dev.rushi.apkdownloadhelper.ui.model.UptodownVersionEntry
+import dev.rushi.apkdownloadhelper.ui.model.UptodownVersionResponse
+import dev.rushi.apkdownloadhelper.ui.model.identityKey
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -266,7 +266,7 @@ internal class UptodownParser(private val ctx: SourceParserContext) : ApkSourceP
                 versionStatus = request.versionStatus(versionName, null),
                 formatMatches = request.acceptsFormat(fileKind),
                 note = if (directUrl == null && uptodownPageUsesTurnstile(doc)) UPTODOWN_CAPTCHA_NOTE else null,
-                // The in-app browser is the only way past Turnstile, so offer it on the
+                // The in-app findapps is the only way past Turnstile, so offer it on the
                 // page the resolver named rather than leaving the user to a manual visit.
                 captchaUrl = page.url.takeIf { directUrl == null && uptodownPageUsesTurnstile(doc) },
                 files = directUrl

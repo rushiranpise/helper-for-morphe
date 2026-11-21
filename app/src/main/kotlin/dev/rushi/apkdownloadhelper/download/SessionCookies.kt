@@ -49,7 +49,7 @@ internal object SessionCookies : CookieJar {
     /**
      * Adds the cookies a WebView already holds for [url] to this jar.
      *
-     * The in-app browser keeps its cookies in Android's [android.webkit.CookieManager],
+     * The in-app findapps keeps its cookies in Android's [android.webkit.CookieManager],
      * not in this jar, so a download that follows a solved challenge would otherwise
      * start without the clearance cookie. [header] is the Cookie request header
      * format returned by `CookieManager.getCookie`, not a Set-Cookie header.

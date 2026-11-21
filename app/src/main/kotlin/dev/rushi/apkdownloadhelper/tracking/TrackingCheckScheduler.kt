@@ -7,7 +7,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import dev.rushi.apkdownloadhelper.ui.MorpheTracking
+import dev.rushi.apkdownloadhelper.ui.model.TrackingStore
 import java.util.concurrent.TimeUnit
 
 private const val UNIQUE_WORK_NAME = "tracked_app_index_check"
@@ -18,7 +18,7 @@ internal object TrackingCheckScheduler {
 
     fun sync(context: Context) {
         val workManager = WorkManager.getInstance(context)
-        if (MorpheTracking.load(context).isEmpty()) {
+        if (TrackingStore.load(context).isEmpty()) {
             workManager.cancelUniqueWork(UNIQUE_WORK_NAME)
             return
         }

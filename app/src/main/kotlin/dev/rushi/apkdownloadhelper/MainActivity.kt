@@ -1,4 +1,4 @@
-﻿package dev.rushi.apkdownloadhelper
+package dev.rushi.apkdownloadhelper
 
 import android.Manifest
 import android.app.Activity
@@ -18,18 +18,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -117,69 +108,64 @@ import dev.rushi.apkdownloadhelper.storage.scheduleHandoffCleanup
 import dev.rushi.apkdownloadhelper.storage.temporaryDownloadsDir
 import dev.rushi.apkdownloadhelper.tracking.EXTRA_OPEN_TRACKING
 import dev.rushi.apkdownloadhelper.tracking.TrackingCheckScheduler
-import dev.rushi.apkdownloadhelper.ui.AboutTabContent
-import dev.rushi.apkdownloadhelper.ui.AdvancedTabContent
-import dev.rushi.apkdownloadhelper.ui.AppBrowserScreen
-import dev.rushi.apkdownloadhelper.ui.AppearanceTabContent
-import dev.rushi.apkdownloadhelper.ui.BrowserDownloadCapture
-import dev.rushi.apkdownloadhelper.ui.CandidateDownloadFile
-import dev.rushi.apkdownloadhelper.ui.CandidateOption
-import dev.rushi.apkdownloadhelper.ui.CandidateResult
-import dev.rushi.apkdownloadhelper.ui.CaptchaBrowserScreen
-import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
-import dev.rushi.apkdownloadhelper.ui.DownloadHelperContract
-import dev.rushi.apkdownloadhelper.ui.DownloadSource
-import dev.rushi.apkdownloadhelper.ui.FailedAttempt
-import dev.rushi.apkdownloadhelper.ui.definitiveNotFoundReason
-import dev.rushi.apkdownloadhelper.ui.FastModeChoice
-import dev.rushi.apkdownloadhelper.ui.FastModeFindResult
-import dev.rushi.apkdownloadhelper.ui.FastModeProgress
-import dev.rushi.apkdownloadhelper.ui.HelperRequest
-import dev.rushi.apkdownloadhelper.ui.HelperScreen
-import dev.rushi.apkdownloadhelper.ui.HomePagerScreen
-import dev.rushi.apkdownloadhelper.ui.LocalMonochromeTheme
-import dev.rushi.apkdownloadhelper.ui.LogsTabContent
-import dev.rushi.apkdownloadhelper.ui.MorpheAnimations
-import dev.rushi.apkdownloadhelper.ui.MorpheDefaults
-import dev.rushi.apkdownloadhelper.ui.MorpheDialogButton
-import dev.rushi.apkdownloadhelper.ui.MorphePushedScreen
-import dev.rushi.apkdownloadhelper.ui.MorpheTypography
-import dev.rushi.apkdownloadhelper.ui.ResolveOutcome
-import dev.rushi.apkdownloadhelper.ui.ResolveState
-import dev.rushi.apkdownloadhelper.ui.ReuseOfferDialog
-import dev.rushi.apkdownloadhelper.ui.ReuseOption
-import dev.rushi.apkdownloadhelper.ui.SettingsCategory
-import dev.rushi.apkdownloadhelper.ui.SettingsPage
-import dev.rushi.apkdownloadhelper.ui.SettingsPageDetail
-import dev.rushi.apkdownloadhelper.ui.SourceCandidateGroup
-import dev.rushi.apkdownloadhelper.ui.SourcesSettingsScreen
-import dev.rushi.apkdownloadhelper.ui.SwitchCandidateDialog
-import dev.rushi.apkdownloadhelper.ui.SwitchCandidatePrompt
-import dev.rushi.apkdownloadhelper.ui.SystemTabContent
-import dev.rushi.apkdownloadhelper.ui.UiState
-import dev.rushi.apkdownloadhelper.ui.UpdatePromptDialog
-import dev.rushi.apkdownloadhelper.ui.UpdateScreen
-import dev.rushi.apkdownloadhelper.ui.VersionHistoryState
-import dev.rushi.apkdownloadhelper.ui.VersionStatus
-import dev.rushi.apkdownloadhelper.ui.browserBuildMismatchMessage
-import dev.rushi.apkdownloadhelper.ui.capturedDownloadFileName
-import dev.rushi.apkdownloadhelper.ui.formatBytes
-import dev.rushi.apkdownloadhelper.ui.identityKey
-import dev.rushi.apkdownloadhelper.ui.labelForLogs
-import dev.rushi.apkdownloadhelper.ui.matchingSourceSwitchCandidates
-import dev.rushi.apkdownloadhelper.ui.monochromeDarkColorScheme
-import dev.rushi.apkdownloadhelper.ui.monochromeLightColorScheme
-import dev.rushi.apkdownloadhelper.ui.morpheDarkColorScheme
-import dev.rushi.apkdownloadhelper.ui.morpheLightColorScheme
-import dev.rushi.apkdownloadhelper.ui.scanResultDetail
-import dev.rushi.apkdownloadhelper.ui.searchDomain
-import dev.rushi.apkdownloadhelper.ui.toAccentColorOrNull
-import dev.rushi.apkdownloadhelper.ui.withCustomAccent
-import dev.rushi.apkdownloadhelper.ui.withPureBlack
-import dev.rushi.apkdownloadhelper.ui.MorphePinnedHeaderPage
-import dev.rushi.apkdownloadhelper.ui.MorpheHeaderBar
-import dev.rushi.apkdownloadhelper.ui.MorpheSubpageScaffold
-import dev.rushi.apkdownloadhelper.ui.SettingsItem
+import dev.rushi.apkdownloadhelper.ui.screen.settings.AboutTabContent
+import dev.rushi.apkdownloadhelper.ui.screen.settings.AdvancedTabContent
+import dev.rushi.apkdownloadhelper.ui.screen.findapps.AppBrowserScreen
+import dev.rushi.apkdownloadhelper.ui.screen.settings.AppearanceTabContent
+import dev.rushi.apkdownloadhelper.ui.model.BrowserDownloadCapture
+import dev.rushi.apkdownloadhelper.ui.model.CandidateDownloadFile
+import dev.rushi.apkdownloadhelper.ui.model.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.model.CandidateResult
+import dev.rushi.apkdownloadhelper.ui.screen.captcha.CaptchaBrowserScreen
+import dev.rushi.apkdownloadhelper.ui.model.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.model.DownloadHelperContract
+import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.model.FailedAttempt
+import dev.rushi.apkdownloadhelper.ui.model.definitiveNotFoundReason
+import dev.rushi.apkdownloadhelper.ui.model.FastModeChoice
+import dev.rushi.apkdownloadhelper.ui.model.FastModeFindResult
+import dev.rushi.apkdownloadhelper.ui.model.FastModeProgress
+import dev.rushi.apkdownloadhelper.ui.model.HelperRequest
+import dev.rushi.apkdownloadhelper.ui.screen.helper.HelperScreen
+import dev.rushi.apkdownloadhelper.ui.screen.home.HomePagerScreen
+import dev.rushi.apkdownloadhelper.ui.theme.LocalMonochromeTheme
+import dev.rushi.apkdownloadhelper.ui.screen.settings.LogsTabContent
+import dev.rushi.apkdownloadhelper.ui.theme.AppAnimations
+import dev.rushi.apkdownloadhelper.ui.shared.button.DialogButton
+import dev.rushi.apkdownloadhelper.ui.shared.layout.PushedScreen
+import dev.rushi.apkdownloadhelper.ui.theme.AppTypography
+import dev.rushi.apkdownloadhelper.ui.model.ResolveOutcome
+import dev.rushi.apkdownloadhelper.ui.model.ResolveState
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.ReuseOfferDialog
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.ReuseOption
+import dev.rushi.apkdownloadhelper.ui.screen.settings.SettingsCategory
+import dev.rushi.apkdownloadhelper.ui.screen.settings.SettingsPage
+import dev.rushi.apkdownloadhelper.ui.screen.settings.SettingsPageDetail
+import dev.rushi.apkdownloadhelper.ui.model.SourceCandidateGroup
+import dev.rushi.apkdownloadhelper.ui.screen.settings.SourcesSettingsScreen
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.SwitchCandidateDialog
+import dev.rushi.apkdownloadhelper.ui.model.SwitchCandidatePrompt
+import dev.rushi.apkdownloadhelper.ui.screen.settings.SystemTabContent
+import dev.rushi.apkdownloadhelper.ui.model.UiState
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.UpdatePromptDialog
+import dev.rushi.apkdownloadhelper.ui.screen.update.UpdateScreen
+import dev.rushi.apkdownloadhelper.ui.model.VersionHistoryState
+import dev.rushi.apkdownloadhelper.ui.model.VersionStatus
+import dev.rushi.apkdownloadhelper.ui.screen.captcha.browserBuildMismatchMessage
+import dev.rushi.apkdownloadhelper.ui.model.capturedDownloadFileName
+import dev.rushi.apkdownloadhelper.ui.util.formatBytes
+import dev.rushi.apkdownloadhelper.ui.model.identityKey
+import dev.rushi.apkdownloadhelper.ui.model.labelForLogs
+import dev.rushi.apkdownloadhelper.ui.model.matchingSourceSwitchCandidates
+import dev.rushi.apkdownloadhelper.ui.theme.monochromeDarkColorScheme
+import dev.rushi.apkdownloadhelper.ui.theme.monochromeLightColorScheme
+import dev.rushi.apkdownloadhelper.ui.theme.appDarkColorScheme
+import dev.rushi.apkdownloadhelper.ui.theme.appLightColorScheme
+import dev.rushi.apkdownloadhelper.ui.shared.download.scanResultDetail
+import dev.rushi.apkdownloadhelper.ui.model.searchDomain
+import dev.rushi.apkdownloadhelper.ui.theme.toAccentColorOrNull
+import dev.rushi.apkdownloadhelper.ui.theme.withCustomAccent
+import dev.rushi.apkdownloadhelper.ui.theme.withPureBlack
 import dev.rushi.apkdownloadhelper.updater.UpdateInfo
 import dev.rushi.apkdownloadhelper.updater.UpdateManager
 import kotlinx.coroutines.CompletableDeferred
@@ -198,23 +184,11 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.ui.unit.dp
-import dev.rushi.apkdownloadhelper.ui.AppDetailView
+import dev.rushi.apkdownloadhelper.ui.screen.findapps.AppDetailScreen
 import dev.rushi.apkdownloadhelper.updater.ArchiveApp
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.windowInsetsBottomHeight
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.foundation.layout.height
-import dev.rushi.apkdownloadhelper.ui.CustomizationTabContent
+import dev.rushi.apkdownloadhelper.ui.screen.settings.CustomizationTabContent
 
 
 internal const val AURORA_AUTH_URL = "https://auroraoss.com/api/auth"
@@ -252,7 +226,7 @@ class MainActivity : ComponentActivity() {
         "Mozilla/5.0 (Linux; Android ${Build.VERSION.RELEASE}; ${Build.MODEL}) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
 
-    /** APKMirror challenges browser user agents but serves this one normally. */
+    /** APKMirror challenges findapps user agents but serves this one normally. */
     private val apkMirrorUserAgent = "HelperForMorphe/1.0"
 
     private val client = OkHttpClient.Builder()
@@ -421,8 +395,8 @@ class MainActivity : ComponentActivity() {
     private var pendingSwitchTarget: DownloadCandidate? = null
     private var pendingSwitchOption: CandidateOption? = null
     private var switchCandidatePrompt by mutableStateOf<SwitchCandidatePrompt?>(null)
-    // Non-null while the in-app browser is open for a candidate whose source
-    // needs a real browser to reach the APK download.
+    // Non-null while the in-app findapps is open for a candidate whose source
+    // needs a real findapps to reach the APK download.
     private var captchaBrowser by mutableStateOf<DownloadCandidate?>(null)
     // Set when a repeat request matches previous downloads that still exist;
     // the user picks one to reuse or chooses to download a fresh copy.
@@ -704,13 +678,13 @@ class MainActivity : ComponentActivity() {
                     // --- OVERLAY FOR SETTINGS SUBPAGE ---
                     AnimatedVisibility(
                         visible = activeSettingsCategory != null,
-                        enter = MorpheAnimations.pushEnter,
-                        exit = MorpheAnimations.pushExit
+                        enter = AppAnimations.pushEnter,
+                        exit = AppAnimations.pushExit
                     ) {
                         val category = lastActiveCategory
                         if (category != null) {
                             val settingsDetailScrollState = rememberScrollState()
-                            MorphePushedScreen {
+                            PushedScreen {
                                 SettingsPageDetail(
                                     title = category.title,
                                     onBack = { activeSettingsCategory = null },
@@ -762,8 +736,8 @@ class MainActivity : ComponentActivity() {
                     // --- OVERLAY FOR FIND APPS DETAIL ---
                     AnimatedVisibility(
                         visible = selectedArchiveApp != null,
-                        enter = MorpheAnimations.pushEnter,
-                        exit = MorpheAnimations.pushExit
+                        enter = AppAnimations.pushEnter,
+                        exit = AppAnimations.pushExit
                     ) {
                         val appDetail = lastSelectedArchiveApp
                         if (appDetail != null) {
@@ -771,8 +745,8 @@ class MainActivity : ComponentActivity() {
                             val isInstalled = remember(appDetail.packageName) {
                                 context.isPackageInstalled(appDetail.packageName)
                             }
-                            MorphePushedScreen {
-                                AppDetailView(
+                            PushedScreen {
+                                AppDetailScreen(
                                     app = appDetail,
                                     installed = isInstalled,
                                     useGradientHeader = helperSettings.useGradientCardColors,
@@ -786,10 +760,10 @@ class MainActivity : ComponentActivity() {
                     // --- OVERLAY FOR UPDATES ---
                     AnimatedVisibility(
                         visible = showUpdates,
-                        enter = MorpheAnimations.pushEnter,
-                        exit = MorpheAnimations.pushExit
+                        enter = AppAnimations.pushEnter,
+                        exit = AppAnimations.pushExit
                     ) {
-                        MorphePushedScreen {
+                        PushedScreen {
                             UpdateScreen(
                                 settings = helperSettings,
                                 onSettingsChange = ::updateHelperSettings,
@@ -1563,7 +1537,7 @@ class MainActivity : ComponentActivity() {
         val manual = manualCandidates(request).firstOrNull { it.source == source } ?: return null
         val requestedVersionName = request.requestedVersionNames.firstOrNull()
         val requestedVersionCode = request.versionCode ?: request.versionCodes.singleOrNull()
-        // Keep the browser on the source itself when its search page is the
+        // Keep the findapps on the source itself when its search page is the
         // thing that hit Cloudflare, instead of sending the user to a Google
         // result for the app.
         val browserUrl = when (source) {
@@ -1894,13 +1868,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // ---- In-app captcha browser: let the user solve a captcha in a real
-    // browser and capture the download URL it produces ----
+    // ---- In-app captcha findapps: let the user solve a captcha in a real
+    // findapps and capture the download URL it produces ----
 
     private fun openCaptchaBrowser(candidate: DownloadCandidate) {
         if (candidate.source == DownloadSource.AURORA || candidate.source == DownloadSource.PLAY) return
         appendLog(
-            "Opening in-app browser for ${candidate.source.label} to continue the download.",
+            "Opening in-app findapps for ${candidate.source.label} to continue the download.",
             LogLevel.Info
         )
         captchaBrowser = candidate
@@ -1912,12 +1886,12 @@ class MainActivity : ComponentActivity() {
         if (candidate == null || !fastModeActive) return
         abandonFastModeCaptcha(
             candidate,
-            "Fast Mode: browser closed before ${candidate.source.label} started a download."
+            "Fast Mode: findapps closed before ${candidate.source.label} started a download."
         )
     }
 
     /**
-     * A Fast Mode captcha route that did not produce a file (closed browser, challenge
+     * A Fast Mode captcha route that did not produce a file (closed findapps, challenge
      * timeout or build mismatch) must release the source queue instead of leaving the
      * card waiting forever. The source is marked failed and the next one is tried.
      */
@@ -1955,7 +1929,7 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * The browser rejected a page whose build does not match the request.
+     * The findapps rejected a page whose build does not match the request.
      * Mark the wrapper source as failed, not the provider whose page it was.
      */
     private fun onBrowserBuildMismatch(code: String?) {
@@ -1997,7 +1971,7 @@ class MainActivity : ComponentActivity() {
         val cookieHeader = capture.cookieHeader
             ?: CookieManager.getInstance().getCookie(referer)
         appendLog(
-            "Captured download link from ${candidate.source.label} in the in-app browser " +
+            "Captured download link from ${candidate.source.label} in the in-app findapps " +
                 "($fileKind): ${capture.downloadUrl}",
             LogLevel.Info
         )
@@ -2248,7 +2222,7 @@ class MainActivity : ComponentActivity() {
                                 awaitingDecision = true,
                                 awaitingCaptcha = true,
                                 mismatchDetail = "${source.label} has ${candidate.versionDisplay}, but the " +
-                                    "download needs a captcha. Solve it in the in-app browser to continue."
+                                    "download needs a captcha. Solve it in the in-app findapps to continue."
                             )
                         )
                         val decision = decisionGate.await()
@@ -2475,7 +2449,7 @@ class MainActivity : ComponentActivity() {
             .filter { (_, candidate) ->
                 // Format differences are fine, but the exact version name AND
                 // version code are both required. A captcha-gated page is still an
-                // exact match: the in-app browser can reveal its file after the user
+                // exact match: the in-app findapps can reveal its file after the user
                 // solves the challenge. A candidate that reports a code outside the
                 // request is surfaced as a mismatch the user can accept or skip 
                 // never silently downloaded.
@@ -3293,10 +3267,10 @@ internal fun HelperTheme(
         ThemeStyle.MATERIAL_YOU -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         } else {
-            if (dark) morpheDarkColorScheme() else morpheLightColorScheme()
+            if (dark) appDarkColorScheme() else appLightColorScheme()
         }
 
-        ThemeStyle.MORPHE -> if (dark) morpheDarkColorScheme() else morpheLightColorScheme()
+        ThemeStyle.MORPHE -> if (dark) appDarkColorScheme() else appLightColorScheme()
     }
     val colorScheme = base
         .let { if (dark && pureBlackTheme) it.withPureBlack() else it }
@@ -3343,7 +3317,7 @@ internal fun HelperTheme(
     CompositionLocalProvider(LocalMonochromeTheme provides (style == ThemeStyle.MONOCHROME)) {
         MaterialTheme(
             colorScheme = colorScheme,
-            typography = MorpheTypography,
+            typography = AppTypography,
             content = content
         )
     }
@@ -3356,7 +3330,7 @@ internal fun HelperButton(
     modifier: Modifier = Modifier,
     icon: ImageVector? = null
 ) {
-    MorpheDialogButton(
+    DialogButton(
         text = text,
         onClick = onClick,
         modifier = modifier,
@@ -3372,7 +3346,7 @@ internal fun HelperOutlinedButton(
     modifier: Modifier = Modifier,
     icon: ImageVector? = null
 ) {
-    MorpheDialogButton(
+    DialogButton(
         text = text,
         onClick = onClick,
         modifier = modifier,
@@ -3381,7 +3355,7 @@ internal fun HelperOutlinedButton(
     )
 }
 
-// ---- In-app captcha browser: a real WebView that passes Cloudflare-style
+// ---- In-app captcha findapps: a real WebView that passes Cloudflare-style
 // challenges, captures the download URL the page produces, and hands it to the
 // normal download pipeline. Any source that gates its file behind a captcha can
 // opt in by setting DownloadCandidate.captchaUrl.

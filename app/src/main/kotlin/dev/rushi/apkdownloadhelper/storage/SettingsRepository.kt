@@ -1,4 +1,4 @@
-﻿package dev.rushi.apkdownloadhelper.storage
+package dev.rushi.apkdownloadhelper.storage
 
 import android.content.Context
 import android.net.ConnectivityManager
@@ -8,7 +8,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import dev.rushi.apkdownloadhelper.BuildConfig
 import dev.rushi.apkdownloadhelper.download.VirusTotalScanner
-import dev.rushi.apkdownloadhelper.ui.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
 import dev.rushi.apkdownloadhelper.updater.UpdateInfo
 import java.io.File
 

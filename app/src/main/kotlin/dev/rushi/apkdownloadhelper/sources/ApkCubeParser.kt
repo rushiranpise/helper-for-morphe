@@ -1,12 +1,12 @@
-﻿package dev.rushi.apkdownloadhelper.sources
+package dev.rushi.apkdownloadhelper.sources
 
 import dev.rushi.apkdownloadhelper.download.normalizedHttpUrlOrNull
 import dev.rushi.apkdownloadhelper.download.versionNameEquals
-import dev.rushi.apkdownloadhelper.ui.CandidateOption
-import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
-import dev.rushi.apkdownloadhelper.ui.DownloadSource
-import dev.rushi.apkdownloadhelper.ui.HelperRequest
-import dev.rushi.apkdownloadhelper.ui.VersionStatus
+import dev.rushi.apkdownloadhelper.ui.model.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.model.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.model.HelperRequest
+import dev.rushi.apkdownloadhelper.ui.model.VersionStatus
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.Locale
@@ -187,7 +187,7 @@ internal abstract class ApkCubeSourceParser(
 }
 
 private const val APKCUBE_CAPTCHA_NOTE =
-    "APKCube gates downloads behind a Cloudflare captcha. Solve it in the in-app browser or open the page manually."
+    "APKCube gates downloads behind a Cloudflare captcha. Solve it in the in-app findapps or open the page manually."
 
 internal fun apkCubeSearchUrl(packageName: String): String =
     "https://apkcube.com/apk-downloader?url=" +
@@ -216,7 +216,7 @@ internal fun apkCubeHtmlNoMatch(html: String?): Boolean {
     val hasDownloadMarker = lower.contains("/download?")
         || lower.contains("download.php")
         || lower.contains("verify to download")
-        || lower.contains("checking your browser")
+        || lower.contains("checking your findapps")
         || lower.contains("turnstile")
         || lower.contains("captcha")
     if (hasDownloadMarker) return false

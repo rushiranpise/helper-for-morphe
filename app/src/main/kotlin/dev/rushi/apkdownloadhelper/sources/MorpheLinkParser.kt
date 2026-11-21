@@ -1,4 +1,4 @@
-﻿package dev.rushi.apkdownloadhelper.sources
+package dev.rushi.apkdownloadhelper.sources
 
 import dev.rushi.apkdownloadhelper.DOWNLOAD_FILE_KIND_ORDER
 import dev.rushi.apkdownloadhelper.DOWNLOAD_FILE_KIND_SET
@@ -6,16 +6,16 @@ import dev.rushi.apkdownloadhelper.TAG
 import dev.rushi.apkdownloadhelper.download.fileKindFromUrlOrNull
 import dev.rushi.apkdownloadhelper.download.normalizedHttpUrlOrNull
 import dev.rushi.apkdownloadhelper.download.sanitizeFileName
-import dev.rushi.apkdownloadhelper.ui.CandidateDownloadFile
-import dev.rushi.apkdownloadhelper.ui.CandidateOption
-import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
-import dev.rushi.apkdownloadhelper.ui.DownloadSource
-import dev.rushi.apkdownloadhelper.ui.HelperRequest
-import dev.rushi.apkdownloadhelper.ui.isApkMirrorFileUrl
-import dev.rushi.apkdownloadhelper.ui.isApkPureFileUrl
-import dev.rushi.apkdownloadhelper.ui.isCapturableDownload
-import dev.rushi.apkdownloadhelper.ui.isUptodownFileUrl
-import dev.rushi.apkdownloadhelper.ui.looksLikeApkDownload
+import dev.rushi.apkdownloadhelper.ui.model.CandidateDownloadFile
+import dev.rushi.apkdownloadhelper.ui.model.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.model.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.model.HelperRequest
+import dev.rushi.apkdownloadhelper.ui.screen.captcha.isApkMirrorFileUrl
+import dev.rushi.apkdownloadhelper.ui.screen.captcha.isApkPureFileUrl
+import dev.rushi.apkdownloadhelper.ui.screen.captcha.isCapturableDownload
+import dev.rushi.apkdownloadhelper.ui.screen.captcha.isUptodownFileUrl
+import dev.rushi.apkdownloadhelper.ui.screen.captcha.looksLikeApkDownload
 import java.net.URI
 import java.util.Locale
 
@@ -25,7 +25,7 @@ import java.util.Locale
  * The resolver is the only component that knows where Morphe itself would send a
  * request, so this source keeps its answer instead of discarding it after one source
  * fails. Known hosts hand the page to their normal parser; direct file endpoints become
- * a one-file candidate; everything else opens in the in-app browser with the exact link
+ * a one-file candidate; everything else opens in the in-app findapps with the exact link
  * the resolver returned.
  */
 internal class MorpheLinkParser(
@@ -58,7 +58,7 @@ internal class MorpheLinkParser(
 
         // Try the resolver answer first, then the request's fallback page. A
         // fallback page can be a direct file, a GitHub release or a source page,
-        // so it gets the same orchestration instead of always opening a browser.
+        // so it gets the same orchestration instead of always opening a findapps.
         for ((url, _) in targets) {
             if (url.isCaptchaGatedSourcePage()) {
                 android.util.Log.i(
@@ -183,9 +183,9 @@ internal class MorpheLinkParser(
         val versionCode = (request.versionCode ?: request.versionCodes.singleOrNull())
             .takeIf { option == CandidateOption.REQUESTED }
         val note = if (resolvedSource != null) {
-            "Morphe resolved this request to ${resolvedSource.label}. Continue in the in-app browser."
+            "Morphe resolved this request to ${resolvedSource.label}. Continue in the in-app findapps."
         } else {
-            "Morphe resolved this link. Continue in the in-app browser."
+            "Morphe resolved this link. Continue in the in-app findapps."
         }
 
         return DownloadCandidate(
