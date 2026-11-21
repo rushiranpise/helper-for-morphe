@@ -1,4 +1,4 @@
-﻿package dev.rushi.apkdownloadhelper.download
+package dev.rushi.apkdownloadhelper.download
 
 import android.content.Context
 import android.content.Intent
@@ -12,10 +12,10 @@ import dev.rushi.apkdownloadhelper.DownloadJobManager
 import dev.rushi.apkdownloadhelper.PendingDownloadResult
 import dev.rushi.apkdownloadhelper.SPLIT_ARCHIVE_FILE_KINDS
 import dev.rushi.apkdownloadhelper.download.*
-import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
-import dev.rushi.apkdownloadhelper.ui.DownloadSource
-import dev.rushi.apkdownloadhelper.ui.DownloadedApkMetadata
-import dev.rushi.apkdownloadhelper.ui.HelperRequest
+import dev.rushi.apkdownloadhelper.ui.model.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.model.DownloadedApkMetadata
+import dev.rushi.apkdownloadhelper.ui.model.HelperRequest
 import net.dongliu.apk.parser.parser.BinaryXmlParser
 import net.dongliu.apk.parser.parser.XmlStreamer
 import net.dongliu.apk.parser.struct.xml.XmlCData

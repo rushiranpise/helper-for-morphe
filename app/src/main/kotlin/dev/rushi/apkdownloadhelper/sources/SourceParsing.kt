@@ -1,13 +1,13 @@
-﻿package dev.rushi.apkdownloadhelper.sources
+package dev.rushi.apkdownloadhelper.sources
 
 import android.content.Context
 import dev.rushi.apkdownloadhelper.download.sourceFailureMessage
 import dev.rushi.apkdownloadhelper.play.PlayHttpClient
 import dev.rushi.apkdownloadhelper.sources.*
-import dev.rushi.apkdownloadhelper.ui.CandidateOption
-import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
-import dev.rushi.apkdownloadhelper.ui.DownloadSource
-import dev.rushi.apkdownloadhelper.ui.HelperRequest
+import dev.rushi.apkdownloadhelper.ui.model.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.model.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.model.HelperRequest
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jsoup.Jsoup

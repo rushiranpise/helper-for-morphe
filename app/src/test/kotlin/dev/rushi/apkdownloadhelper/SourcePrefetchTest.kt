@@ -8,7 +8,7 @@ import dev.rushi.apkdownloadhelper.sources.UptodownDownload
 import dev.rushi.apkdownloadhelper.sources.UptodownPrepared
 import dev.rushi.apkdownloadhelper.sources.UptodownRelease
 import dev.rushi.apkdownloadhelper.sources.apkMirrorSearchUrl
-import dev.rushi.apkdownloadhelper.ui.HelperRequest
+import dev.rushi.apkdownloadhelper.ui.model.HelperRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

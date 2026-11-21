@@ -1,7 +1,7 @@
-﻿package dev.rushi.apkdownloadhelper.download
+package dev.rushi.apkdownloadhelper.download
 
 import dev.rushi.apkdownloadhelper.download.*
-import dev.rushi.apkdownloadhelper.ui.CandidateDownloadFile
+import dev.rushi.apkdownloadhelper.ui.model.CandidateDownloadFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll

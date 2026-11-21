@@ -1,4 +1,4 @@
-﻿package dev.rushi.apkdownloadhelper.sources
+package dev.rushi.apkdownloadhelper.sources
 
 import android.net.Uri
 import android.util.Log
@@ -14,12 +14,12 @@ import dev.rushi.apkdownloadhelper.download.sourceVersionFromText
 import dev.rushi.apkdownloadhelper.download.trailingVersionCode
 import dev.rushi.apkdownloadhelper.download.withoutTrailingVersionCode
 import dev.rushi.apkdownloadhelper.gson
-import dev.rushi.apkdownloadhelper.ui.CandidateDownloadFile
-import dev.rushi.apkdownloadhelper.ui.CandidateOption
-import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
-import dev.rushi.apkdownloadhelper.ui.DownloadSource
-import dev.rushi.apkdownloadhelper.ui.HelperRequest
-import dev.rushi.apkdownloadhelper.ui.VersionStatus
+import dev.rushi.apkdownloadhelper.ui.model.CandidateDownloadFile
+import dev.rushi.apkdownloadhelper.ui.model.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.model.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.model.HelperRequest
+import dev.rushi.apkdownloadhelper.ui.model.VersionStatus
 import org.jsoup.nodes.Document
 import java.net.URLEncoder
 import java.util.Locale

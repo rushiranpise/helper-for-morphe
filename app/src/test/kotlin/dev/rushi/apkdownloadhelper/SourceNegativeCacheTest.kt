@@ -1,8 +1,8 @@
 package dev.rushi.apkdownloadhelper
 
 import dev.rushi.apkdownloadhelper.sources.runSourceLookup
-import dev.rushi.apkdownloadhelper.ui.ResolveOutcome
-import dev.rushi.apkdownloadhelper.ui.definitiveNotFoundReason
+import dev.rushi.apkdownloadhelper.ui.model.ResolveOutcome
+import dev.rushi.apkdownloadhelper.ui.model.definitiveNotFoundReason
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
