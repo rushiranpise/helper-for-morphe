@@ -38,7 +38,7 @@ private val APKMIRROR_EDITION_SLUG_REGEX = Regex(
 )
 
 private const val APKMIRROR_BROWSER_NOTE =
-    "Complete any findapps check, then choose the file on the APKMirror page."
+    "Complete any browser check, then choose the file on the APKMirror page."
 
 private const val APKMIRROR_SEARCH_NOTE =
     "Open APKMirror's search results, then choose the app and version."
@@ -352,7 +352,7 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
                     .getOrNull()
                 // APKMirror now answers the helper's HTTP client with a Cloudflare
                 // challenge. Keep the exact page the resolver named and open it in
-                // the in-app findapps instead of discarding the shortcut.
+                // the in-app browser instead of discarding the shortcut.
                 listOf(direct ?: apkMirrorResolvedWebCandidate(request, resolved, version, option))
             }
 
@@ -382,7 +382,7 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         }
     }
 
-    /** The exact APKMirror page the resolver named, offered to the in-app findapps. */
+    /** The exact APKMirror page the resolver named, offered to the in-app browser. */
     private fun apkMirrorResolvedWebCandidate(
         request: HelperRequest,
         pageUrl: String,
@@ -807,7 +807,7 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         val releaseDoc = fetchDocument(releaseUrl)
         if (releaseDoc.isCloudflareChallenge()) {
             throw SourceChallengeException(
-                "APKMirror showed a Cloudflare findapps-verification page instead of the release."
+                "APKMirror showed a Cloudflare browser-verification page instead of the release."
             )
         }
 
@@ -853,7 +853,7 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         }
         if (variantDoc.isCloudflareChallenge()) {
             throw SourceChallengeException(
-                "APKMirror showed a Cloudflare findapps-verification page instead of the variant."
+                "APKMirror showed a Cloudflare browser-verification page instead of the variant."
             )
         }
 
@@ -883,7 +883,7 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         val downloadDoc = fetchDocument(downloadButtonUrl, referer = variantPageUrl)
         if (downloadDoc.isCloudflareChallenge()) {
             throw SourceChallengeException(
-                "APKMirror showed a Cloudflare findapps-verification page instead of the download page."
+                "APKMirror showed a Cloudflare browser-verification page instead of the download page."
             )
         }
 

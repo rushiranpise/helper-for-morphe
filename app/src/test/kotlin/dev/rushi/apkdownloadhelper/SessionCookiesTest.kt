@@ -82,11 +82,11 @@ class SessionCookiesTest {
         val download = "https://www.apkmirror.com/wp-content/themes/APKMirror/download.php?id=1"
             .toHttpUrl()
 
-        SessionCookies.importCookieHeader(download, "cf_clearance=findapps; session=abc")
+        SessionCookies.importCookieHeader(download, "cf_clearance=browser; session=abc")
 
         val sent = SessionCookies.loadForRequest(download)
         assertEquals(listOf("cf_clearance", "session"), sent.map { it.name })
-        assertEquals("findapps", sent.first().value)
+        assertEquals("browser", sent.first().value)
     }
 
     @Test

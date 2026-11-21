@@ -93,9 +93,9 @@ internal fun VersionHistoryRow(
                 Text(
                     text = when {
                         // Captcha-gated rows are browsed in the in-app captcha
-                        // findapps, not downloaded.
+                        // browser, not downloaded.
                         candidate.captchaUrl != null && !candidate.directDownload ->
-                            "Browsable in the in-app findapps (version history)"
+                            "Browsable in the in-app browser (version history)"
                         showOpenLink -> "No direct download  open the version page"
                         // History rows know only the version page until the
                         // user taps Download, which resolves the real format.

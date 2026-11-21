@@ -23,7 +23,7 @@ internal fun String.looksLikeApkDownload(): Boolean {
 
 /**
  * Uptodown's file links carry no extension at all (`dw.uptodown.com/dwn/<token>`), so the
- * extension test alone misses them: the in-app findapps saw a navigation to a URL it could
+ * extension test alone misses them: the in-app browser saw a navigation to a URL it could
  * not recognise as a file and let the page handle it.
  */
 internal fun String.isUptodownFileUrl(): Boolean {
@@ -34,7 +34,7 @@ internal fun String.isUptodownFileUrl(): Boolean {
 }
 
 /**
- * Cookies the findapps holds for a captured file URL, falling back to the page
+ * Cookies the browser holds for a captured file URL, falling back to the page
  * that produced it. The downloader imports this header into its own jar; it is
  * the same session that passed the challenge, so the file hop must reuse it.
  */
@@ -66,7 +66,7 @@ internal fun String.isApkPureFileUrl(): Boolean {
     return apkPureHost && uri.path.orEmpty().trim('/').startsWith("b/", ignoreCase = true)
 }
 
-/** A URL the in-app findapps should treat as the file it was opened to capture. */
+/** A URL the in-app browser should treat as the file it was opened to capture. */
 internal fun String.isCapturableDownload(): Boolean =
     looksLikeApkDownload() || isUptodownFileUrl() || isApkMirrorFileUrl() || isApkPureFileUrl()
 
@@ -78,13 +78,13 @@ internal fun String?.browserBuildMismatchMessage(expected: String?): String =
     "Download page is build ${this?.takeIf(String::isNotBlank) ?: "unknown"}, " +
         "expected ${expected?.takeIf(String::isNotBlank) ?: "the requested build"}."
 
-/** APKCube uses its own catalogue and findapps flow. */
+/** APKCube uses its own catalogue and browser flow. */
 internal fun DownloadSource.isApkCubeBrowserFlow(): Boolean =
     this == DownloadSource.APK_CUBE
 
 /**
  * APKCube's download flow stays on its own site. Off-site links on the download
- * page are prelander ads, so the in-app findapps must not follow them.
+ * page are prelander ads, so the in-app browser must not follow them.
  */
 internal fun String.isApkCubeHostedUrl(): Boolean {
     val uri = runCatching { java.net.URI(urlDecoded()) }.getOrNull() ?: return false

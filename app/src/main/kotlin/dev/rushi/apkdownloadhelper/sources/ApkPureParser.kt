@@ -25,7 +25,7 @@ import java.net.URLEncoder
 import java.util.Locale
 
 private const val APKPURE_BROWSER_NOTE =
-    "APKPure did not return a direct file. Use the in-app findapps to download it."
+    "APKPure did not return a direct file. Use the in-app browser to download it."
 
 internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourceParser {
     override val source: DownloadSource = DownloadSource.APK_PURE
@@ -472,14 +472,14 @@ internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourcePa
 
     /**
      * The last resort after APKPure's direct endpoint, update API, and web pages
-     * all fail: open APKPure in the in-app findapps and let its own download
+     * all fail: open APKPure in the in-app browser and let its own download
      * button produce the file.
      */
     private fun apkPureBrowserCandidate(
         request: HelperRequest,
         option: CandidateOption
     ): DownloadCandidate? {
-        // APKPure's findapps download is an APK or its XAPK bundle. A request
+        // APKPure's browser download is an APK or its XAPK bundle. A request
         // for split archives can still use the same page when split archives
         // are allowed, as in the reference WebView flow.
         if (!request.acceptsFormat("apk") &&

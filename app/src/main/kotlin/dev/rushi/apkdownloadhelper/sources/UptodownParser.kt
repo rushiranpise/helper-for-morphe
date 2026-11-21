@@ -266,7 +266,7 @@ internal class UptodownParser(private val ctx: SourceParserContext) : ApkSourceP
                 versionStatus = request.versionStatus(versionName, null),
                 formatMatches = request.acceptsFormat(fileKind),
                 note = if (directUrl == null && uptodownPageUsesTurnstile(doc)) UPTODOWN_CAPTCHA_NOTE else null,
-                // The in-app findapps is the only way past Turnstile, so offer it on the
+                // The in-app browser is the only way past Turnstile, so offer it on the
                 // page the resolver named rather than leaving the user to a manual visit.
                 captchaUrl = page.url.takeIf { directUrl == null && uptodownPageUsesTurnstile(doc) },
                 files = directUrl

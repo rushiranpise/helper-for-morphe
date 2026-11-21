@@ -243,7 +243,7 @@ internal interface ApkSourceParser {
      *
      * The resolver-backed source delegates to the matching parser instead of
      * duplicating every site walk. Returning null means this parser cannot continue
-     * from that URL, and the caller falls back to the in-app findapps.
+     * from that URL, and the caller falls back to the in-app browser.
      */
     suspend fun findCandidatesFromResolvedUrl(
         request: HelperRequest,

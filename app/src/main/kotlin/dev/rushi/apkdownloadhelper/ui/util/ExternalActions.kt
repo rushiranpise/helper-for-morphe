@@ -26,7 +26,7 @@ internal fun openVirusTotalPage(context: Context, sha256: String) {
     ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
     runCatching { context.startActivity(open) }
         .onFailure {
-            Toast.makeText(context, "No findapps available", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "No browser available", Toast.LENGTH_SHORT).show()
         }
 }
 

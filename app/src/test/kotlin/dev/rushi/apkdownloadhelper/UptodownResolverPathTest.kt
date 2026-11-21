@@ -46,7 +46,7 @@ class UptodownResolverPathTest {
                data-file-id="987"
                ${if (xapkFlagOnly) "data-only-xapk=\"1\"" else ""}
                ${if (dataUrl != null) "data-url=\"$dataUrl\"" else ""}>Download</a>
-            <div id="download-turnstile-widget" data-sitekey="solved-in-findapps"></div>
+            <div id="download-turnstile-widget" data-sitekey="solved-in-browser"></div>
           </body>
         </html>
     """.trimIndent()
@@ -72,7 +72,7 @@ class UptodownResolverPathTest {
         // as the scraped path does.
         assertFalse(candidate.directDownload)
         assertTrue(candidate.note.orEmpty().contains("captcha", ignoreCase = true))
-        // And it points the in-app findapps at the page that holds the button, which is
+        // And it points the in-app browser at the page that holds the button, which is
         // the only way past Turnstile.
         assertEquals(resolvedUrl, candidate.captchaUrl)
     }

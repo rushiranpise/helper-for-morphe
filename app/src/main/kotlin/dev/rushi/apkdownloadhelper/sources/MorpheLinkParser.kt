@@ -25,7 +25,7 @@ import java.util.Locale
  * The resolver is the only component that knows where Morphe itself would send a
  * request, so this source keeps its answer instead of discarding it after one source
  * fails. Known hosts hand the page to their normal parser; direct file endpoints become
- * a one-file candidate; everything else opens in the in-app findapps with the exact link
+ * a one-file candidate; everything else opens in the in-app browser with the exact link
  * the resolver returned.
  */
 internal class MorpheLinkParser(
@@ -58,7 +58,7 @@ internal class MorpheLinkParser(
 
         // Try the resolver answer first, then the request's fallback page. A
         // fallback page can be a direct file, a GitHub release or a source page,
-        // so it gets the same orchestration instead of always opening a findapps.
+        // so it gets the same orchestration instead of always opening a browser.
         for ((url, _) in targets) {
             if (url.isCaptchaGatedSourcePage()) {
                 android.util.Log.i(
@@ -183,9 +183,9 @@ internal class MorpheLinkParser(
         val versionCode = (request.versionCode ?: request.versionCodes.singleOrNull())
             .takeIf { option == CandidateOption.REQUESTED }
         val note = if (resolvedSource != null) {
-            "Morphe resolved this request to ${resolvedSource.label}. Continue in the in-app findapps."
+            "Morphe resolved this request to ${resolvedSource.label}. Continue in the in-app browser."
         } else {
-            "Morphe resolved this link. Continue in the in-app findapps."
+            "Morphe resolved this link. Continue in the in-app browser."
         }
 
         return DownloadCandidate(

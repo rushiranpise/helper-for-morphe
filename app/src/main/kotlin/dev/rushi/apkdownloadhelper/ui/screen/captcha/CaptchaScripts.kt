@@ -15,7 +15,7 @@ internal class CaptchaCaptureBridge(
 internal const val CAPTCHA_BRIDGE_NAME = "Android"
 
 /**
- * Injected into every page the captcha findapps finishes loading. Captures
+ * Injected into every page the captcha browser finishes loading. Captures
  * clicks on download-looking links and window.open calls that the download
  * listener would not see (e.g. links opened in a new tab).
  */
@@ -60,7 +60,7 @@ internal const val BROWSER_CHALLENGE_TIMEOUT_MS = 5 * 60_000L
 
 /**
  * Reports whether the page is currently showing a Cloudflare-style challenge.
- * The probe is polled while the findapps is open so a stalled page can be
+ * The probe is polled while the browser is open so a stalled page can be
  * reloaded only after its challenge clears.
  */
 internal const val BROWSER_CHALLENGE_PROBE_JS = """
@@ -76,7 +76,7 @@ internal const val BROWSER_CHALLENGE_PROBE_JS = """
     (document.body ? document.body.innerText : '')).toLowerCase();
   if (text.indexOf('verify you are human') >= 0
       || text.indexOf('security verification') >= 0
-      || text.indexOf('checking your findapps') >= 0
+      || text.indexOf('checking your browser') >= 0
       || text.indexOf('just a moment') >= 0
       || text.indexOf('attention required') >= 0
       || text.indexOf('enable javascript and cookies to continue') >= 0) {

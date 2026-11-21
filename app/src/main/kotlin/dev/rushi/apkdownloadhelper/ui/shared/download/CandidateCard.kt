@@ -118,9 +118,9 @@ internal fun CandidateCard(
         } else {
             // Resolved candidates (Recommended/Latest/History) from every source
             // except Aurora and Play can fall back to the in-app captcha
-            // findapps: it opens the candidate's page in a real WebView (passing
+            // browser: it opens the candidate's page in a real WebView (passing
             // any Cloudflare challenge) and captures the download URL the page
-            // produces. The findapps action stays here because the bottom bar
+            // produces. The browser action stays here because the bottom bar
             // for these tabs shows "Find latest/requested" instead.
             if (candidate.source != DownloadSource.AURORA &&
                 candidate.source != DownloadSource.PLAY

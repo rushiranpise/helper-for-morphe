@@ -691,7 +691,7 @@ internal fun sourceFailureMessage(sourceLabel: String, error: Throwable, action:
             "$sourceLabel has no build compatible with this device: $details"
         }
         details.contains("cloudflare", ignoreCase = true) -> {
-            "$sourceLabel showed a findapps verification page, so direct access is blocked. Open the link and download manually."
+            "$sourceLabel showed a browser verification page, so direct access is blocked. Open the link and download manually."
         }
         details.contains("timeout", ignoreCase = true) -> {
             "$sourceLabel took too long to respond. Try again or use Manual mode."

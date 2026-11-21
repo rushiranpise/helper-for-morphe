@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Models + fetcher for the Morphe archive index that powers the "Find New
- * Apps" findapps. The index is deliberately NOT cached: every open fetches the
+ * Apps" browser. The index is deliberately NOT cached: every open fetches the
  * current JSON live so the list always reflects the archive right now.
  */
 internal data class MorpheArchiveData(
@@ -219,7 +219,7 @@ internal data class ArchiveFreshness(val label: String, val stale: Boolean)
 private const val STALE_AFTER_MS = 48L * 60L * 60L * 1000L
 
 /**
- * How long ago the index was built, phrased for the findapps header. Returns null
+ * How long ago the index was built, phrased for the browser header. Returns null
  * when the timestamp is missing or unreadable, so the caller shows nothing rather
  * than claiming a freshness it cannot know.
  */

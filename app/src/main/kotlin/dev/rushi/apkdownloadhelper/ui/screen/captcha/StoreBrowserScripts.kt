@@ -9,7 +9,7 @@ import org.json.JSONObject
 
 /**
  * Walks APKMirror's search -> release -> variant -> download chain in the
- * in-app findapps. The HTTP parser already does this with plain requests; this
+ * in-app browser. The HTTP parser already does this with plain requests; this
  * is the same walk on a page that can pass Cloudflare, with the requested
  * version, ABI and build code used to pick the right variant.
  */
@@ -281,7 +281,7 @@ internal fun apkMirrorBrowserScript(
 
 /**
  * Walks APKPure's search -> versions -> app -> download chain in the in-app
- * findapps, the last resort after the direct endpoint and web parsers fail.
+ * browser, the last resort after the direct endpoint and web parsers fail.
  */
 internal fun apkPureBrowserScript(
     candidate: DownloadCandidate,

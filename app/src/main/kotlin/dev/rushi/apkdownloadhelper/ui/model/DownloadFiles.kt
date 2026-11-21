@@ -10,7 +10,7 @@ internal data class CandidateDownloadFile(
     val size: Long? = null,
     val referer: String? = null,
     val cookieHeader: String? = null,
-    // The exact findapps identity that earned the captured cookies. APKMirror's
+    // The exact browser identity that earned the captured cookies. APKMirror's
     // Cloudflare clearance is tied to the user agent, so the download must
     // introduce itself the same way the WebView did.
     val userAgent: String? = null,

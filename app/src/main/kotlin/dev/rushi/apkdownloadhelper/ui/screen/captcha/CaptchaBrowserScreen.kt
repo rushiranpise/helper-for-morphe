@@ -154,13 +154,13 @@ internal fun CaptchaBrowserScreen(
                     view: WebView?,
                     request: WebResourceRequest?
                 ): WebResourceResponse? {
-                    // Apply AdGuard DNS filtering to the in-app findapps: when the
+                    // Apply AdGuard DNS filtering to the in-app browser: when the
                     // setting is on, drop subresources whose host AdGuard filters
                     // (ads/trackers answer 0.0.0.0). Any resolver failure means
                     // "not blocked", so the page still loads.
                     val host = request?.url?.host ?: return null
                     if (AdGuardDns.isBlocked(host)) {
-                        Log.i(TAG, "AdGuard DNS: blocked ${request.url} in the in-app findapps")
+                        Log.i(TAG, "AdGuard DNS: blocked ${request.url} in the in-app browser")
                         return WebResourceResponse(
                             "text/plain",
                             "utf-8",
@@ -389,7 +389,7 @@ internal fun CaptchaBrowserScreen(
             ) {
                 InfoBox(title = "Download from ${candidate.source.label}", icon = Icons.Outlined.OpenInBrowser) {
                     Text(
-                        text = "Complete any findapps check on the page. The file returns to " +
+                        text = "Complete any browser check on the page. The file returns to " +
                             "Morphe automatically when its download starts.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant

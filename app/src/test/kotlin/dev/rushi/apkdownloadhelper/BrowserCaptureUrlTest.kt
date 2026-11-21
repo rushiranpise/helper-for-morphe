@@ -11,7 +11,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * What the in-app findapps treats as the file it was opened to capture.
+ * What the in-app browser treats as the file it was opened to capture.
  *
  * Uptodown's links carry no extension (`dw.uptodown.com/dwn/<token>`), so the extension
  * test alone let the page handle the download itself and nothing was captured.

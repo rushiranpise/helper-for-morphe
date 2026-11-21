@@ -226,7 +226,7 @@ class MainActivity : ComponentActivity() {
         "Mozilla/5.0 (Linux; Android ${Build.VERSION.RELEASE}; ${Build.MODEL}) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
 
-    /** APKMirror challenges findapps user agents but serves this one normally. */
+    /** APKMirror challenges browser user agents but serves this one normally. */
     private val apkMirrorUserAgent = "HelperForMorphe/1.0"
 
     private val client = OkHttpClient.Builder()
@@ -395,8 +395,8 @@ class MainActivity : ComponentActivity() {
     private var pendingSwitchTarget: DownloadCandidate? = null
     private var pendingSwitchOption: CandidateOption? = null
     private var switchCandidatePrompt by mutableStateOf<SwitchCandidatePrompt?>(null)
-    // Non-null while the in-app findapps is open for a candidate whose source
-    // needs a real findapps to reach the APK download.
+    // Non-null while the in-app browser is open for a candidate whose source
+    // needs a real browser to reach the APK download.
     private var captchaBrowser by mutableStateOf<DownloadCandidate?>(null)
     // Set when a repeat request matches previous downloads that still exist;
     // the user picks one to reuse or chooses to download a fresh copy.
@@ -1537,7 +1537,7 @@ class MainActivity : ComponentActivity() {
         val manual = manualCandidates(request).firstOrNull { it.source == source } ?: return null
         val requestedVersionName = request.requestedVersionNames.firstOrNull()
         val requestedVersionCode = request.versionCode ?: request.versionCodes.singleOrNull()
-        // Keep the findapps on the source itself when its search page is the
+        // Keep the browser on the source itself when its search page is the
         // thing that hit Cloudflare, instead of sending the user to a Google
         // result for the app.
         val browserUrl = when (source) {
@@ -1868,13 +1868,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // ---- In-app captcha findapps: let the user solve a captcha in a real
-    // findapps and capture the download URL it produces ----
+    // ---- In-app captcha browser: let the user solve a captcha in a real
+    // browser and capture the download URL it produces ----
 
     private fun openCaptchaBrowser(candidate: DownloadCandidate) {
         if (candidate.source == DownloadSource.AURORA || candidate.source == DownloadSource.PLAY) return
         appendLog(
-            "Opening in-app findapps for ${candidate.source.label} to continue the download.",
+            "Opening in-app browser for ${candidate.source.label} to continue the download.",
             LogLevel.Info
         )
         captchaBrowser = candidate
@@ -1886,12 +1886,12 @@ class MainActivity : ComponentActivity() {
         if (candidate == null || !fastModeActive) return
         abandonFastModeCaptcha(
             candidate,
-            "Fast Mode: findapps closed before ${candidate.source.label} started a download."
+            "Fast Mode: browser closed before ${candidate.source.label} started a download."
         )
     }
 
     /**
-     * A Fast Mode captcha route that did not produce a file (closed findapps, challenge
+     * A Fast Mode captcha route that did not produce a file (closed browser, challenge
      * timeout or build mismatch) must release the source queue instead of leaving the
      * card waiting forever. The source is marked failed and the next one is tried.
      */
@@ -1929,7 +1929,7 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * The findapps rejected a page whose build does not match the request.
+     * The browser rejected a page whose build does not match the request.
      * Mark the wrapper source as failed, not the provider whose page it was.
      */
     private fun onBrowserBuildMismatch(code: String?) {
@@ -1971,7 +1971,7 @@ class MainActivity : ComponentActivity() {
         val cookieHeader = capture.cookieHeader
             ?: CookieManager.getInstance().getCookie(referer)
         appendLog(
-            "Captured download link from ${candidate.source.label} in the in-app findapps " +
+            "Captured download link from ${candidate.source.label} in the in-app browser " +
                 "($fileKind): ${capture.downloadUrl}",
             LogLevel.Info
         )
@@ -2222,7 +2222,7 @@ class MainActivity : ComponentActivity() {
                                 awaitingDecision = true,
                                 awaitingCaptcha = true,
                                 mismatchDetail = "${source.label} has ${candidate.versionDisplay}, but the " +
-                                    "download needs a captcha. Solve it in the in-app findapps to continue."
+                                    "download needs a captcha. Solve it in the in-app browser to continue."
                             )
                         )
                         val decision = decisionGate.await()
@@ -2449,7 +2449,7 @@ class MainActivity : ComponentActivity() {
             .filter { (_, candidate) ->
                 // Format differences are fine, but the exact version name AND
                 // version code are both required. A captcha-gated page is still an
-                // exact match: the in-app findapps can reveal its file after the user
+                // exact match: the in-app browser can reveal its file after the user
                 // solves the challenge. A candidate that reports a code outside the
                 // request is surfaced as a mismatch the user can accept or skip 
                 // never silently downloaded.
@@ -3355,7 +3355,7 @@ internal fun HelperOutlinedButton(
     )
 }
 
-// ---- In-app captcha findapps: a real WebView that passes Cloudflare-style
+// ---- In-app captcha browser: a real WebView that passes Cloudflare-style
 // challenges, captures the download URL the page produces, and hands it to the
 // normal download pipeline. Any source that gates its file behind a captcha can
 // opt in by setting DownloadCandidate.captchaUrl.

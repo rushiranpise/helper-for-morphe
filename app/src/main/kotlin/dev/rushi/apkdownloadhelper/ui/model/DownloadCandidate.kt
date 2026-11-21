@@ -25,12 +25,12 @@ internal data class DownloadCandidate(
     val variantNumber: Int? = null,
     val files: List<CandidateDownloadFile> = emptyList(),
     // When set, the source gates the file behind a captcha/JS challenge that
-    // only a real findapps can pass. The card then offers a "Solve captcha in
+    // only a real browser can pass. The card then offers a "Solve captcha in
     // app" action that opens this URL in an embedded WebView and captures the
     // download the page produces.
     val captchaUrl: String? = null,
     // The source whose page a wrapper such as Morphe Link resolved. It keeps the
-    // candidate branded as the wrapper while still selecting that source's findapps
+    // candidate branded as the wrapper while still selecting that source's browser
     // script for a captcha page.
     val viaSource: DownloadSource? = null
 ) {
