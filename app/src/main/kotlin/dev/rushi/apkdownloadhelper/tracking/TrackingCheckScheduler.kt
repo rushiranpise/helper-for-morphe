@@ -41,4 +41,18 @@ internal object TrackingCheckScheduler {
             request
         )
     }
+
+    fun checkNow(context: Context) {
+        val workManager = WorkManager.getInstance(context)
+        if (MorpheTracking.load(context).isEmpty()) return
+
+        val request = androidx.work.OneTimeWorkRequestBuilder<TrackingCheckWorker>()
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .build()
+            )
+            .build()
+        workManager.enqueue(request)
+    }
 }
