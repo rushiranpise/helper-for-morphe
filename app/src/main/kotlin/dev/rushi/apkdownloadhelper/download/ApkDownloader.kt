@@ -101,6 +101,9 @@ internal class ApkDownloader(
         // this HTTP client, so import it before the first request. A cleared
         // challenge is only valid for the cookies that solved it.
         url.toHttpUrlOrNull()?.let { SessionCookies.importCookieHeader(it, download.cookieHeader) }
+        download.referer?.normalizedHttpUrlOrNull()?.toHttpUrlOrNull()?.let {
+            SessionCookies.importCookieHeader(it, download.cookieHeader)
+        }
 
         // Resume a partial single-stream file with the existing path. Mixing a
         // byte offset with a segment layout would corrupt the output.
