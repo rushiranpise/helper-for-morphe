@@ -130,4 +130,45 @@ class SplitArchiveScanTest {
             file.delete()
         }
     }
+
+    @Test
+    fun `packageSplitArchive stores split APK files and deletes staged files`() {
+        val split1 = File.createTempFile("stage-base", ".part")
+        val split2 = File.createTempFile("stage-config", ".part")
+        val outputFile = File.createTempFile("test-splits", ".apks")
+        try {
+            split1.writeText("base apk content payload")
+            split2.writeText("config split content payload")
+
+            packageSplitArchive(
+                outputFile = outputFile,
+                stagedFiles = listOf(
+                    split1 to "base.apk",
+                    split2 to "split_config.arm64_v8a.apk"
+                )
+            )
+
+            assertFalse("Staged file 1 should be deleted after packaging", split1.exists())
+            assertFalse("Staged file 2 should be deleted after packaging", split2.exists())
+            assertTrue("Output package should exist", outputFile.exists())
+            assertTrue("Should be recognized as a split container", outputFile.isSplitApkContainer())
+
+            java.util.zip.ZipFile(outputFile).use { zip ->
+                val baseEntry = zip.getEntry("base.apk")
+                val splitEntry = zip.getEntry("split_config.arm64_v8a.apk")
+                assertTrue(baseEntry != null)
+                assertTrue(splitEntry != null)
+
+                val baseContent = zip.getInputStream(baseEntry).bufferedReader().readText()
+                val splitContent = zip.getInputStream(splitEntry).bufferedReader().readText()
+                assertEquals("base apk content payload", baseContent)
+                assertEquals("config split content payload", splitContent)
+            }
+        } finally {
+            split1.delete()
+            split2.delete()
+            outputFile.delete()
+        }
+    }
 }
+

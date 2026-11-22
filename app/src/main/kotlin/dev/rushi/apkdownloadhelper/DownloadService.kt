@@ -30,6 +30,7 @@ import dev.rushi.apkdownloadhelper.download.compareVersionNames
 import dev.rushi.apkdownloadhelper.download.downloadFailureMessage
 import dev.rushi.apkdownloadhelper.download.httpLoggingInterceptor
 import dev.rushi.apkdownloadhelper.download.normalizedArchiveExtension
+import dev.rushi.apkdownloadhelper.download.packageSplitArchive
 import dev.rushi.apkdownloadhelper.download.readDownloadedApkMetadata
 import dev.rushi.apkdownloadhelper.download.sanitizeFileName
 import dev.rushi.apkdownloadhelper.download.versionNameEquals
@@ -995,14 +996,8 @@ internal class DownloadService : Service() {
             stagedFile to file.fileName.ifBlank { "split_$index.apk" }.sanitizeFileName()
         }
 
-        ZipOutputStream(outputFile.outputStream()).use { zip ->
-            staged.forEach { (stagedFile, entryName) ->
-                zip.putNextEntry(ZipEntry(entryName))
-                stagedFile.inputStream().use { input -> input.copyTo(zip) }
-                zip.closeEntry()
-                stagedFile.delete()
-            }
-        }
+        emitPostDownloadStatus(candidate, "Packaging split bundle (.apks)…")
+        packageSplitArchive(outputFile, staged)
         return outputFile
     }
 

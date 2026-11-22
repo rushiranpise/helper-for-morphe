@@ -37,9 +37,11 @@ import java.net.URLEncoder
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.util.Locale
+import java.util.zip.Deflater
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 
 internal fun playStoreUrl(packageName: String): String =
@@ -781,6 +783,25 @@ internal fun String.sanitizeFileName(): String =
     replace(Regex("[^A-Za-z0-9._-]"), "_")
 
 internal val PACKAGE_PATTERN = Regex("""^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$""")
+
+/**
+ * Packages multiple staged APK files into a single `.apks` zip container without recompressing
+ * already-compressed APK files, significantly reducing CPU usage and packaging latency.
+ */
+internal fun packageSplitArchive(
+    outputFile: File,
+    stagedFiles: List<Pair<File, String>>
+) {
+    ZipOutputStream(outputFile.outputStream().buffered()).use { zip ->
+        zip.setLevel(Deflater.NO_COMPRESSION)
+        stagedFiles.forEach { (stagedFile, entryName) ->
+            zip.putNextEntry(ZipEntry(entryName))
+            stagedFile.inputStream().buffered().use { input -> input.copyTo(zip) }
+            zip.closeEntry()
+            stagedFile.delete()
+        }
+    }
+}
 
 
 
