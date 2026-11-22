@@ -55,6 +55,64 @@ import dev.rushi.apkdownloadhelper.ui.shared.state.EmptyLaunchState
 import dev.rushi.apkdownloadhelper.ui.theme.AppColors
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.glassFill
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.outlined.DownloadDone
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.core.content.ContextCompat
+import dev.rushi.apkdownloadhelper.isHistoryUriUsable
+import dev.rushi.apkdownloadhelper.storage.DownloadHistoryEntry
+import dev.rushi.apkdownloadhelper.storage.DownloadHistoryStore
+import dev.rushi.apkdownloadhelper.tracking.TrackingCheckScheduler
+import dev.rushi.apkdownloadhelper.ui.model.FavouriteApps
+import dev.rushi.apkdownloadhelper.ui.model.TrackedAppChanges
+import dev.rushi.apkdownloadhelper.ui.model.TrackedAppSnapshot
+import dev.rushi.apkdownloadhelper.ui.model.TrackingStore
+import dev.rushi.apkdownloadhelper.ui.model.trackedChanges
+import dev.rushi.apkdownloadhelper.ui.model.trackingPackageKey
+import dev.rushi.apkdownloadhelper.ui.shared.appcard.AppListCard
+import dev.rushi.apkdownloadhelper.ui.shared.text.SectionTitle
+import dev.rushi.apkdownloadhelper.ui.theme.animatedListItem
+import dev.rushi.apkdownloadhelper.updater.ArchiveApp
+import dev.rushi.apkdownloadhelper.updater.MorpheArchive
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+private data class StoredApkCardItem(
+    val entry: DownloadHistoryEntry,
+    val app: ArchiveApp,
+    val installed: Boolean
+)
+
+private fun loadStoredApkItems(context: android.content.Context): List<StoredApkCardItem> {
+    val archiveAppsByPkg = runCatching {
+        MorpheArchive.loadCachedIndex(context)?.apps?.associateBy { it.packageName }
+    }.getOrNull().orEmpty()
+
+    return DownloadHistoryStore.entries(context)
+        .filter { context.isHistoryUriUsable(it.uri) }
+        .map { entry ->
+            val baseApp = archiveAppsByPkg[entry.packageName]
+            val app = baseApp?.copy(
+                name = entry.appName.ifBlank { baseApp.name }
+            ) ?: ArchiveApp(
+                packageName = entry.packageName,
+                name = entry.appName,
+                versions = listOfNotNull(entry.versionName)
+            )
+            val installed = runCatching {
+                context.packageManager.getPackageInfo(entry.packageName, 0) != null
+            }.getOrDefault(false)
+            StoredApkCardItem(entry = entry, app = app, installed = installed)
+        }
+}
 
 //==================================================
 // Normal App Open
@@ -64,8 +122,10 @@ import dev.rushi.apkdownloadhelper.ui.theme.glassFill
 internal fun HelperStandaloneContent(
     settings: HelperSettings,
     onSettingsChange: (HelperSettings) -> Unit,
-    onOpenMorphe: () -> Unit
+    onOpenMorphe: () -> Unit,
+    onOpenApp: (ArchiveApp) -> Unit = {}
 ) {
+    val context = LocalContext.current
     val listState = rememberLazyListState()
     val headerHaze = remember { HazeState() }
     var headerHeightDp by remember { mutableStateOf(0.dp) }
@@ -73,6 +133,92 @@ internal fun HelperStandaloneContent(
         derivedStateOf {
             listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0
         }
+    }
+
+    var storedItems by remember { mutableStateOf(loadStoredApkItems(context)) }
+    var entryToDelete by remember { mutableStateOf<DownloadHistoryEntry?>(null) }
+
+    LaunchedEffect(Unit) {
+        val archiveAppsByPkg = withContext(Dispatchers.IO) {
+            runCatching {
+                (MorpheArchive.loadCachedIndex(context) ?: MorpheArchive.fetchIndex(context))
+                    .apps
+                    .associateBy { it.packageName }
+            }.getOrDefault(emptyMap())
+        }
+        if (archiveAppsByPkg.isNotEmpty()) {
+            storedItems = storedItems.map { item ->
+                val matched = archiveAppsByPkg[item.entry.packageName] ?: return@map item
+                item.copy(
+                    app = matched.copy(name = item.entry.appName.ifBlank { matched.name })
+                )
+            }
+        }
+    }
+
+    fun deleteStoredEntry(entry: DownloadHistoryEntry) {
+        val uri = android.net.Uri.parse(entry.uri)
+        runCatching {
+            if (entry.uri.startsWith("content://")) {
+                context.contentResolver.delete(uri, null, null)
+            } else {
+                uri.path?.let { java.io.File(it).delete() }
+            }
+        }
+        storedItems = storedItems.filterNot {
+            it.entry.uri == entry.uri && it.entry.timestamp == entry.timestamp
+        }
+    }
+
+    fun shareStoredEntry(entry: DownloadHistoryEntry) {
+        val uri = android.net.Uri.parse(entry.uri)
+        val mime = if (entry.fileName.endsWith(".apk", ignoreCase = true)) {
+            "application/vnd.android.package-archive"
+        } else {
+            "application/octet-stream"
+        }
+        val share = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = mime
+            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            clipData = android.content.ClipData.newUri(context.contentResolver, entry.fileName, uri)
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        runCatching {
+            context.startActivity(
+                android.content.Intent.createChooser(
+                    share,
+                    "Share ${entry.fileName}"
+                )
+            )
+        }
+    }
+
+    entryToDelete?.let { target ->
+        dev.rushi.apkdownloadhelper.ui.shared.dialog.AppAlertDialog(
+            onDismissRequest = { entryToDelete = null },
+            title = {
+                Text(
+                    text = "Delete APK?",
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                )
+            },
+            text = { Text("Delete ${target.fileName} from storage?") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        entryToDelete = null
+                        deleteStoredEntry(target)
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { entryToDelete = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -87,10 +233,48 @@ internal fun HelperStandaloneContent(
                 end = AppDefaults.ContentPadding,
                 bottom = 160.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(AppDefaults.ItemSpacing)
+            verticalArrangement = Arrangement.spacedBy(
+                if (storedItems.isNotEmpty()) 3.dp else AppDefaults.ItemSpacing
+            )
         ) {
-            item {
-                EmptyLaunchState(onOpenMorphe = onOpenMorphe)
+            if (storedItems.isEmpty()) {
+                item(key = "empty_launch") {
+                    EmptyLaunchState(onOpenMorphe = onOpenMorphe)
+                }
+            } else {
+                itemsIndexed(
+                    items = storedItems,
+                    key = { index, item -> "${item.entry.uri}_${item.entry.timestamp}_$index" }
+                ) { index, item ->
+                    val isFirst = index == 0
+                    val isLast = index == storedItems.lastIndex
+                    val outerRadius = 22.dp
+                    val innerRadius = 10.dp
+                    val cardShape = RoundedCornerShape(
+                        topStart = if (isFirst) outerRadius else innerRadius,
+                        topEnd = if (isFirst) outerRadius else innerRadius,
+                        bottomStart = if (isLast) outerRadius else innerRadius,
+                        bottomEnd = if (isLast) outerRadius else innerRadius
+                    )
+                    val versionLine = listOfNotNull(
+                        item.entry.versionName?.takeIf { it.isNotBlank() } ?: item.entry.fileName,
+                        item.entry.sourceName.takeIf { it.isNotBlank() }
+                    ).joinToString(" · ")
+
+                    AppListCard(
+                        app = item.app,
+                        installed = item.installed,
+                        favourite = false,
+                        shape = cardShape,
+                        useGradient = settings.useGradientCardColors,
+                        customBottomText = versionLine,
+                        onToggleFavourite = {},
+                        onShare = { shareStoredEntry(item.entry) },
+                        onDelete = { entryToDelete = item.entry },
+                        onClick = { onOpenApp(item.app) },
+                        modifier = Modifier.animatedListItem(this)
+                    )
+                }
             }
         }
 

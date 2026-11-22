@@ -653,11 +653,13 @@ class MainActivity : ComponentActivity() {
                                             activeSettingsCategory != null ||
                                             showSourcesScreen ||
                                             selectedArchiveApp != null ||
-                                            uiState is UiState.Downloading ||
-                                            uiState is UiState.FastMode ||
-                                            uiState is UiState.ScanAsk ||
-                                            uiState is UiState.ScanResult ||
-                                            (uiState is UiState.Ready && request != null)
+                                            (request != null && (
+                                                    uiState is UiState.Ready ||
+                                                            uiState is UiState.Downloading ||
+                                                            uiState is UiState.FastMode ||
+                                                            uiState is UiState.ScanAsk ||
+                                                            uiState is UiState.ScanResult
+                                                    ))
                                 }
                             )
                         }
@@ -843,6 +845,20 @@ class MainActivity : ComponentActivity() {
         // keep the in-flight request on screen: only a fresh Morphe request
         // replaces the current session.
         if (intent.action != DownloadHelperContract.ACTION_DOWNLOAD_ORIGINAL_APK) {
+            // If no download/scan is actively running in the background, clear any
+            // finished Morphe request session so returning via the launcher opens
+            // the standalone screen with the bottom navigation bar visible.
+            val hasActiveTransfer = DownloadJobManager.activeJob != null ||
+                DownloadJobManager.pendingScan != null ||
+                fastModeActive ||
+                autoRetryActive
+            if (!hasActiveTransfer && request != null) {
+                request = null
+                reuseOffer = null
+                switchCandidatePrompt = null
+                captchaBrowser = null
+                uiState = UiState.Idle
+            }
             installedPackageRefreshToken++
             return
         }
@@ -1222,38 +1238,53 @@ class MainActivity : ComponentActivity() {
 
     private fun downloadVersion(candidate: DownloadCandidate) {
         val activeRequest = request ?: return
-        // Capture the current result before Loading replaces it, so a failed
-        // resolution can restore the history list with this row flipped to
-        // "Open link" instead of wiping back to a fresh screen.
         val currentResult = (uiState as? UiState.Ready)?.result
             ?: initialCandidateResult(activeRequest)
+        val candidateKey = candidate.identityKey()
         appendLog("Resolving ${candidate.versionDisplay} from ${candidate.source.label} for download...")
-        uiState = UiState.Loading
+        // Keep the History list visible and show an inline spinner on this row's button
+        // instead of replacing the screen with UiState.Loading.
+        uiState = UiState.Ready(
+            currentResult.setHistoryResolvingKey(
+                source = candidate.source,
+                candidateKey = candidateKey
+            )
+        )
         lifecycleScope.launch {
             val resolved = withContext(Dispatchers.IO) {
                 runCatching { resolveHistoryCandidate(activeRequest, candidate) }
             }
+            val latestResult = (uiState as? UiState.Ready)?.result ?: currentResult
             resolved
                 .onSuccess { direct ->
                     if (direct == null) {
-                        // No direct download exists for this version. Keep the
-                        // history list usable by flipping this row to an
-                        // "Open link" action instead of erroring the whole screen.
                         val message =
                             "No direct download was available for ${candidate.versionDisplay} " +
                                 "on ${candidate.source.label}. Open the version page manually."
                         appendLog(message, LogLevel.Warning)
                         uiState = UiState.Ready(
-                            currentResult.markHistoryCandidateNoDirectDownload(
+                            latestResult.markHistoryCandidateNoDirectDownload(
                                 source = candidate.source,
-                                candidateKey = candidate.identityKey()
+                                candidateKey = candidateKey
                             )
                         )
                     } else {
+                        uiState = UiState.Ready(
+                            latestResult.setHistoryResolvingKey(
+                                source = candidate.source,
+                                candidateKey = null
+                            )
+                        )
                         downloadAndReturn(direct)
                     }
                 }
                 .onFailure { error ->
+                    uiState = UiState.Ready(
+                        latestResult.setHistoryResolvingKey(
+                            source = candidate.source,
+                            candidateKey = null
+                        )
+                    )
                     val message = downloadFailureMessage(candidate, error)
                     appendLog(message, LogLevel.Error)
                     showFailure(message, candidate.source, candidate.option)
@@ -1747,6 +1778,13 @@ class MainActivity : ComponentActivity() {
 
     private fun pauseDownload() {
         appendLog("Pausing download…", LogLevel.Info)
+        when (val current = uiState) {
+            is UiState.Downloading -> uiState = current.copy(paused = true)
+            is UiState.FastMode -> uiState = current.copy(
+                progress = current.progress.copy(paused = true)
+            )
+            else -> Unit
+        }
         runCatching {
             startService(
                 Intent(this, DownloadService::class.java).setAction(ACTION_PAUSE_DOWNLOAD)
@@ -1758,6 +1796,13 @@ class MainActivity : ComponentActivity() {
 
     private fun resumeDownload() {
         appendLog("Resuming download…", LogLevel.Info)
+        when (val current = uiState) {
+            is UiState.Downloading -> uiState = current.copy(paused = false)
+            is UiState.FastMode -> uiState = current.copy(
+                progress = current.progress.copy(paused = false)
+            )
+            else -> Unit
+        }
         runCatching {
             startService(
                 Intent(this, DownloadService::class.java).setAction(ACTION_RESUME_DOWNLOAD)
@@ -2539,9 +2584,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
             is DownloadJobManager.Event.Progress -> {
-                val wasPaused = (uiState as? UiState.Downloading)?.paused
-                    ?: (uiState as? UiState.FastMode)?.progress?.paused
-                    ?: false
+                val currentFastTitle = (uiState as? UiState.FastMode)?.progress?.title
                 uiState = if (fastModeActive) {
                     UiState.FastMode(
                         FastModeProgress(
@@ -2550,18 +2593,23 @@ class MainActivity : ComponentActivity() {
                             percent = event.percent,
                             speedBytesPerSec = event.speedBytesPerSec,
                             etaMs = event.etaMs,
-                            paused = wasPaused,
-                            connections = event.connections
+                            paused = event.paused,
+                            connections = event.connections,
+                            downloadedBytes = event.downloadedBytes,
+                            totalBytes = event.totalBytes,
+                            title = currentFastTitle
                         )
                     )
                 } else {
                     UiState.Downloading(
-                        event.candidate,
-                        event.percent,
-                        event.speedBytesPerSec,
-                        event.etaMs,
-                        paused = wasPaused,
-                        connections = event.connections
+                        candidate = event.candidate,
+                        percent = event.percent,
+                        speedBytesPerSec = event.speedBytesPerSec,
+                        etaMs = event.etaMs,
+                        paused = event.paused,
+                        connections = event.connections,
+                        downloadedBytes = event.downloadedBytes,
+                        totalBytes = event.totalBytes
                     )
                 }
             }

@@ -38,10 +38,10 @@ private val APKMIRROR_EDITION_SLUG_REGEX = Regex(
 )
 
 private const val APKMIRROR_BROWSER_NOTE =
-    "Complete any browser check, then choose the file on the APKMirror page."
+    "Solve captcha in the in-app browser — the app will handle everything else automatically."
 
 private const val APKMIRROR_SEARCH_NOTE =
-    "Open APKMirror's search results, then choose the app and version."
+    "Solve captcha in the in-app browser — the app will handle everything else automatically."
 
 internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSourceParser {
     override val source: DownloadSource = DownloadSource.APK_MIRROR

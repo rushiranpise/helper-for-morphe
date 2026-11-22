@@ -50,7 +50,23 @@ import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
 import dev.rushi.apkdownloadhelper.ui.model.UiState
 import dev.rushi.apkdownloadhelper.ui.shared.button.SkipWaitButton
 import dev.rushi.apkdownloadhelper.ui.shared.dialog.AppAlertDialog
+import dev.rushi.apkdownloadhelper.ui.shared.progress.WavyLinearProgressBar
 import dev.rushi.apkdownloadhelper.ui.theme.pressScale
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Button
+
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.window.Dialog
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.AppDialogProperties
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.DialogContentPadding
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.DialogSurface
+import dev.rushi.apkdownloadhelper.ui.theme.pressScale
+import dev.rushi.apkdownloadhelper.ui.util.formatBytes
 import dev.rushi.apkdownloadhelper.ui.util.formatTransferEta
 import dev.rushi.apkdownloadhelper.ui.util.formatTransferSpeed
 
@@ -65,44 +81,14 @@ internal fun DownloadingState(
     onSkipWait: () -> Unit,
     onSkipScan: () -> Unit
 ) {
-    var showSwitch by remember { mutableStateOf(false) }
-    var resumeOnDismiss by remember { mutableStateOf(false) }
+    var showCancelConfirm by remember { mutableStateOf(false) }
 
-    if (showSwitch) {
-        AppAlertDialog(
-            onDismissRequest = {
-                showSwitch = false
-                if (resumeOnDismiss) onResume()
-                resumeOnDismiss = false
-            },
-            title = { Text("Switch source") },
-            text = {
-                Column {
-                    availableSources
-                        .filter { it != state.candidate.source }
-                        .forEach { source ->
-                            TextButton(
-                                onClick = {
-                                    showSwitch = false
-                                    resumeOnDismiss = false
-                                    onSwitchSource(source)
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(source.label)
-                            }
-                        }
-                }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showSwitch = false
-                        if (resumeOnDismiss) onResume()
-                        resumeOnDismiss = false
-                    }
-                ) { Text("Cancel") }
+    if (showCancelConfirm) {
+        CancelDownloadDialog(
+            onKeepDownloading = { showCancelConfirm = false },
+            onConfirmStop = {
+                showCancelConfirm = false
+                onCancel()
             }
         )
     }
@@ -149,52 +135,52 @@ internal fun DownloadingState(
                     )
                 }
                 if (!isScan) {
-                    TransferStats(
-                        connections = state.connections,
-                        speedBytesPerSec = state.speedBytesPerSec,
-                        etaMs = state.etaMs,
-                        paused = state.paused,
-                        includeConnections = state.percent < 100
-                    )
+                    val candidateMeta = buildList {
+                        state.candidate.versionName?.takeIf { it.isNotBlank() }?.let(::add)
+                        state.candidate.fileKind
+                            .takeIf { !it.equals("web", ignoreCase = true) }
+                            ?.uppercase()
+                            ?.let(::add)
+                    }.joinToString(" · ")
+                    if (candidateMeta.isNotBlank()) {
+                        Text(
+                            text = candidateMeta,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
-
             DownloadPercentPill(percent = state.percent, paused = state.paused)
-
-            DownloadCancelButton(onClick = onCancel)
+            DownloadCancelButton(onClick = { showCancelConfirm = true })
         }
 
-        // Linear progress bar
         DownloadProgressBar(
             percent = state.percent,
-            paused = state.paused,
-            modifier = Modifier.fillMaxWidth()
+            paused = state.paused
         )
 
+        if (!isScan) {
+            DownloadDetailsRow(
+                downloadedBytes = state.downloadedBytes,
+                totalBytes = state.totalBytes,
+                speedBytesPerSec = state.speedBytesPerSec,
+                etaMs = state.etaMs,
+                connections = state.connections,
+                paused = state.paused,
+                showConnections = state.percent < 100
+            )
+        }
+
         if (!isScan && state.percent < 100) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                DownloadPillButton(
-                    text = if (state.paused) "Resume" else "Pause",
-                    icon = if (state.paused) Icons.Outlined.PlayArrow else Icons.Outlined.Pause,
-                    primary = true,
-                    onClick = if (state.paused) onResume else onPause,
-                    modifier = Modifier.weight(1f)
-                )
-                DownloadPillButton(
-                    text = "Switch source",
-                    icon = Icons.Outlined.SwapHoriz,
-                    primary = false,
-                    onClick = {
-                        resumeOnDismiss = !state.paused
-                        if (!state.paused) onPause()
-                        showSwitch = true
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-            }
+            DownloadPillButton(
+                text = if (state.paused) "Resume" else "Pause",
+                icon = if (state.paused) Icons.Outlined.PlayArrow else Icons.Outlined.Pause,
+                onClick = if (state.paused) onResume else onPause,
+                primary = true,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
 
         SkipWaitButton(
@@ -232,28 +218,17 @@ internal fun DownloadProgressBar(
         animationSpec = tween(220),
         label = "download_linear_progress"
     )
-    Box(
-        modifier = modifier
-            .height(8.dp)
-            .clip(CircleShape)
-            .background(scheme.surfaceVariant.copy(alpha = 0.65f))
-    ) {
-        if (animatedProgress > 0f) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(animatedProgress)
-                    .fillMaxHeight()
-                    .clip(CircleShape)
-                    .background(
-                        if (paused) {
-                            scheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        } else {
-                            scheme.primary
-                        }
-                    )
-            )
-        }
-    }
+    WavyLinearProgressBar(
+        progress = { animatedProgress },
+        active = !paused && percent < 100,
+        color = if (paused) {
+            scheme.onSurfaceVariant.copy(alpha = 0.65f)
+        } else {
+            scheme.primary
+        },
+        trackColor = scheme.surfaceVariant.copy(alpha = 0.7f),
+        modifier = modifier.height(16.dp)
+    )
 }
 
 @Composable
@@ -408,6 +383,162 @@ private fun transferStatLines(
             ?.let(::add)
         if (etaMs != null && etaMs > 0L) {
             add("${formatTransferEta(etaMs)} left")
+        }
+    }
+}
+
+@Composable
+internal fun DownloadDetailsRow(
+    downloadedBytes: Long,
+    totalBytes: Long,
+    speedBytesPerSec: Double,
+    etaMs: Long?,
+    connections: Int,
+    paused: Boolean,
+    showConnections: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    val sizeText = when {
+        totalBytes > 0L -> "${downloadedBytes.formatBytes()} / ${totalBytes.formatBytes()}"
+        downloadedBytes > 0L -> downloadedBytes.formatBytes()
+        else -> null
+    }
+    val rightParts = buildList {
+        if (paused) {
+            add("Paused")
+        } else {
+            formatTransferSpeed(speedBytesPerSec).takeIf { it.isNotEmpty() }?.let(::add)
+            if (etaMs != null && etaMs > 0L) add("${formatTransferEta(etaMs)} left")
+        }
+        if (showConnections) {
+            add("$connections ${if (connections == 1) "conn" else "conns"}")
+        }
+    }
+
+    if (sizeText == null && rightParts.isEmpty()) return
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (sizeText != null) {
+            Text(
+                text = sizeText,
+                style = MaterialTheme.typography.labelMedium,
+                color = scheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
+        }
+        if (rightParts.isNotEmpty()) {
+            Text(
+                text = rightParts.joinToString(" · "),
+                style = MaterialTheme.typography.labelMedium,
+                color = scheme.onSurfaceVariant,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+internal fun CancelDownloadDialog(
+    title: String = "Stop download?",
+    message: String = "The current download progress will be discarded.",
+    onKeepDownloading: () -> Unit,
+    onConfirmStop: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    Dialog(
+        onDismissRequest = onKeepDownloading,
+        properties = AppDialogProperties
+    ) {
+        DialogSurface(modifier = Modifier.fillMaxWidth(0.90f)) {
+            Column(
+                modifier = Modifier.padding(DialogContentPadding),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(scheme.errorContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Close,
+                            contentDescription = null,
+                            tint = scheme.onErrorContainer,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = scheme.onSurface
+                    )
+                }
+
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = scheme.onSurfaceVariant
+                )
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val keepInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                    Button(
+                        onClick = onKeepDownloading,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .pressScale(keepInteraction),
+                        interactionSource = keepInteraction,
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = scheme.primaryContainer,
+                            contentColor = scheme.onPrimaryContainer
+                        )
+                    ) {
+                        Text(
+                            text = "Keep downloading",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    val stopInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                    Button(
+                        onClick = onConfirmStop,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .pressScale(stopInteraction),
+                        interactionSource = stopInteraction,
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = scheme.errorContainer.copy(alpha = 0.85f),
+                            contentColor = scheme.onErrorContainer
+                        )
+                    ) {
+                        Text(
+                            text = "Stop",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
         }
     }
 }

@@ -1,8 +1,10 @@
 package dev.rushi.apkdownloadhelper.ui.shared.download
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -23,6 +25,7 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material.icons.outlined.VerifiedUser
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -123,7 +126,7 @@ internal fun CandidateCard(
 
         if (candidate.directDownload) {
             ModePrimaryPillButton(
-                text = "Download and return",
+                text = "Download",
                 icon = Icons.Outlined.Download,
                 onClick = onDownload,
                 modifier = Modifier.fillMaxWidth()
@@ -153,20 +156,21 @@ internal fun CandidateCard(
                     onClick = { onSolveCaptcha(candidate) },
                     modifier = Modifier.fillMaxWidth()
                 )
+            } else {
+                ModeSecondaryPillButton(
+                    text = "Open in app",
+                    icon = Icons.Outlined.OpenInBrowser,
+                    onClick = {
+                        if (candidate.source == DownloadSource.PLAY) {
+                            context.openPlayStoreListing(candidate.packageName, candidate.url)
+                        } else {
+                            onSolveCaptcha(candidate)
+                        }
+                        hasOpenedLink = true
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
-            ModeSecondaryPillButton(
-                text = "Open in app",
-                icon = Icons.Outlined.OpenInBrowser,
-                onClick = {
-                    if (candidate.source == DownloadSource.PLAY) {
-                        context.openPlayStoreListing(candidate.packageName, candidate.url)
-                    } else {
-                        onSolveCaptcha(candidate)
-                    }
-                    hasOpenedLink = true
-                },
-                modifier = Modifier.fillMaxWidth()
-            )
             if (showUseInstalledApp) {
                 ModePrimaryPillButton(
                     text = "Use installed app",
@@ -279,72 +283,202 @@ private fun ModeSecondaryPillButton(
 
 @Composable
 internal fun CandidateInfoChips(request: HelperRequest, candidate: DownloadCandidate) {
+    val scheme = MaterialTheme.colorScheme
     val requestedVersionNames = request.requestedVersionNames
     val requestedVersionCodes = request.requestedVersionCodes
-    val versionTone = when {
-        requestedVersionNames.isEmpty() -> SemanticTone.Primary
-        candidate.versionName != null && requestedVersionNames.any { candidate.versionName.versionNameEquals(it) } -> {
-            SemanticTone.Primary
-        }
-        else -> SemanticTone.Error
-    }
-    val versionCodeTone = when {
-        requestedVersionCodes.isEmpty() -> SemanticTone.Primary
-        candidate.versionCode in requestedVersionCodes -> SemanticTone.Primary
-        else -> SemanticTone.Error
-    }
-    val formatTone = when {
-        candidate.fileKind.equals("web", ignoreCase = true) -> SemanticTone.Neutral
-        request.acceptsFormat(candidate.fileKind) -> SemanticTone.Primary
-        else -> SemanticTone.Error
-    }
+    val versionMatches = requestedVersionNames.isEmpty() ||
+            (candidate.versionName != null && requestedVersionNames.any { candidate.versionName.versionNameEquals(it) })
+    val versionCodeMatches = requestedVersionCodes.isEmpty() ||
+            candidate.versionCode == null ||
+            candidate.versionCode in requestedVersionCodes
+    val formatMatches = candidate.fileKind.equals("web", ignoreCase = true) ||
+            request.acceptsFormat(candidate.fileKind)
 
-    StatusBadgeRow(modifier = Modifier.fillMaxWidth()) {
-        candidate.versionName?.let {
-            StatusBadge(text = it, icon = Icons.Outlined.History, tone = versionTone)
+    val versionTint = if (versionMatches) scheme.primary else scheme.error
+    val versionLabel = candidate.versionName ?: candidate.versionDisplay
+    val variantText = candidate.variantTag ?: candidate.variantLabel
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.History,
+                contentDescription = null,
+                tint = versionTint,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                text = versionLabel,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = scheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            if (!candidate.fileKind.equals("web", ignoreCase = true)) {
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(
+                            if (formatMatches) scheme.primaryContainer
+                            else scheme.errorContainer
+                        )
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = candidate.fileKind.uppercase(),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (formatMatches) scheme.onPrimaryContainer else scheme.onErrorContainer,
+                        maxLines = 1
+                    )
+                }
+            }
         }
-        if (candidate.versionCode != null) {
-            StatusBadge(text = "Build ${candidate.versionCode}", tone = versionCodeTone)
-        }
-        if (candidate.versionName == null && candidate.versionCode == null) {
-            StatusBadge(text = candidate.versionDisplay, icon = Icons.Outlined.History, tone = versionTone)
-        }
-        if (!candidate.fileKind.equals("web", ignoreCase = true)) {
-            StatusBadge(text = candidate.fileKind.uppercase(), tone = formatTone)
-        }
-        (candidate.variantTag ?: candidate.variantLabel)?.let { label ->
-            StatusBadge(text = label, tone = SemanticTone.Neutral)
-        }
-        candidate.variantNumber?.let { number ->
-            StatusBadge(text = "Variant $number", tone = SemanticTone.Neutral)
+
+        val hasMeta = candidate.versionCode != null || variantText != null || candidate.variantNumber != null
+        if (hasMeta) {
+            StatusBadgeRow(modifier = Modifier.fillMaxWidth()) {
+                candidate.versionCode?.let { code ->
+                    StatusBadge(
+                        text = "Build $code",
+                        containerColor = if (versionCodeMatches) {
+                            scheme.surfaceVariant.copy(alpha = 0.55f)
+                        } else {
+                            scheme.errorContainer.copy(alpha = 0.7f)
+                        },
+                        contentColor = if (versionCodeMatches) {
+                            scheme.onSurfaceVariant
+                        } else {
+                            scheme.onErrorContainer
+                        }
+                    )
+                }
+                variantText?.let { label ->
+                    StatusBadge(
+                        text = label,
+                        containerColor = scheme.surfaceVariant.copy(alpha = 0.55f),
+                        contentColor = scheme.onSurfaceVariant
+                    )
+                }
+                candidate.variantNumber?.let { number ->
+                    StatusBadge(
+                        text = "Variant $number",
+                        containerColor = scheme.surfaceVariant.copy(alpha = 0.55f),
+                        contentColor = scheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }
 
+private val MISMATCH_DETAIL_REGEX = Regex("^([^:]+):\\s*requested\\s+(.+),\\s*found\\s+(.+)$")
+
 @Composable
 internal fun CandidateMatchBox(match: CandidateMatchSummary) {
-    val tone = if (match.matches) SemanticTone.Primary else SemanticTone.Error
+    val scheme = MaterialTheme.colorScheme
+    val isError = !match.matches
+    val containerColor = if (isError) {
+        scheme.errorContainer.copy(alpha = 0.42f)
+    } else {
+        scheme.primaryContainer.copy(alpha = 0.35f)
+    }
+    val rowSurfaceColor = if (isError) {
+        scheme.errorContainer.copy(alpha = 0.45f)
+    } else {
+        scheme.primaryContainer.copy(alpha = 0.4f)
+    }
+    val titleColor = if (isError) scheme.error else scheme.primary
+    val contentColor = if (isError) scheme.onErrorContainer else scheme.onPrimaryContainer
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(tone.container.copy(alpha = 0.72f))
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+            .background(containerColor)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text(
-            text = match.title,
-            style = MaterialTheme.typography.labelLarge,
-            color = tone.content,
-            fontWeight = FontWeight.Bold
-        )
-        match.details.forEach { detail ->
-            Text(
-                text = detail,
-                color = MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.bodySmall
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = if (isError) Icons.Outlined.Warning else Icons.Outlined.CheckCircle,
+                contentDescription = null,
+                tint = titleColor,
+                modifier = Modifier.size(18.dp)
             )
+            Text(
+                text = match.title,
+                color = titleColor,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        match.details.forEach { detail ->
+            val parsed = MISMATCH_DETAIL_REGEX.matchEntire(detail.trim())
+            if (parsed != null) {
+                val fieldLabel = parsed.groupValues[1].trim()
+                val requestedValue = parsed.groupValues[2].trim()
+                val foundValue = parsed.groupValues[3].trim()
+                val showFieldSuffix = match.details.size > 1
+                val requestedLabel = if (showFieldSuffix) "Requested ${fieldLabel.lowercase()}" else "Requested"
+                val foundLabel = if (showFieldSuffix) "Found ${fieldLabel.lowercase()}" else "Found"
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(rowSurfaceColor)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = requestedLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = contentColor.copy(alpha = 0.72f),
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = requestedValue,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = contentColor,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = foundLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = contentColor.copy(alpha = 0.72f),
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = foundValue,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = contentColor,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            } else {
+                Text(
+                    text = detail,
+                    color = contentColor,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
         }
     }
 }

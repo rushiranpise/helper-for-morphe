@@ -114,7 +114,15 @@ import dev.rushi.apkdownloadhelper.ui.theme.AppColors
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.LocalMonochromeTheme
 import dev.rushi.apkdownloadhelper.ui.theme.SemanticTone
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.window.Dialog
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.AppDialogProperties
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.DialogContentPadding
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.DialogSurface
 import dev.rushi.apkdownloadhelper.ui.theme.glassFill
+import dev.rushi.apkdownloadhelper.ui.theme.pressScale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -305,42 +313,106 @@ internal fun HelperRequestContent(
     pickerState?.let { SourcePickerDialog(state = it) }
 
     confirmFastModeTarget?.let { enableFastMode ->
-        AppAlertDialog(
+        Dialog(
             onDismissRequest = { confirmFastModeTarget = null },
-            title = {
-                Text(
-                    text = if (enableFastMode) "Switch to Fast Mode?" else "Turn off Fast Mode?",
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Text(
-                    text = if (enableFastMode) {
-                        "Current background actions will stop and Fast Mode will immediately search enabled sources for this app."
-                    } else {
-                        "Current Fast Mode search or download will stop and switch back to manual source selection."
-                    },
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        confirmFastModeTarget = null
-                        onSettingsChange(settings.copy(fastMode = enableFastMode))
+            properties = AppDialogProperties
+        ) {
+            DialogSurface(modifier = Modifier.fillMaxWidth(0.90f)) {
+                Column(
+                    modifier = Modifier.padding(DialogContentPadding),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (enableFastMode) scheme.primaryContainer
+                                    else scheme.surfaceVariant.copy(alpha = 0.65f)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Bolt,
+                                contentDescription = null,
+                                tint = if (enableFastMode) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Text(
+                            text = if (enableFastMode) "Switch to Fast Mode?" else "Turn off Fast Mode?",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = scheme.onSurface
+                        )
                     }
-                ) {
-                    Text(if (enableFastMode) "Start Fast Mode" else "Turn off")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { confirmFastModeTarget = null }
-                ) {
-                    Text("Cancel")
+
+                    Text(
+                        text = if (enableFastMode) {
+                            "Current background actions will stop and Fast Mode will immediately search enabled sources for this app."
+                        } else {
+                            "Current Fast Mode search or download will stop and switch back to manual source selection."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = scheme.onSurfaceVariant
+                    )
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val confirmInteraction = remember { MutableInteractionSource() }
+                        Button(
+                            onClick = {
+                                confirmFastModeTarget = null
+                                onSettingsChange(settings.copy(fastMode = enableFastMode))
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .pressScale(confirmInteraction),
+                            interactionSource = confirmInteraction,
+                            shape = CircleShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = scheme.primaryContainer,
+                                contentColor = scheme.onPrimaryContainer
+                            )
+                        ) {
+                            Text(
+                                text = if (enableFastMode) "Start Fast Mode" else "Turn off Fast Mode",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        val cancelInteraction = remember { MutableInteractionSource() }
+                        Button(
+                            onClick = { confirmFastModeTarget = null },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .pressScale(cancelInteraction),
+                            interactionSource = cancelInteraction,
+                            shape = CircleShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = scheme.surfaceVariant.copy(alpha = 0.55f),
+                                contentColor = scheme.onSurface
+                            )
+                        ) {
+                            Text(
+                                text = "Cancel",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
             }
-        )
+        }
     }
 
     Box(
@@ -370,7 +442,6 @@ internal fun HelperRequestContent(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .alpha(formatCardAlpha)
                             .clip(RoundedCornerShape(24.dp))
                             .background(scheme.surfaceColorAtElevation(2.dp))
                             .padding(16.dp),
@@ -404,7 +475,9 @@ internal fun HelperRequestContent(
                         }
 
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .alpha(formatCardAlpha),
                             horizontalArrangement = Arrangement.spacedBy(3.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {

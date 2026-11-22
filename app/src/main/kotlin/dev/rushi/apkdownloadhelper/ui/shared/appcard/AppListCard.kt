@@ -16,6 +16,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Notifications
@@ -60,7 +62,10 @@ internal fun AppListCard(
     newPatches: Int = 0,
     onToggleTracking: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
-    useGradient: Boolean = true
+    useGradient: Boolean = true,
+    customBottomText: String? = null,
+    onShare: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null
 ) {
     val monochrome = LocalMonochromeTheme.current
     val effectiveGradient = useGradient && !monochrome
@@ -191,72 +196,153 @@ internal fun AppListCard(
                         }
                     }
                 }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                if (customBottomText != null) {
+                    Text(
+                        text = customBottomText,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = subtitleColor.copy(alpha = 0.88f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                } else {
                     Row(
-                        modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (released != null) {
-                            ThemedIcon(
-                                icon = Icons.Outlined.History,
-                                size = 12.dp,
-                                tint = subtitleColor.copy(alpha = 0.75f)
-                            )
-                            Text(
-                                text = released,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = subtitleColor.copy(alpha = 0.75f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (released != null) {
+                                ThemedIcon(
+                                    icon = Icons.Outlined.History,
+                                    size = 12.dp,
+                                    tint = subtitleColor.copy(alpha = 0.75f)
+                                )
+                                Text(
+                                    text = released,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = subtitleColor.copy(alpha = 0.75f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
+                        Text(
+                            text = "${app.sourceCount} " +
+                                    if (app.sourceCount == 1) "source" else "sources",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = subtitleColor.copy(alpha = 0.9f),
+                            maxLines = 1
+                        )
                     }
-                    Text(
-                        text = "${app.sourceCount} " +
-                                if (app.sourceCount == 1) "source" else "sources",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = subtitleColor.copy(alpha = 0.9f),
-                        maxLines = 1
-                    )
                 }
             }
 
             Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                onToggleTracking?.let { toggleTracking ->
+                if (onShare != null || onDelete != null) {
+                    onShare?.let { shareAction ->
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (!effectiveGradient) scheme.surfaceVariant.copy(alpha = 0.65f)
+                                    else Color.White.copy(alpha = 0.16f)
+                                )
+                                .clickable(role = Role.Button, onClick = shareAction),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Share,
+                                contentDescription = "Share APK",
+                                tint = if (!effectiveGradient) scheme.onSurface else Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                    onDelete?.let { deleteAction ->
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (!effectiveGradient) scheme.errorContainer.copy(alpha = 0.75f)
+                                    else Color.White.copy(alpha = 0.16f)
+                                )
+                                .clickable(role = Role.Button, onClick = deleteAction),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.DeleteOutline,
+                                contentDescription = "Delete APK",
+                                tint = if (!effectiveGradient) scheme.onErrorContainer else Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                } else {
+                    onToggleTracking?.let { toggleTracking ->
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    when {
+                                        tracked -> if (effectiveGradient) {
+                                            Color.White.copy(alpha = 0.22f)
+                                        } else {
+                                            scheme.primaryContainer.copy(alpha = 0.85f)
+                                        }
+
+                                        !effectiveGradient -> scheme.surfaceVariant.copy(alpha = 0.65f)
+                                        else -> Color.White.copy(alpha = 0.16f)
+                                    }
+                                )
+                                .clickable(role = Role.Button, onClick = toggleTracking),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (tracked) {
+                                    Icons.Filled.Notifications
+                                } else {
+                                    Icons.Outlined.Notifications
+                                },
+                                contentDescription = if (tracked) "Stop tracking" else "Track updates",
+                                tint = if (tracked) {
+                                    if (!effectiveGradient) scheme.onPrimaryContainer else Color.White
+                                } else if (!effectiveGradient) {
+                                    scheme.onSurface
+                                } else {
+                                    Color.White
+                                },
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
                     Box(
                         modifier = Modifier
                             .size(40.dp)
                             .clip(CircleShape)
                             .background(
                                 when {
-                                    tracked -> if (effectiveGradient) {
-                                        Color.White.copy(alpha = 0.22f)
-                                    } else {
-                                        scheme.primaryContainer.copy(alpha = 0.85f)
-                                    }
+                                    favourite -> Color.White.copy(alpha = 0.92f)
                                     !effectiveGradient -> scheme.surfaceVariant.copy(alpha = 0.65f)
                                     else -> Color.White.copy(alpha = 0.16f)
                                 }
                             )
-                            .clickable(role = Role.Button, onClick = toggleTracking),
+                            .clickable(role = Role.Button, onClick = onToggleFavourite),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = if (tracked) {
-                                Icons.Filled.Notifications
-                            } else {
-                                Icons.Outlined.Notifications
-                            },
-                            contentDescription = if (tracked) "Stop tracking" else "Track updates",
-                            tint = if (tracked) {
-                                if (!effectiveGradient) scheme.onPrimaryContainer else Color.White
+                            imageVector = if (favourite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                            contentDescription = if (favourite) "Unlike" else "Like",
+                            tint = if (favourite) {
+                                Color(0xFFD32F2F)
                             } else if (!effectiveGradient) {
                                 scheme.onSurface
                             } else {
@@ -265,33 +351,6 @@ internal fun AppListCard(
                             modifier = Modifier.size(20.dp)
                         )
                     }
-                }
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(
-                            when {
-                                favourite -> Color.White.copy(alpha = 0.92f)
-                                !effectiveGradient -> scheme.surfaceVariant.copy(alpha = 0.65f)
-                                else -> Color.White.copy(alpha = 0.16f)
-                            }
-                        )
-                        .clickable(role = Role.Button, onClick = onToggleFavourite),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (favourite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = if (favourite) "Unlike" else "Like",
-                        tint = if (favourite) {
-                            Color(0xFFD32F2F)
-                        } else if (!effectiveGradient) {
-                            scheme.onSurface
-                        } else {
-                            Color.White
-                        },
-                        modifier = Modifier.size(20.dp)
-                    )
                 }
             }
         }

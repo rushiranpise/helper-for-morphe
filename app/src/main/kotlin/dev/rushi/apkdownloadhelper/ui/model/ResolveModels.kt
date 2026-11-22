@@ -37,6 +37,20 @@ internal data class CandidateResult(
         }
     )
 
+    fun setHistoryResolvingKey(
+        source: DownloadSource,
+        candidateKey: String?
+    ): CandidateResult = copy(
+        sourceGroups = sourceGroups.map { group ->
+            if (group.source == source && group.history is VersionHistoryState.Done) {
+                val done = group.history as VersionHistoryState.Done
+                group.copy(history = done.copy(resolvingKey = candidateKey))
+            } else {
+                group
+            }
+        }
+    )
+
     fun markHistoryCandidateNoDirectDownload(
         source: DownloadSource,
         candidateKey: String
@@ -46,7 +60,8 @@ internal data class CandidateResult(
                 val done = group.history as VersionHistoryState.Done
                 group.copy(
                     history = done.copy(
-                        noDirectDownloadKeys = done.noDirectDownloadKeys + candidateKey
+                        noDirectDownloadKeys = done.noDirectDownloadKeys + candidateKey,
+                        resolvingKey = if (done.resolvingKey == candidateKey) null else done.resolvingKey
                     )
                 )
             } else {
@@ -97,7 +112,8 @@ internal sealed interface VersionHistoryState {
         // Identity keys of candidates whose direct download could not be
         // resolved; those rows render an "Open link" action instead of
         // "Download" so the user is not stuck in a resolve-then-error loop.
-        val noDirectDownloadKeys: Set<String> = emptySet()
+        val noDirectDownloadKeys: Set<String> = emptySet(),
+        val resolvingKey: String? = null
     ) : VersionHistoryState
     data class Error(val message: String) : VersionHistoryState
 }

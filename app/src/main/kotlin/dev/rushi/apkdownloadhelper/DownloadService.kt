@@ -127,7 +127,10 @@ internal object DownloadJobManager {
             val percent: Int,
             val speedBytesPerSec: Double = 0.0,
             val etaMs: Long? = null,
-            val connections: Int = 1
+            val connections: Int = 1,
+            val paused: Boolean = false,
+            val downloadedBytes: Long = 0L,
+            val totalBytes: Long = 0L
         ) : Event
         data class Completed(val result: PendingDownloadResult, val epoch: Long = 0) : Event
         data class Paused(
@@ -1058,11 +1061,14 @@ internal class DownloadService : Service() {
         } else null
         DownloadJobManager.emit(
             DownloadJobManager.Event.Progress(
-                candidate,
-                percent,
-                currentSpeedBytesPerSec,
-                etaMs,
-                currentConnections
+                candidate = candidate,
+                percent = percent,
+                speedBytesPerSec = currentSpeedBytesPerSec,
+                etaMs = etaMs,
+                connections = currentConnections,
+                paused = paused,
+                downloadedBytes = copied,
+                totalBytes = total
             )
         )
         // Refresh at least once a second so speed/ETA stay fresh even when

@@ -22,7 +22,7 @@ import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 @Composable
 internal fun HelperSetupCard() {
     val colors = MaterialTheme.colorScheme
-    SectionCard {
+    SurfaceCard(cornerRadius = AppDefaults.SectionCornerRadius) {
         Column(
             modifier = Modifier.padding(AppDefaults.ContentPadding),
             verticalArrangement = Arrangement.spacedBy(8.dp)

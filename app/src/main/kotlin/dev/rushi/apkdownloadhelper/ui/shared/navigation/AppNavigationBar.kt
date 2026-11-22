@@ -86,7 +86,6 @@ internal fun AppNavigationBar(
                     .glassFill(AppColors.glassContainerColor(), CircleShape, hazeState),
                 shape = CircleShape,
                 color = Color.Transparent,
-                border = BorderStroke(1.dp, AppColors.glassBorderColor())
             ) {
                 Box(modifier = Modifier.padding(horizontal = 6.dp)) {
                     val slots = remember { mutableStateMapOf<Int, IntRange>() }

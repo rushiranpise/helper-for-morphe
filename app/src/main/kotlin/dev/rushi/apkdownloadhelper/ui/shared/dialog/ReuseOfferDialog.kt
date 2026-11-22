@@ -28,7 +28,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
@@ -93,19 +92,14 @@ internal fun ReuseOfferDialog(
                     options.forEach { option ->
                         val entry = option.entry
                         val cardInteraction = remember { MutableInteractionSource() }
-                        Surface(
-                            onClick = { onUseExisting(option) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .pressScale(cardInteraction),
-                            interactionSource = cardInteraction,
-                            shape = RoundedCornerShape(20.dp),
-                            color = scheme.surfaceColorAtElevation(4.dp),
-                            contentColor = scheme.onSurface
-                        ) {
+                        options.forEach { option ->
+                            val entry = option.entry
+                            val useItInteraction = remember { MutableInteractionSource() }
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(scheme.surfaceColorAtElevation(4.dp))
                                     .padding(14.dp),
                                 verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
@@ -230,6 +224,34 @@ internal fun ReuseOfferDialog(
                                         )
                                     }
                                 }
+                                Button(
+                                    onClick = { onUseExisting(option) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(44.dp)
+                                        .pressScale(useItInteraction),
+                                    interactionSource = useItInteraction,
+                                    shape = CircleShape,
+                                    border = null,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = scheme.primaryContainer,
+                                        contentColor = scheme.onPrimaryContainer
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 16.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.CheckCircle,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = "Use it",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                }
                             }
                         }
                     }
@@ -245,8 +267,8 @@ internal fun ReuseOfferDialog(
                     shape = CircleShape,
                     border = null,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = scheme.primaryContainer,
-                        contentColor = scheme.onPrimaryContainer
+                        containerColor = scheme.surfaceVariant.copy(alpha = 0.55f),
+                        contentColor = scheme.onSurface
                     ),
                     contentPadding = PaddingValues(horizontal = 16.dp)
                 ) {
@@ -259,7 +281,7 @@ internal fun ReuseOfferDialog(
                     Text(
                         text = "Download new",
                         style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.SemiBold,
                         maxLines = 1
                     )
                 }

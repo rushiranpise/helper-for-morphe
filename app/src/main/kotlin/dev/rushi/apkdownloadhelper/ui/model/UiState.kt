@@ -14,7 +14,9 @@ internal sealed interface UiState {
         val etaMs: Long? = null,
         val statusMessage: String? = null,
         val paused: Boolean = false,
-        val connections: Int = 1
+        val connections: Int = 1,
+        val downloadedBytes: Long = 0L,
+        val totalBytes: Long = 0L
     ) : UiState
     data class Error(val message: String) : UiState
     data class FastMode(val progress: FastModeProgress) : UiState
@@ -51,6 +53,8 @@ internal data class FastModeProgress(
     val etaMs: Long? = null,
     val paused: Boolean = false,
     val connections: Int = 1,
+    val downloadedBytes: Long = 0L,
+    val totalBytes: Long = 0L,
     val done: Boolean = false,
     val succeeded: Boolean = false,
     // Present once Fast Mode finishes so the regular source list stays reachable.

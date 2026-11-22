@@ -11,10 +11,14 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -258,7 +262,15 @@ internal fun CaptchaBrowserScreen(
             return@LaunchedEffect
         }
         injectedPage = pageFinishedCount
-        when (candidate.viaSource ?: candidate.source) {
+        val currentUrl = browserPageUrl.value
+        val host = runCatching { Uri.parse(currentUrl).host.orEmpty().lowercase(Locale.US) }.getOrDefault("")
+        val effectiveSource = when {
+            host == "apkmirror.com" || host.endsWith(".apkmirror.com") -> DownloadSource.APK_MIRROR
+            host == "apkpure.com" || host.endsWith(".apkpure.com") -> DownloadSource.APK_PURE
+            host == "uptodown.com" || host.endsWith(".uptodown.com") || host.endsWith(".uptodown.net") -> DownloadSource.UPTODOWN
+            else -> candidate.viaSource ?: candidate.source
+        }
+        when (effectiveSource) {
             DownloadSource.APK_MIRROR -> webView.evaluateJavascript(
                 apkMirrorBrowserScript(
                     candidate = candidate,
@@ -276,7 +288,8 @@ internal fun CaptchaBrowserScreen(
                 ),
                 null
             )
-            else -> webView.evaluateJavascript(CAPTCHA_AUTOPRESS_JS, null)
+            DownloadSource.UPTODOWN -> webView.evaluateJavascript(CAPTCHA_AUTOPRESS_JS, null)
+            else -> Unit
         }
     }
     LaunchedEffect(challengeActive, challengeStartedAt, isManualMode) {
@@ -395,8 +408,8 @@ internal fun CaptchaBrowserScreen(
             ) {
                 InfoBox(title = "Download from ${candidate.source.label}", icon = Icons.Outlined.OpenInBrowser) {
                     Text(
-                        text = "Complete any browser check on the page. The file returns to " +
-                            "Morphe automatically when its download starts.",
+                        text = "Solve any captcha on the page. Once cleared, the app will handle " +
+                            "everything else automatically.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

@@ -73,22 +73,11 @@ internal fun buildPrimaryAction(
                 loading = true,
                 run = {}
             )
-            is ResolveState.Done -> {
-                val direct = state.candidates.firstOrNull { it.directDownload }
-                if (direct != null) {
-                    PrimaryAction(
-                        label = "Download ${direct.versionDisplay}",
-                        icon = Icons.Outlined.Download,
-                        run = { onDownload(direct) }
-                    )
-                } else {
-                    PrimaryAction(
-                        label = resolveLabel,
-                        icon = Icons.Outlined.Search,
-                        run = { onResolve(group.source, option) }
-                    )
-                }
-            }
+            is ResolveState.Done -> PrimaryAction(
+                label = if (isLatest) "Reload latest" else "Reload requested",
+                icon = Icons.Outlined.Refresh,
+                run = { onResolve(group.source, option) }
+            )
             else -> PrimaryAction(
                 label = resolveLabel,
                 icon = Icons.Outlined.Search,

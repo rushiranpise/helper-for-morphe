@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
@@ -66,13 +68,16 @@ internal fun LazyListScope.versionHistoryItems(
                     ModeNoticeCard("No version list was available for this source.")
                 }
             } else {
-                itemsIndexed(
+                items(
                     items = state.candidates,
-                    key = { index, candidate -> "history_${candidate.identityKey()}_$index" }
-                ) { _, candidate ->
+                    key = { "history_${it.identityKey()}" }
+                ) { candidate ->
+                    val key = candidate.identityKey()
                     VersionHistoryRow(
                         candidate = candidate,
-                        showOpenLink = candidate.identityKey() in state.noDirectDownloadKeys,
+                        showOpenLink = key in state.noDirectDownloadKeys,
+                        isResolving = state.resolvingKey == key,
+                        anyResolving = state.resolvingKey != null,
                         onDownloadVersion = { onDownloadVersion(candidate) },
                         onSolveCaptcha = { onSolveCaptcha(candidate) }
                     )
@@ -86,6 +91,8 @@ internal fun LazyListScope.versionHistoryItems(
 internal fun VersionHistoryRow(
     candidate: DownloadCandidate,
     showOpenLink: Boolean,
+    isResolving: Boolean = false,
+    anyResolving: Boolean = false,
     onDownloadVersion: () -> Unit,
     onSolveCaptcha: (DownloadCandidate) -> Unit
 ) {
@@ -155,12 +162,51 @@ internal fun VersionHistoryRow(
                 )
             }
             else -> {
-                HistoryActionPill(
-                    text = "Download",
-                    icon = Icons.Outlined.Download,
-                    primary = true,
-                    onClick = onDownloadVersion
-                )
+                val downloadInteraction = remember { MutableInteractionSource() }
+                Button(
+                    onClick = onDownloadVersion,
+                    enabled = !anyResolving,
+                    modifier = Modifier
+                        .height(40.dp)
+                        .pressScale(downloadInteraction),
+                    interactionSource = downloadInteraction,
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = scheme.primaryContainer,
+                        contentColor = scheme.onPrimaryContainer,
+                        disabledContainerColor = scheme.primaryContainer.copy(alpha = 0.65f),
+                        disabledContentColor = scheme.onPrimaryContainer.copy(alpha = 0.85f)
+                    ),
+                    contentPadding = PaddingValues(horizontal = 14.dp)
+                ) {
+                    if (isResolving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = scheme.onPrimaryContainer
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "Loading…",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Outlined.Download,
+                            contentDescription = null,
+                            modifier = Modifier.size(17.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "Download",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                    }
+                }
             }
         }
     }
