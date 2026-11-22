@@ -1,4 +1,4 @@
-﻿package dev.rushi.apkdownloadhelper.sources
+package dev.rushi.apkdownloadhelper.sources
 
 import android.content.Context
 import android.util.Log
@@ -37,8 +37,69 @@ internal class AuroraParser(private val ctx: SourceParserContext) : ApkSourcePar
         option: CandidateOption
     ): List<DownloadCandidate> = when (option) {
         CandidateOption.LATEST -> findAurora(request)
-        CandidateOption.REQUESTED,
+        CandidateOption.REQUESTED -> findAuroraRequested(request)
         CandidateOption.MANUAL -> emptyList()
+    }
+
+    private fun findAuroraRequested(request: HelperRequest): List<DownloadCandidate> {
+        val targetCodes = request.requestedVersionCodes.ifEmpty {
+            listOfNotNull(request.versionCode).toSet()
+        }
+        if (targetCodes.isEmpty()) return emptyList()
+
+        val auth = runCatching { playAuth() }.getOrNull() ?: return emptyList()
+        val app = runCatching {
+            AppDetailsHelper(auth)
+                .using(playHttpClient)
+                .getAppByPackageName(request.packageName)
+        }.getOrNull() ?: return emptyList()
+
+        if (app.packageName != request.packageName) return emptyList()
+
+        for (code in targetCodes) {
+            val playFiles = runCatching {
+                getPlayInstallFiles(app, code)
+            }.getOrNull().orEmpty()
+
+            if (playFiles.isEmpty()) continue
+
+            val files = playFiles.mapIndexedNotNull { index, file ->
+                val url = file.url.normalizedHttpUrlOrNull()
+                if (url == null) {
+                    Log.w(TAG, "Aurora returned invalid download URL for ${request.packageName}: ${file.url}")
+                    return@mapIndexedNotNull null
+                }
+                CandidateDownloadFile(
+                    url = url,
+                    fileName = playFileName(file, index),
+                    size = file.size
+                )
+            }
+
+            if (files.size != playFiles.size || files.isEmpty()) continue
+
+            val fileKind = if (files.size > 1) "apks" else "apk"
+            if (!request.acceptsFormat(fileKind)) continue
+
+            val versionName = request.requestedVersionName ?: app.versionName
+            return listOf(
+                DownloadCandidate(
+                    source = DownloadSource.AURORA,
+                    name = app.displayName.ifBlank { request.appName },
+                    packageName = app.packageName,
+                    versionName = versionName,
+                    versionCode = code,
+                    url = playStoreUrl(app.packageName),
+                    fileKind = fileKind,
+                    option = CandidateOption.REQUESTED,
+                    directDownload = true,
+                    versionStatus = VersionStatus.REQUESTED,
+                    formatMatches = true,
+                    files = files
+                )
+            )
+        }
+        return emptyList()
     }
 
     private fun findAurora(request: HelperRequest): List<DownloadCandidate> {
@@ -98,10 +159,10 @@ internal class AuroraParser(private val ctx: SourceParserContext) : ApkSourcePar
         }
     }
 
-    private fun getPlayInstallFiles(app: App): List<PlayFile> =
+    private fun getPlayInstallFiles(app: App, versionCode: Long = app.versionCode): List<PlayFile> =
         PurchaseHelper(playAuth())
             .using(playHttpClient)
-            .purchase(app.packageName, app.versionCode, app.offerType)
+            .purchase(app.packageName, versionCode, app.offerType)
             .filter { it.type == PlayFile.Type.BASE || it.type == PlayFile.Type.SPLIT }
 
     private fun playFileName(file: PlayFile, index: Int): String =
