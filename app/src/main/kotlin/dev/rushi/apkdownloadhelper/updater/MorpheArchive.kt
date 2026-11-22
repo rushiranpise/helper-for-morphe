@@ -1,4 +1,4 @@
-package dev.rushi.apkdownloadhelper.updater
+﻿package dev.rushi.apkdownloadhelper.updater
 
 import android.content.Context
 import android.util.Log
@@ -132,7 +132,43 @@ internal data class ArchiveApp(
             else -> 100
         }
     }
+
+    fun matchingReason(query: String): MatchReason? {
+        if (query.isBlank()) return null
+        ensureSearchIndex()
+        val q = query.trim().lowercase(Locale.US)
+        if (nameLower.contains(q) || packageLower.contains(q)) return null
+
+        patches.firstOrNull { it.lowercase(Locale.US).contains(q) }?.let {
+            return MatchReason.Patch(it)
+        }
+        sources.forEach { source ->
+            source.patches.firstOrNull { it.name.lowercase(Locale.US).contains(q) }?.let {
+                return MatchReason.Patch(it.name)
+            }
+        }
+        sources.firstOrNull { it.repo.lowercase(Locale.US).contains(q) }?.let {
+            val repoName = it.repo.substringAfterLast('/')
+            return MatchReason.SourceRepo(repoName.ifBlank { it.repo })
+        }
+        patchDetails.firstOrNull { it.description?.lowercase(Locale.US)?.contains(q) == true }?.let {
+            return MatchReason.Patch(it.name.ifBlank { "Matches description" })
+        }
+        sources.forEach { source ->
+            source.patches.firstOrNull { it.description?.lowercase(Locale.US)?.contains(q) == true }?.let {
+                return MatchReason.Patch(it.name.ifBlank { "Matches description" })
+            }
+        }
+        return null
+    }
 }
+
+sealed class MatchReason(val label: String) {
+    data class Patch(val name: String) : MatchReason("Patch: $name")
+    data class SourceRepo(val repo: String) : MatchReason("Source: $repo")
+    data class Description(val text: String) : MatchReason("Match: $text")
+}
+
 
 internal data class ArchivePatch(
     @SerializedName("name") val name: String = "",

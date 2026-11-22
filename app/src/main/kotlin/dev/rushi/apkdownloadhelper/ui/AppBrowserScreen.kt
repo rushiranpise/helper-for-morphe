@@ -1,4 +1,4 @@
-package dev.rushi.apkdownloadhelper.ui
+﻿package dev.rushi.apkdownloadhelper.ui
 
 import android.Manifest
 import android.content.Context
@@ -128,6 +128,7 @@ import dev.rushi.apkdownloadhelper.updater.ArchiveApp
 import dev.rushi.apkdownloadhelper.updater.ArchiveFreshness
 import dev.rushi.apkdownloadhelper.updater.ArchiveSource
 import dev.rushi.apkdownloadhelper.updater.MorpheArchive
+import dev.rushi.apkdownloadhelper.updater.MatchReason
 import dev.rushi.apkdownloadhelper.updater.archiveFreshness
 import dev.rushi.apkdownloadhelper.updater.formatBundleRelease
 import dev.rushi.apkdownloadhelper.updater.formatReleaseDate
@@ -1150,6 +1151,7 @@ internal fun AppBrowserScreen(
                             tracked = trackingPackageKey(app.packageName) in tracked,
                             updates = changes.updates,
                             newPatches = changes.newPatches,
+                            matchReason = if (query.isNotBlank()) app.matchingReason(query) else null,
                             shape = cardShape,
                             useGradient = useGradientCards,
                             onToggleFavourite = {
@@ -1517,6 +1519,7 @@ internal fun AppBrowserRow(
     tracked: Boolean = false,
     updates: Int = 0,
     newPatches: Int = 0,
+    matchReason: MatchReason? = null,
     onToggleTracking: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     useGradient: Boolean = true
@@ -1624,8 +1627,11 @@ internal fun AppBrowserRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (updates > 0 || newPatches > 0) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (updates > 0 || newPatches > 0 || matchReason != null) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         if (updates > 0) {
                             TrackingChangeBadge(
                                 text = "$updates update" + if (updates == 1) "" else "s",
@@ -1646,6 +1652,17 @@ internal fun AppBrowserRow(
                                     scheme.tertiaryContainer
                                 },
                                 content = if (effectiveGradient) Color.White else scheme.onTertiaryContainer
+                            )
+                        }
+                        if (matchReason != null) {
+                            TrackingChangeBadge(
+                                text = matchReason.label,
+                                container = if (effectiveGradient) {
+                                    Color.White.copy(alpha = 0.22f)
+                                } else {
+                                    scheme.secondaryContainer
+                                },
+                                content = if (effectiveGradient) Color.White else scheme.onSecondaryContainer
                             )
                         }
                     }
