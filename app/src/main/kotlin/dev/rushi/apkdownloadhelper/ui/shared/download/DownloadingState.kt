@@ -1,22 +1,37 @@
 package dev.rushi.apkdownloadhelper.ui.shared.download
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.SwapHoriz
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,20 +39,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import dev.rushi.apkdownloadhelper.HelperButton
-import dev.rushi.apkdownloadhelper.HelperOutlinedButton
 import dev.rushi.apkdownloadhelper.R
-import dev.rushi.apkdownloadhelper.ui.shared.button.IconActionButton
-import dev.rushi.apkdownloadhelper.ui.shared.button.SkipWaitButton
-import dev.rushi.apkdownloadhelper.ui.shared.card.SurfaceCard
-import dev.rushi.apkdownloadhelper.ui.shared.dialog.AppAlertDialog
-import dev.rushi.apkdownloadhelper.ui.shared.progress.WavyProgressRing
 import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
 import dev.rushi.apkdownloadhelper.ui.model.UiState
-import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
+import dev.rushi.apkdownloadhelper.ui.shared.button.SkipWaitButton
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.AppAlertDialog
+import dev.rushi.apkdownloadhelper.ui.theme.pressScale
 import dev.rushi.apkdownloadhelper.ui.util.formatTransferEta
 import dev.rushi.apkdownloadhelper.ui.util.formatTransferSpeed
 
@@ -94,139 +107,254 @@ internal fun DownloadingState(
         )
     }
 
-    SurfaceCard {
-        Column(
-            modifier = Modifier.padding(AppDefaults.ContentPadding),
-            verticalArrangement = Arrangement.spacedBy(AppDefaults.ItemSpacing)
+    val scheme = MaterialTheme.colorScheme
+    val statusText = state.statusMessage
+        ?: if (state.paused) "Paused" else "Downloading from ${state.candidate.source.label}"
+    val isScan = isScanStatus(statusText)
+    val (phase, detail) = if (isScan) scanPhaseSplit(statusText) else (statusText to "")
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(scheme.surfaceColorAtElevation(2.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        // Header: status + stats on left, percentage pill + circular cancel on right
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            val statusText = state.statusMessage
-                ?: if (state.paused) "Paused" else "Downloading from ${state.candidate.source.label}"
-            val isScan = isScanStatus(statusText)
-            val (phase, detail) = if (isScan) scanPhaseSplit(statusText) else (statusText to "")
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    text = phase,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = scheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (detail.isNotBlank()) {
+                    Text(
+                        text = detail,
+                        color = scheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (!isScan) {
+                    TransferStats(
+                        connections = state.connections,
+                        speedBytesPerSec = state.speedBytesPerSec,
+                        etaMs = state.etaMs,
+                        paused = state.paused,
+                        includeConnections = state.percent < 100
+                    )
+                }
+            }
+
+            DownloadPercentPill(percent = state.percent, paused = state.paused)
+
+            DownloadCancelButton(onClick = onCancel)
+        }
+
+        // Linear progress bar
+        DownloadProgressBar(
+            percent = state.percent,
+            paused = state.paused,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        if (!isScan && state.percent < 100) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(AppDefaults.ItemSpacing),
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                DownloadProgressGauge(
-                    percent = state.percent,
-                    paused = state.paused,
-                    modifier = Modifier.size(104.dp)
+                DownloadPillButton(
+                    text = if (state.paused) "Resume" else "Pause",
+                    icon = if (state.paused) Icons.Outlined.PlayArrow else Icons.Outlined.Pause,
+                    primary = true,
+                    onClick = if (state.paused) onResume else onPause,
+                    modifier = Modifier.weight(1f)
                 )
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = phase,
-                            modifier = Modifier.weight(1f),
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        IconActionButton(
-                            icon = Icons.Outlined.Close,
-                            contentDescription = "Cancel download",
-                            onClick = onCancel
-                        )
-                    }
-                    if (detail.isNotBlank()) {
-                        Text(
-                            text = detail,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    if (!isScan) {
-                        TransferStats(
-                            connections = state.connections,
-                            speedBytesPerSec = state.speedBytesPerSec,
-                            etaMs = state.etaMs,
-                            paused = state.paused,
-                            includeConnections = state.percent < 100
-                        )
-                    }
-                }
+                DownloadPillButton(
+                    text = "Switch source",
+                    icon = Icons.Outlined.SwapHoriz,
+                    primary = false,
+                    onClick = {
+                        resumeOnDismiss = !state.paused
+                        if (!state.paused) onPause()
+                        showSwitch = true
+                    },
+                    modifier = Modifier.weight(1f)
+                )
             }
-            if (!isScan && state.percent < 100) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    HelperOutlinedButton(
-                        text = if (state.paused) "Resume" else "Pause",
-                        onClick = if (state.paused) onResume else onPause,
-                        modifier = Modifier.weight(1f),
-                        icon = if (state.paused) Icons.Outlined.PlayArrow else Icons.Outlined.Pause
-                    )
-                    HelperOutlinedButton(
-                        text = "Switch source",
-                        onClick = {
-                            resumeOnDismiss = !state.paused
-                            if (!state.paused) onPause()
-                            showSwitch = true
-                        },
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Outlined.SwapHoriz
-                    )
-                }
-            }
-            SkipWaitButton(
-                active = isRateLimitWait(statusText),
-                onSkipWait = onSkipWait
+        }
+
+        SkipWaitButton(
+            active = isRateLimitWait(statusText),
+            onSkipWait = onSkipWait
+        )
+
+        if (isScan) {
+            DownloadPillButton(
+                text = "Skip scan & hand off",
+                icon = Icons.Outlined.Shield,
+                primary = true,
+                onClick = onSkipScan,
+                modifier = Modifier.fillMaxWidth()
             )
-            if (isScan) {
-                HelperButton(
-                    text = "Skip scan & hand off",
-                    onClick = onSkipScan,
-                    icon = Icons.Outlined.Shield,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Text(
-                    text = stringResource(R.string.hand_the_downloaded_file_to_morphe),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
+            Text(
+                text = stringResource(R.string.hand_the_downloaded_file_to_morphe),
+                color = scheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
         }
     }
 }
 
 @Composable
-internal fun DownloadProgressGauge(
+internal fun DownloadProgressBar(
     percent: Int,
     paused: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val shown = percent.coerceIn(0, 100)
-    Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        WavyProgressRing(
-            progress = { shown / 100f },
-            modifier = Modifier.fillMaxSize(),
-            strokeWidth = 7.dp,
-            active = !paused
-        )
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = "$shown%",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
+    val scheme = MaterialTheme.colorScheme
+    val target = percent.coerceIn(0, 100) / 100f
+    val animatedProgress by animateFloatAsState(
+        targetValue = target,
+        animationSpec = tween(220),
+        label = "download_linear_progress"
+    )
+    Box(
+        modifier = modifier
+            .height(8.dp)
+            .clip(CircleShape)
+            .background(scheme.surfaceVariant.copy(alpha = 0.65f))
+    ) {
+        if (animatedProgress > 0f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(animatedProgress)
+                    .fillMaxHeight()
+                    .clip(CircleShape)
+                    .background(
+                        if (paused) {
+                            scheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        } else {
+                            scheme.primary
+                        }
+                    )
             )
-            if (paused) {
-                Text(
-                    text = "Paused",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
         }
+    }
+}
+
+@Composable
+internal fun DownloadPercentPill(
+    percent: Int,
+    paused: Boolean
+) {
+    val scheme = MaterialTheme.colorScheme
+    val shown = percent.coerceIn(0, 100)
+    Box(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(
+                if (paused) {
+                    scheme.surfaceVariant.copy(alpha = 0.7f)
+                } else {
+                    scheme.primaryContainer.copy(alpha = 0.7f)
+                }
+            )
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "$shown%",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = if (paused) scheme.onSurfaceVariant else scheme.onPrimaryContainer,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+internal fun DownloadCancelButton(onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val interaction = remember { MutableInteractionSource() }
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .size(36.dp)
+            .pressScale(interaction),
+        interactionSource = interaction,
+        shape = CircleShape,
+        color = scheme.surfaceVariant.copy(alpha = 0.55f),
+        contentColor = scheme.onSurface
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = Icons.Outlined.Close,
+                contentDescription = "Cancel download",
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+@Composable
+internal fun DownloadPillButton(
+    text: String,
+    icon: ImageVector,
+    primary: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    val interaction = remember { MutableInteractionSource() }
+    Button(
+        onClick = onClick,
+        modifier = modifier
+            .height(46.dp)
+            .pressScale(interaction),
+        interactionSource = interaction,
+        shape = CircleShape,
+        border = null,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (primary) {
+                scheme.primaryContainer
+            } else {
+                scheme.surfaceVariant.copy(alpha = 0.55f)
+            },
+            contentColor = if (primary) {
+                scheme.onPrimaryContainer
+            } else {
+                scheme.onSurface
+            }
+        ),
+        contentPadding = PaddingValues(horizontal = 14.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (primary) FontWeight.Bold else FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -246,27 +374,19 @@ internal fun TransferStats(
         paused = paused,
         includeConnections = includeConnections
     )
-    if (lines.isEmpty()) {
-        Text(
-            text = if (paused) "Paused" else "Downloading",
-            modifier = modifier,
-            fontWeight = FontWeight.Medium
-        )
-        return
+    val summary = if (lines.isEmpty()) {
+        if (paused) "Paused" else "Downloading"
+    } else {
+        lines.joinToString(" · ")
     }
-    Column(
+    Text(
+        text = summary,
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(1.dp)
-    ) {
-        lines.forEach { line ->
-            Text(
-                text = line,
-                fontWeight = FontWeight.Medium,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1
-            )
-        }
-    }
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.bodySmall,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis
+    )
 }
 
 private fun transferStatLines(

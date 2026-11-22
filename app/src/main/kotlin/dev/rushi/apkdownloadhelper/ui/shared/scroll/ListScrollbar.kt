@@ -277,9 +277,10 @@ private fun LazyListState.seekTarget(
         return lastIndex to (lastSize + layoutInfo.afterContentPadding).roundToInt().coerceAtLeast(0)
     }
 
+    val spacing = layoutInfo.mainAxisItemSpacing.toFloat()
     var remaining = fraction * metrics.maxScrollOffset
     for (index in 0 until lastIndex) {
-        val itemSize = sizeCache.sizeAt(index)?.toFloat() ?: metrics.averageItemSize
+        val itemSize = (sizeCache.sizeAt(index)?.toFloat() ?: metrics.averageItemSize) + spacing
         if (itemSize <= 0f || remaining < itemSize) {
             return index to remaining.roundToInt().coerceAtLeast(0)
         }
@@ -299,16 +300,31 @@ private fun LazyListState.scrollbarMetrics(sizeCache: ScrollbarSizeCache): Scrol
     visible.forEach { sizeCache.record(it.index, it.size) }
 
     val viewport = (info.viewportEndOffset - info.viewportStartOffset).coerceAtLeast(1)
-    // Unseen rows use the measured average, so this stays O(visible) per frame.
+    val spacing = info.mainAxisItemSpacing.toFloat()
     val average = sizeCache.average(viewport.toFloat() / total).coerceAtLeast(1f)
-    val content = (average * total + info.beforeContentPadding + info.afterContentPadding)
-        .coerceAtLeast(viewport.toFloat())
+
+    val unmeasuredCount = (total - sizeCache.measuredCount).coerceAtLeast(0)
+    val totalSpacing = (total - 1).coerceAtLeast(0) * spacing
+    val content = (
+            sizeCache.measuredTotal +
+                    unmeasuredCount * average +
+                    totalSpacing +
+                    info.beforeContentPadding +
+                    info.afterContentPadding
+            ).coerceAtLeast(viewport.toFloat())
     val maxScrollOffset = (content - viewport).coerceAtLeast(1f)
+
     val progress = when {
         !canScrollBackward -> 0f
         !canScrollForward -> 1f
         else -> {
-            val offset = firstVisibleItemIndex * average + firstVisibleItemScrollOffset
+            // Sum real measured sizes for items above the viewport instead of multiplying by average,
+            // preventing thumb jumps when header cards differ in height from list rows.
+            var offset = 0f
+            for (index in 0 until firstVisibleItemIndex) {
+                offset += (sizeCache.sizeAt(index)?.toFloat() ?: average) + spacing
+            }
+            offset += firstVisibleItemScrollOffset
             (offset / maxScrollOffset).coerceIn(0f, 1f)
         }
     }

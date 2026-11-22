@@ -1,73 +1,41 @@
 package dev.rushi.apkdownloadhelper.ui.screen.helper
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Smartphone
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import dev.rushi.apkdownloadhelper.storage.FastModePolicy
-import dev.rushi.apkdownloadhelper.storage.HelperSettings
-import dev.rushi.apkdownloadhelper.storage.orderedSources
-import dev.rushi.apkdownloadhelper.ui.model.CandidateOption
-import dev.rushi.apkdownloadhelper.ui.model.DownloadCandidate
-import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
-import dev.rushi.apkdownloadhelper.ui.model.HelperRequest
-import dev.rushi.apkdownloadhelper.ui.model.UiState
-import dev.rushi.apkdownloadhelper.ui.shared.appinfo.AppInfoCard
-import dev.rushi.apkdownloadhelper.ui.shared.download.CheckingPickedFileState
-import dev.rushi.apkdownloadhelper.ui.shared.download.DownloadingState
-import dev.rushi.apkdownloadhelper.ui.shared.download.FastModeCard
-import dev.rushi.apkdownloadhelper.ui.shared.download.ScanAskCard
-import dev.rushi.apkdownloadhelper.ui.shared.download.ScanResultCard
-import dev.rushi.apkdownloadhelper.ui.shared.download.isScanStatus
-import dev.rushi.apkdownloadhelper.ui.shared.scroll.verticalScrollFade
-import dev.rushi.apkdownloadhelper.ui.shared.settings.VirusTotalQuotaCard
-import dev.rushi.apkdownloadhelper.ui.shared.source.PrimaryAction
-import dev.rushi.apkdownloadhelper.ui.shared.source.SourceBottomBar
-import dev.rushi.apkdownloadhelper.ui.shared.source.SourcePickerFlow
-import dev.rushi.apkdownloadhelper.ui.shared.state.ErrorState
-import dev.rushi.apkdownloadhelper.ui.shared.state.LoadingState
-import dev.rushi.apkdownloadhelper.ui.shared.text.SectionTitle
-import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.ui.Alignment
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
@@ -76,49 +44,140 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.surfaceColorAtElevation
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import dev.rushi.apkdownloadhelper.R
+import dev.rushi.apkdownloadhelper.download.isPackageInstalled
+import dev.rushi.apkdownloadhelper.download.orderedFileKinds
+import dev.rushi.apkdownloadhelper.storage.FastModePolicy
+import dev.rushi.apkdownloadhelper.storage.HelperSettings
+import dev.rushi.apkdownloadhelper.storage.orderedSources
+import dev.rushi.apkdownloadhelper.ui.model.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.model.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.model.HelperRequest
+import dev.rushi.apkdownloadhelper.ui.model.UiState
 import dev.rushi.apkdownloadhelper.ui.shared.appcard.AppAvatar
 import dev.rushi.apkdownloadhelper.ui.shared.button.AnimatedFab
 import dev.rushi.apkdownloadhelper.ui.shared.button.GlassHeaderButton
 import dev.rushi.apkdownloadhelper.ui.shared.chip.StatusBadge
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.AppAlertDialog
+import dev.rushi.apkdownloadhelper.ui.shared.download.CheckingPickedFileState
+import dev.rushi.apkdownloadhelper.ui.shared.download.DownloadingState
+import dev.rushi.apkdownloadhelper.ui.shared.download.FastModeCard
+import dev.rushi.apkdownloadhelper.ui.shared.download.ScanAskCard
+import dev.rushi.apkdownloadhelper.ui.shared.download.ScanResultCard
+import dev.rushi.apkdownloadhelper.ui.shared.download.isScanStatus
 import dev.rushi.apkdownloadhelper.ui.shared.icon.ThemedIcon
 import dev.rushi.apkdownloadhelper.ui.shared.scroll.LazyListScrollbar
+import dev.rushi.apkdownloadhelper.ui.shared.settings.VirusTotalQuotaCard
+import dev.rushi.apkdownloadhelper.ui.shared.source.PrimaryAction
+import dev.rushi.apkdownloadhelper.ui.shared.source.SourceBottomBar
+import dev.rushi.apkdownloadhelper.ui.shared.source.SourcePickerDialog
+import dev.rushi.apkdownloadhelper.ui.shared.source.rememberSourcePickerState
+import dev.rushi.apkdownloadhelper.ui.shared.source.sourcePickerItems
+import dev.rushi.apkdownloadhelper.ui.shared.state.ErrorState
+import dev.rushi.apkdownloadhelper.ui.shared.state.LoadingState
 import dev.rushi.apkdownloadhelper.ui.theme.AppColors
+import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.LocalMonochromeTheme
 import dev.rushi.apkdownloadhelper.ui.theme.SemanticTone
 import dev.rushi.apkdownloadhelper.ui.theme.glassFill
-import kotlinx.coroutines.launch
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.surfaceColorAtElevation
-import dev.rushi.apkdownloadhelper.download.isPackageInstalled
-import dev.rushi.apkdownloadhelper.download.orderedFileKinds
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+@Stable
+private class RequestHeaderCollapse {
+    var folded by mutableFloatStateOf(0f)
+        private set
+
+    private var range = 0
+    private var drags = 0
+
+    val connection: NestedScrollConnection = object : NestedScrollConnection {
+        override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+            if (source == NestedScrollSource.UserInput) drags++
+            return Offset.Zero
+        }
+
+        override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+            folded = (folded - consumed.y - available.y.coerceAtLeast(0f)).coerceIn(0f, range.toFloat())
+            return Offset.Zero
+        }
+
+        override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+            if (folded > 0f && folded < range) {
+                easeTo(if (folded < range / 2f) 0f else range.toFloat())
+            }
+            return Velocity.Zero
+        }
+    }
+
+    private suspend fun easeTo(target: Float) {
+        val drag = drags
+        animate(folded, target, animationSpec = tween(220)) { value, _ ->
+            if (drags == drag) folded = value
+        }
+    }
+
+    suspend fun unfold() {
+        if (folded > 0f) easeTo(0f)
+    }
+
+    fun measured(height: Int) {
+        range = height
+        if (folded > height) folded = height.toFloat()
+    }
+}
+
+private fun Modifier.foldsWith(collapse: RequestHeaderCollapse): Modifier =
+    clipToBounds().layout { measurable, constraints ->
+        val placeable = measurable.measure(constraints)
+        collapse.measured(placeable.height)
+        val height = (placeable.height - collapse.folded.roundToInt()).coerceAtLeast(0)
+        layout(placeable.width, height) {
+            placeable.place(0, height - placeable.height)
+        }
+    }
 
 //==================================================
 // Morphe Request Flow (Screen when morphe requests)
 //==================================================
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun HelperRequestContent(
     request: HelperRequest,
@@ -159,9 +218,27 @@ internal fun HelperRequestContent(
     val availableSources = settings.orderedSources.filter { it !in settings.disabledSources }
     var primaryAction by remember { mutableStateOf<PrimaryAction?>(null) }
 
-    val flowVisible = state is UiState.Ready || (state is UiState.FastMode && state.progress.result != null)
-    LaunchedEffect(flowVisible) {
-        if (!flowVisible) primaryAction = null
+    val activeResult = when (state) {
+        is UiState.Ready -> state.result
+        is UiState.FastMode -> state.progress.result
+        else -> null
+    }
+    LaunchedEffect(activeResult != null) {
+        if (activeResult == null) primaryAction = null
+    }
+
+    val pickerState = activeResult?.let { result ->
+        rememberSourcePickerState(
+            request = request,
+            result = result,
+            selectedPagerPage = selectedPagerPage,
+            onPagerPageChanged = onPagerPageChanged,
+            onResolve = onResolve,
+            onDownload = onDownload,
+            onVersionHistory = onVersionHistory,
+            onSolveCaptcha = onSolveCaptcha,
+            onPrimaryActionChanged = { primaryAction = it }
+        )
     }
 
     var confirmFastModeTarget by remember { mutableStateOf<Boolean?>(null) }
@@ -172,10 +249,22 @@ internal fun HelperRequestContent(
     val monochrome = LocalMonochromeTheme.current
     val listState = rememberLazyListState()
     val pageHaze = remember { HazeState() }
+    val collapse = remember(request.packageName) { RequestHeaderCollapse() }
     val scope = rememberCoroutineScope()
 
-    var headerHeightDp by remember { mutableStateOf(0.dp) }
+    var unfoldedHeaderHeightDp by remember { mutableStateOf(0.dp) }
     var footerHeightDp by remember { mutableStateOf(0.dp) }
+
+    val formatsLocked = state is UiState.Downloading ||
+        state is UiState.CheckingPickedFile ||
+        state is UiState.ScanAsk ||
+        state is UiState.ScanResult ||
+        (state is UiState.FastMode && !state.progress.done)
+    val formatCardAlpha by animateFloatAsState(
+        targetValue = if (formatsLocked) 0.42f else 1f,
+        animationSpec = tween(200),
+        label = "accepted_formats_alpha"
+    )
     var copied by remember(request.packageName) { mutableStateOf(false) }
     LaunchedEffect(copied) {
         if (copied) {
@@ -188,6 +277,15 @@ internal fun HelperRequestContent(
         installed = withContext(Dispatchers.IO) {
             context.isPackageInstalled(request.packageName)
         }
+    }
+
+    val isAtTop by remember(listState) {
+        derivedStateOf {
+            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+        }
+    }
+    LaunchedEffect(isAtTop) {
+        if (isAtTop) collapse.unfold()
     }
 
     val isScrolled by remember(listState) {
@@ -204,8 +302,10 @@ internal fun HelperRequestContent(
         lerp(scheme.surfaceColorAtElevation(2.dp), scheme.primary, 0.18f).copy(alpha = tintAlpha)
     }
 
+    pickerState?.let { SourcePickerDialog(state = it) }
+
     confirmFastModeTarget?.let { enableFastMode ->
-        dev.rushi.apkdownloadhelper.ui.shared.dialog.AppAlertDialog(
+        AppAlertDialog(
             onDismissRequest = { confirmFastModeTarget = null },
             title = {
                 Text(
@@ -224,7 +324,7 @@ internal fun HelperRequestContent(
                 )
             },
             confirmButton = {
-                androidx.compose.material3.TextButton(
+                TextButton(
                     onClick = {
                         confirmFastModeTarget = null
                         onSettingsChange(settings.copy(fastMode = enableFastMode))
@@ -234,7 +334,7 @@ internal fun HelperRequestContent(
                 }
             },
             dismissButton = {
-                androidx.compose.material3.TextButton(
+                TextButton(
                     onClick = { confirmFastModeTarget = null }
                 ) {
                     Text("Cancel")
@@ -243,7 +343,11 @@ internal fun HelperRequestContent(
         )
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(collapse.connection)
+    ) {
         // 1. Full-screen LazyColumn scrolling behind the frosted header & bottom bar
         LazyColumn(
             state = listState,
@@ -251,14 +355,13 @@ internal fun HelperRequestContent(
                 .fillMaxSize()
                 .hazeSource(state = pageHaze),
             contentPadding = PaddingValues(
-                top = headerHeightDp + 12.dp,
+                top = unfoldedHeaderHeightDp + 12.dp,
                 start = AppDefaults.ContentPadding,
                 end = AppDefaults.ContentPadding,
                 bottom = (if (primaryAction != null) footerHeightDp else 0.dp) + 12.dp
             ),
             verticalArrangement = Arrangement.spacedBy(AppDefaults.ItemSpacing)
         ) {
-            // Interactive Format Selector Card (replaces duplicated AppInfoCard)
             val allKinds = request.availableFileKinds.orderedFileKinds()
             if (allKinds.size > 1) {
                 item(key = "format_selector") {
@@ -267,6 +370,7 @@ internal fun HelperRequestContent(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .alpha(formatCardAlpha)
                             .clip(RoundedCornerShape(24.dp))
                             .background(scheme.surfaceColorAtElevation(2.dp))
                             .padding(16.dp),
@@ -316,6 +420,7 @@ internal fun HelperRequestContent(
                                 )
                                 Surface(
                                     onClick = { onFormatToggle(kind) },
+                                    enabled = !formatsLocked,
                                     modifier = Modifier
                                         .weight(1f)
                                         .height(40.dp),
@@ -362,23 +467,16 @@ internal fun HelperRequestContent(
                 UiState.Loading -> item(key = "loading") { LoadingState() }
 
                 is UiState.Ready -> {
-                    item(key = "source_picker") {
-                        SourcePickerFlow(
+                    pickerState?.let { picker ->
+                        sourcePickerItems(
+                            state = picker,
                             request = request,
-                            result = state.result,
-                            selectedPagerPage = selectedPagerPage,
-                            onPagerPageChanged = onPagerPageChanged,
-                            onResolve = onResolve,
                             onDownload = onDownload,
                             onPickDownloadedFile = onPickDownloadedFile,
                             onUseInstalledApp = onUseInstalledApp,
                             onSolveCaptcha = onSolveCaptcha,
-                            onVersionHistory = onVersionHistory,
                             onDownloadVersion = onDownloadVersion,
-                            onRefresh = onRefresh,
-                            onCancel = onCancel,
-                            installedPackageRefreshToken = installedPackageRefreshToken,
-                            onPrimaryActionChanged = { primaryAction = it }
+                            installedPackageRefreshToken = installedPackageRefreshToken
                         )
                     }
                 }
@@ -472,50 +570,44 @@ internal fun HelperRequestContent(
                             VirusTotalQuotaCard(virusTotalApiKey)
                         }
                     }
-                    state.progress.result?.let { result ->
-                        item(key = "fast_mode_fallback_picker") {
-                            SourcePickerFlow(
-                                request = request,
-                                result = result,
-                                selectedPagerPage = selectedPagerPage,
-                                onPagerPageChanged = onPagerPageChanged,
-                                onResolve = onResolve,
-                                onDownload = onDownload,
-                                onPickDownloadedFile = onPickDownloadedFile,
-                                onUseInstalledApp = onUseInstalledApp,
-                                onSolveCaptcha = onSolveCaptcha,
-                                onVersionHistory = onVersionHistory,
-                                onDownloadVersion = onDownloadVersion,
-                                onRefresh = onRefresh,
-                                onCancel = onCancel,
-                                installedPackageRefreshToken = installedPackageRefreshToken,
-                                onPrimaryActionChanged = { primaryAction = it }
-                            )
-                        }
+                    pickerState?.let { picker ->
+                        sourcePickerItems(
+                            state = picker,
+                            request = request,
+                            onDownload = onDownload,
+                            onPickDownloadedFile = onPickDownloadedFile,
+                            onUseInstalledApp = onUseInstalledApp,
+                            onSolveCaptcha = onSolveCaptcha,
+                            onDownloadVersion = onDownloadVersion,
+                            installedPackageRefreshToken = installedPackageRefreshToken
+                        )
                     }
                 }
             }
         }
 
-        // 2. Scrollbar matching AppBrowserScreen
+        // 2. Smooth scrollbar with fixed top offset so it doesn't expand when the header pills hide
         LazyListScrollbar(
             listState = listState,
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .fillMaxHeight()
-                .padding(top = headerHeightDp)
-                .navigationBarsPadding()
+                .padding(
+                    top = unfoldedHeaderHeightDp,
+                    bottom = if (primaryAction != null) footerHeightDp else 0.dp
+                )
+                .then(if (primaryAction == null) Modifier.navigationBarsPadding() else Modifier)
         )
 
-        // 3. Go-to-top FAB matching AppBrowserScreen
+        // 3. Go-to-top FAB
         AnimatedFab(
-            visible = listState.firstVisibleItemIndex > 0,
+            visible = listState.firstVisibleItemIndex > 1,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .navigationBarsPadding()
+                .then(if (primaryAction == null) Modifier.navigationBarsPadding() else Modifier)
                 .padding(
                     end = 20.dp,
-                    bottom = (if (primaryAction != null) footerHeightDp else 0.dp) + 20.dp
+                    bottom = (if (primaryAction != null) footerHeightDp else 0.dp) + 12.dp
                 )
         ) {
             Surface(
@@ -533,13 +625,16 @@ internal fun HelperRequestContent(
             }
         }
 
-        // 4. AppDetailScreen-style Frosted Hero Header (No format pill here—Version, Build & ABI only)
+        // 4. AppDetailScreen-style Frosted Hero Header with scroll-collapsing pill bar
         Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .onSizeChanged { size ->
-                    headerHeightDp = with(density) { size.height.toDp() }
+                    val measuredDp = with(density) { size.height.toDp() }
+                    if (collapse.folded == 0f && measuredDp > 0.dp) {
+                        unfoldedHeaderHeightDp = measuredDp
+                    }
                 }
                 .clip(headerShape)
                 .glassFill(
@@ -554,10 +649,7 @@ internal fun HelperRequestContent(
                     vertical = 12.dp
                 )
         ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -633,39 +725,46 @@ internal fun HelperRequestContent(
                     )
                 }
 
-                // Single-row horizontally scrollable StatusBadges (Version, Build, ABIs)
+                // Single-row horizontally scrollable badges that fold away on scroll
                 val badgeFill = if (monochrome) {
                     scheme.surfaceVariant.copy(alpha = 0.65f)
                 } else {
                     lerp(scheme.surfaceVariant, scheme.primary, 0.25f).copy(alpha = 0.65f)
                 }
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .foldsWith(collapse)
                 ) {
-                    StatusBadge(
-                        text = "Version ${request.requestedVersionName ?: "Any"}",
-                        icon = Icons.Outlined.History,
-                        containerColor = badgeFill,
-                        contentColor = scheme.onSurface
-                    )
-                    request.versionCodeSummary?.let { code ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp)
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         StatusBadge(
-                            text = "Build $code",
+                            text = request.requestedVersionName ?: "Any",
+                            icon = Icons.Outlined.History,
                             containerColor = badgeFill,
                             contentColor = scheme.onSurface
                         )
-                    }
-                    request.availableAbis.firstOrNull()?.let { primaryAbi ->
-                        StatusBadge(
-                            text = primaryAbi,
-                            icon = Icons.Outlined.Memory,
-                            containerColor = badgeFill,
-                            contentColor = scheme.onSurface
-                        )
+                        request.versionCodeSummary?.let { code ->
+                            StatusBadge(
+                                text = "Build $code",
+                                containerColor = badgeFill,
+                                contentColor = scheme.onSurface
+                            )
+                        }
+                        request.availableAbis.firstOrNull()?.let { primaryAbi ->
+                            StatusBadge(
+                                text = primaryAbi,
+                                icon = Icons.Outlined.Memory,
+                                containerColor = badgeFill,
+                                contentColor = scheme.onSurface
+                            )
+                        }
                     }
                 }
             }
@@ -692,7 +791,7 @@ internal fun HelperRequestContent(
             )
         }
 
-        // 6. Pinned Bottom Frosted Action Bar (Haze blur on Refresh, Close & Primary pill)
+        // 6. Pinned Bottom Frosted Action Bar
         primaryAction?.let { action ->
             SourceBottomBar(
                 action = action,

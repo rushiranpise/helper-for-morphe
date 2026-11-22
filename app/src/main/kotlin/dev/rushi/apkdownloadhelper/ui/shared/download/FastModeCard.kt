@@ -288,79 +288,72 @@ internal fun FastModeCard(
                 val percent = progress.percent
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(AppDefaults.ItemSpacing),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    DownloadProgressGauge(
-                        percent = percent,
-                        paused = progress.paused,
-                        modifier = Modifier.size(104.dp)
-                    )
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (isScan) {
-                            val (phase, detail) = scanPhaseSplit(progress.detail)
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
+                    if (isScan) {
+                        val (phase, detail) = scanPhaseSplit(progress.detail)
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Text(
+                                text = phase,
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleSmall,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (detail.isNotBlank()) {
                                 Text(
-                                    text = phase,
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    maxLines = 2,
+                                    text = detail,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 3,
                                     overflow = TextOverflow.Ellipsis
                                 )
-                                if (detail.isNotBlank()) {
-                                    Text(
-                                        text = detail,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        maxLines = 3,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
                             }
-                        } else {
-                            TransferStats(
-                                connections = progress.connections,
-                                speedBytesPerSec = progress.speedBytesPerSec,
-                                etaMs = progress.etaMs,
-                                paused = progress.paused,
-                                includeConnections = percent < 100,
-                                modifier = Modifier.weight(1f)
-                            )
                         }
-                        IconActionButton(
-                            icon = Icons.Outlined.Close,
-                            contentDescription = "Cancel download",
-                            onClick = onCancel
+                    } else {
+                        TransferStats(
+                            connections = progress.connections,
+                            speedBytesPerSec = progress.speedBytesPerSec,
+                            etaMs = progress.etaMs,
+                            paused = progress.paused,
+                            includeConnections = percent < 100,
+                            modifier = Modifier.weight(1f)
                         )
                     }
+                    DownloadPercentPill(percent = percent, paused = progress.paused)
+                    DownloadCancelButton(onClick = onCancel)
                 }
+                DownloadProgressBar(
+                    percent = percent,
+                    paused = progress.paused,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 if (!isScanStatus(progress.detail) && progress.percent < 100) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        HelperOutlinedButton(
+                        DownloadPillButton(
                             text = if (progress.paused) "Resume" else "Pause",
+                            icon = if (progress.paused) Icons.Outlined.PlayArrow else Icons.Outlined.Pause,
+                            primary = true,
                             onClick = if (progress.paused) onResume else onPause,
-                            modifier = Modifier.weight(1f),
-                            icon = if (progress.paused) Icons.Outlined.PlayArrow else Icons.Outlined.Pause
+                            modifier = Modifier.weight(1f)
                         )
-                        HelperOutlinedButton(
+                        DownloadPillButton(
                             text = "Switch source",
+                            icon = Icons.Outlined.SwapHoriz,
+                            primary = false,
                             onClick = {
                                 resumeOnDismiss = !progress.paused
                                 if (!progress.paused) onPause()
                                 showSwitch = true
                             },
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Outlined.SwapHoriz
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
@@ -369,10 +362,11 @@ internal fun FastModeCard(
                     onSkipWait = onSkipWait
                 )
                 if (isScanStatus(progress.detail)) {
-                    HelperButton(
+                    DownloadPillButton(
                         text = "Skip scan & hand off",
-                        onClick = onSkipScan,
                         icon = Icons.Outlined.Shield,
+                        primary = true,
+                        onClick = onSkipScan,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }

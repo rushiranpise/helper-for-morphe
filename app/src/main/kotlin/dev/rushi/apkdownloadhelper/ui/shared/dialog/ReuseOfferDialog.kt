@@ -1,23 +1,38 @@
 package dev.rushi.apkdownloadhelper.ui.shared.dialog
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.HelpOutline
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,14 +40,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import dev.rushi.apkdownloadhelper.HelperButton
 import dev.rushi.apkdownloadhelper.R
 import dev.rushi.apkdownloadhelper.storage.DownloadHistoryEntry
+import dev.rushi.apkdownloadhelper.ui.shared.appcard.AppAvatar
+import dev.rushi.apkdownloadhelper.ui.shared.chip.StatusBadge
+import dev.rushi.apkdownloadhelper.ui.shared.chip.StatusBadgeRow
 import dev.rushi.apkdownloadhelper.ui.shared.icon.ThemedIcon
-import dev.rushi.apkdownloadhelper.ui.shared.source.sourceCardBorder
-import dev.rushi.apkdownloadhelper.ui.shared.source.sourceCardFill
-import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.SemanticTone
+import dev.rushi.apkdownloadhelper.ui.theme.pressScale
 import dev.rushi.apkdownloadhelper.ui.util.formatBytes
 
 /** A previously downloaded file offered for reuse, with its size on disk. */
@@ -56,104 +71,198 @@ internal fun ReuseOfferDialog(
             )
         },
         text = {
+            val scheme = MaterialTheme.colorScheme
+            val downloadNewInteraction = remember { MutableInteractionSource() }
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(AppDefaults.ContentPaddingSmall)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
                     text = stringResource(R.string.a_previous_download_for_this_exact),
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant
                 )
-                options.forEach { option ->
-                    val entry = option.entry
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(AppDefaults.CompactCornerRadius))
-                            .clickable { onUseExisting(option) },
-                        shape = RoundedCornerShape(AppDefaults.CompactCornerRadius),
-                        color = sourceCardFill(),
-                        border = BorderStroke(1.dp, sourceCardBorder())
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 320.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    options.forEach { option ->
+                        val entry = option.entry
+                        val cardInteraction = remember { MutableInteractionSource() }
+                        Surface(
+                            onClick = { onUseExisting(option) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .pressScale(cardInteraction),
+                            interactionSource = cardInteraction,
+                            shape = RoundedCornerShape(20.dp),
+                            color = scheme.surfaceColorAtElevation(4.dp),
+                            contentColor = scheme.onSurface
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Text(
-                                    text = entry.sourceName,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                entry.versionName?.let {
-                                    Text(
-                                        text = "· $it",
-                                        style = MaterialTheme.typography.labelLarge,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                if (option.sizeBytes > 0L) {
-                                    Text(
-                                        text = "· ${option.sizeBytes.formatBytes()}",
-                                        style = MaterialTheme.typography.labelLarge,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            Text(
-                                text = entry.fileName,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            entry.scanVerdict?.let { verdict ->
+                                // App icon + name + package
                                 Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(AppDefaults.ContentPaddingSmall),
-                                    modifier = Modifier.padding(top = 3.dp)
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    ThemedIcon(
-                                        icon = when {
-                                            verdict.malicious -> Icons.Outlined.Warning
-                                            verdict.failed -> Icons.Outlined.HelpOutline
-                                            else -> Icons.Outlined.CheckCircle
-                                        },
-                                        size = 16.dp,
-                                        tint = when {
-                                            verdict.malicious -> SemanticTone.Error.accent
-                                            verdict.failed -> SemanticTone.Warning.accent
-                                            else -> SemanticTone.Success.accent
-                                        }
+                                    AppAvatar(
+                                        packageName = entry.packageName,
+                                        initial = entry.appName.firstOrNull()?.uppercaseChar() ?: '?'
+                                    )
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        Text(
+                                            text = entry.appName,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = scheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = entry.packageName,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = scheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+
+                                // Version, source, format & file size pills
+                                StatusBadgeRow(modifier = Modifier.fillMaxWidth()) {
+                                    entry.versionName?.let { version ->
+                                        StatusBadge(
+                                            text = version,
+                                            icon = Icons.Outlined.History,
+                                            tone = SemanticTone.Primary
+                                        )
+                                    }
+                                    StatusBadge(
+                                        text = entry.sourceName,
+                                        containerColor = scheme.surfaceVariant.copy(alpha = 0.65f),
+                                        contentColor = scheme.onSurface
+                                    )
+                                    if (entry.fileKind.isNotBlank() && !entry.fileKind.equals("web", ignoreCase = true)) {
+                                        StatusBadge(
+                                            text = entry.fileKind.uppercase(),
+                                            containerColor = scheme.surfaceVariant.copy(alpha = 0.65f),
+                                            contentColor = scheme.onSurfaceVariant
+                                        )
+                                    }
+                                    if (option.sizeBytes > 0L) {
+                                        StatusBadge(
+                                            text = option.sizeBytes.formatBytes(),
+                                            containerColor = scheme.surfaceVariant.copy(alpha = 0.65f),
+                                            contentColor = scheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+
+                                // File name strip
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(scheme.surfaceVariant.copy(alpha = 0.35f))
+                                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.FolderOpen,
+                                        contentDescription = null,
+                                        tint = scheme.onSurfaceVariant,
+                                        modifier = Modifier.size(14.dp)
                                     )
                                     Text(
-                                        text = verdict.label,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.Medium,
-                                        color = if (verdict.malicious) {
-                                            MaterialTheme.colorScheme.error
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
+                                        text = entry.fileName,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = scheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
                                     )
+                                }
+
+                                // Scan verdict (if any)
+                                entry.scanVerdict?.let { verdict ->
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        ThemedIcon(
+                                            icon = when {
+                                                verdict.malicious -> Icons.Outlined.Warning
+                                                verdict.failed -> Icons.Outlined.HelpOutline
+                                                else -> Icons.Outlined.CheckCircle
+                                            },
+                                            size = 15.dp,
+                                            tint = when {
+                                                verdict.malicious -> SemanticTone.Error.accent
+                                                verdict.failed -> SemanticTone.Warning.accent
+                                                else -> SemanticTone.Primary.accent
+                                            }
+                                        )
+                                        Text(
+                                            text = verdict.label,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Medium,
+                                            color = if (verdict.malicious) {
+                                                scheme.error
+                                            } else {
+                                                scheme.onSurfaceVariant
+                                            },
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
-                Spacer(Modifier.height(4.dp))
-                HelperButton(
-                    text = "Download new",
+
+                Button(
                     onClick = onDownloadNew,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .pressScale(downloadNewInteraction),
+                    interactionSource = downloadNewInteraction,
+                    shape = CircleShape,
+                    border = null,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = scheme.primaryContainer,
+                        contentColor = scheme.onPrimaryContainer
+                    ),
+                    contentPadding = PaddingValues(horizontal = 16.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Download,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Download new",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
+                    )
+                }
             }
         },
         confirmButton = {}
