@@ -249,6 +249,55 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
             .takeIf(List<DownloadCandidate>::isNotEmpty)
     }
 
+    private suspend fun apkMirrorApiRequestedCandidates(
+        request: HelperRequest
+    ): List<DownloadCandidate>? {
+        val api = ctx.apkMirrorApi ?: return null
+        val data = runCatching {
+            api.appExists(ApkMirrorAppExistsRequest(pnames = listOf(request.packageName)))
+                .data
+                .firstOrNull { it.pname == request.packageName && it.exists }
+        }
+            .onFailure { Log.w(TAG, "APKMirror API requested lookup failed", it) }
+            .getOrNull()
+            ?: return null
+
+        val version = data.release.version.trim()
+        if (version.isEmpty()) return null
+        val requestedMatches = request.requestedVersionNames.any { it.versionNameEquals(version) } ||
+            (request.requestedVersionNames.isEmpty() && request.compatibleVersionNames.any { it.versionNameEquals(version) })
+        if (!requestedMatches) return null
+
+        val releaseUrl = apkMirrorAbsoluteUrl(data.release.link)
+            ?.takeIf(::apkMirrorLooksLikeReleaseUrl)
+            ?: return null
+        val variants = data.apks
+            .flatMap { it.toApkMirrorVariants() }
+            .mapIndexed { index, variant -> variant.copy(number = index + 1) }
+        if (variants.isEmpty()) return null
+
+        val selected = apkMirrorSelectableVariants(request, variants, CandidateOption.REQUESTED)
+        if (selected.isEmpty()) return null
+        val multiVariant = selected.size > 1
+        return selected.mapNotNull { variant ->
+            runCatching {
+                apkMirrorDirectCandidateFromReleaseUrl(
+                    request = request,
+                    releaseUrl = releaseUrl,
+                    versionName = version,
+                    option = CandidateOption.REQUESTED,
+                    variant = variant,
+                    variantNumber = variant.number.takeIf { multiVariant }
+                )
+            }
+                .onFailure { Log.w(TAG, "APKMirror API requested variant failed: ${variant.url}", it) }
+                .getOrNull()
+        }
+            .distinctBy(DownloadCandidate::identityKey)
+            .takeIf(List<DownloadCandidate>::isNotEmpty)
+    }
+
+
     private fun ApkMirrorAppExistsApk.toApkMirrorVariants(): List<ApkMirrorVariant> {
         val url = apkMirrorAbsoluteUrl(link) ?: return emptyList()
         val kinds = downloadTypes.mapNotNull { type ->
@@ -427,10 +476,11 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
         )
     }
 
-    private fun findApkMirrorRequested(request: HelperRequest): List<DownloadCandidate> {
+    private suspend fun findApkMirrorRequested(request: HelperRequest): List<DownloadCandidate> {
         if (!request.hasKnownVersionRequest) return emptyList()
 
         apkMirrorFastPath(request, CandidateOption.REQUESTED)?.let { return it }
+        apkMirrorApiRequestedCandidates(request)?.let { return it }
 
         val searchDoc = fetchDocument(apkMirrorPackageSearchUrl(request.packageName))
         val appPageUrl = resolveApkMirrorAppPage(

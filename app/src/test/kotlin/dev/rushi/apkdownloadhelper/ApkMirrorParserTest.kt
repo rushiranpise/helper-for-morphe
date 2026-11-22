@@ -1,4 +1,4 @@
-package dev.rushi.apkdownloadhelper
+﻿package dev.rushi.apkdownloadhelper
 
 import dev.rushi.apkdownloadhelper.download.*
 import dev.rushi.apkdownloadhelper.sources.*
@@ -260,6 +260,66 @@ class ApkMirrorParserTest {
         val candidate = candidates.single()
         assertEquals("2.0.0", candidate.versionName)
         assertEquals(200L, candidate.versionCode)
+        assertEquals("$finalUrl&forcebaseapk=true", candidate.url)
+        assertTrue(candidate.directDownload)
+        assertTrue(fetcher.requestedUrls().none { it.contains("?post_type") })
+    }
+
+    @Test
+    fun findCandidates_requestedUsesApkMirrorApiWhenVersionMatches() = runBlocking {
+        val releaseUrl = "https://www.apkmirror.com/apk/example-org/example-app/2-0-0-release/"
+        val variantUrl = "${releaseUrl}example-app-2-0-0-android-apk-download/"
+        val downloadPageUrl = "${variantUrl}download/"
+        val finalUrl = "https://www.apkmirror.com/download.php?id=200&key=b"
+        val fetcher = FakeSourceTextFetcher(
+            pages = mapOf(
+                variantUrl to
+                    """<html><body>
+                         <table><tr><th>Version</th><td>2.0.0 (200)</td></tr></table>
+                         <a class="downloadButton" href="$downloadPageUrl">Download</a>
+                       </body></html>""",
+                downloadPageUrl to
+                    """<html><body><a id="download-link" href="$finalUrl"></a></body></html>"""
+            )
+        )
+        val api = FakeApkMirrorApi(
+            ApkMirrorAppExistsResponse(
+                data = listOf(
+                    ApkMirrorAppExistsData(
+                        pname = packageName,
+                        exists = true,
+                        release = ApkMirrorAppExistsRelease("2.0.0", releaseUrl),
+                        apks = listOf(
+                            ApkMirrorAppExistsApk(
+                                versionCode = "200",
+                                link = variantUrl,
+                                arches = listOf("universal"),
+                                dpis = listOf("nodpi"),
+                                downloadTypes = listOf("apk")
+                            )
+                        )
+                    )
+                )
+            )
+        )
+        val parser = ApkMirrorParser(
+            SourceParserContext(
+                fetcher = fetcher,
+                apkPureApi = FakeApkPureApi(),
+                aptoideApi = FakeAptoideApi(),
+                apkMirrorApi = api
+            )
+        )
+
+        val candidates = parser.findCandidates(
+            testRequest(packageName = packageName, versionName = "2.0.0"),
+            CandidateOption.REQUESTED
+        )
+
+        val candidate = candidates.single()
+        assertEquals("2.0.0", candidate.versionName)
+        assertEquals(200L, candidate.versionCode)
+        assertEquals(CandidateOption.REQUESTED, candidate.option)
         assertEquals("$finalUrl&forcebaseapk=true", candidate.url)
         assertTrue(candidate.directDownload)
         assertTrue(fetcher.requestedUrls().none { it.contains("?post_type") })
