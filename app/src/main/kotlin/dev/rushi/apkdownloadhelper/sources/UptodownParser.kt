@@ -1,4 +1,4 @@
-﻿package dev.rushi.apkdownloadhelper.sources
+package dev.rushi.apkdownloadhelper.sources
 
 import android.net.Uri
 import android.util.Log
@@ -397,7 +397,7 @@ internal class UptodownParser(private val ctx: SourceParserContext) : ApkSourceP
             // (e.g. an "external" Play Store listing like Discord). Pointing at a
             // store page is not a downloadable file, so don't treat it as a direct
             // download  the row should fall back to opening the page instead.
-            ?.takeUnless { it.isPlayStoreListing() }
+            ?.takeUnless { it.isPlayStoreListing() || (request.packageName != "com.uptodown" && it.isUptodownStoreListing()) }
             ?: uptodownDownloadUrlFromPage(doc)
         val normalizedDetailUrl = detailUrl.trimEnd('/')
         val dataCode = versionsDoc?.let(::uptodownDataCode) ?: uptodownDataCode(doc)
@@ -737,12 +737,18 @@ internal class UptodownParser(private val ctx: SourceParserContext) : ApkSourceP
             contains("market.android.com", ignoreCase = true) ||
             startsWith("market://", ignoreCase = true)
 
+    private fun String.isUptodownStoreListing(): Boolean =
+        contains("uptodown-android", ignoreCase = true) ||
+            contains("com.uptodown", ignoreCase = true) ||
+            contains("uptodown-app-store", ignoreCase = true)
+
     private fun uptodownDownloadUrlFromPage(doc: Document): String? {
         val dataUrl = doc.selectFirst("#detail-download-button[data-url]")
             ?.attr("data-url")
             ?.takeIf(String::isNotBlank)
             ?: return null
         val normalized = dataUrl.trim()
+        if (normalized.isUptodownStoreListing()) return null
         return if (normalized.startsWith("http", ignoreCase = true)) {
             normalized.normalizedHttpUrlOrNull()
         } else {
