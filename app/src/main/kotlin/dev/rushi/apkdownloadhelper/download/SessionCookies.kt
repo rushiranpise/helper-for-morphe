@@ -1,4 +1,4 @@
-﻿package dev.rushi.apkdownloadhelper.download
+package dev.rushi.apkdownloadhelper.download
 
 import okhttp3.Cookie
 import okhttp3.CookieJar
@@ -40,6 +40,13 @@ internal object SessionCookies : CookieJar {
                     byHost[key] = list.takeLast(MAX_COOKIES_PER_HOST).toMutableList()
                 }
             }
+        }
+        runCatching {
+            val cm = android.webkit.CookieManager.getInstance() ?: return@runCatching
+            cookies.forEach { cookie ->
+                cm.setCookie(url.toString(), cookie.toString())
+            }
+            cm.flush()
         }
     }
 
@@ -105,6 +112,13 @@ internal object SessionCookies : CookieJar {
     }
 
     override fun loadForRequest(url: HttpUrl): List<Cookie> {
+        runCatching {
+            val cm = android.webkit.CookieManager.getInstance()
+            cm?.getCookie(url.toString())
+        }.getOrNull()?.let { header ->
+            importCookieHeader(url, header)
+        }
+
         val keys = candidateDomainKeys(url.host)
         val now = System.currentTimeMillis()
         val cookiesByName = LinkedHashMap<String, Cookie>()

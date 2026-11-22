@@ -1,4 +1,4 @@
-﻿package dev.rushi.apkdownloadhelper
+package dev.rushi.apkdownloadhelper
 
 import android.Manifest
 import android.app.Activity
@@ -248,12 +248,14 @@ class MainActivity : ComponentActivity() {
         const val APKMIRROR_REQUEST_GAP_MS = 800L
     }
 
-    private val browserUserAgent =
-        "Mozilla/5.0 (Linux; Android ${Build.VERSION.RELEASE}; ${Build.MODEL}) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
-
-    /** APKMirror challenges browser user agents but serves this one normally. */
-    private val apkMirrorUserAgent = "HelperForMorphe/1.0"
+    private val browserUserAgent: String by lazy {
+        runCatching {
+            android.webkit.WebSettings.getDefaultUserAgent(this)
+        }.getOrNull() ?: (
+            "Mozilla/5.0 (Linux; Android ${Build.VERSION.RELEASE}; ${Build.MODEL}) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+        )
+    }
 
     private val client = OkHttpClient.Builder()
         .followRedirects(true)
@@ -261,15 +263,9 @@ class MainActivity : ComponentActivity() {
         .dns(AdGuardDns)
         .cookieJar(SessionCookies)
         .addInterceptor { chain ->
-            val host = chain.request().url.host.lowercase(Locale.US)
-            val userAgent = if (host == "apkmirror.com" || host.endsWith(".apkmirror.com")) {
-                apkMirrorUserAgent
-            } else {
-                browserUserAgent
-            }
             chain.proceed(
                 chain.request().newBuilder()
-                    .header("User-Agent", userAgent)
+                    .header("User-Agent", browserUserAgent)
                     .build()
             )
         }
@@ -1511,7 +1507,7 @@ class MainActivity : ComponentActivity() {
         source: DownloadSource,
         candidates: List<DownloadCandidate>
     ): List<DownloadCandidate> {
-        if (!request.hasRequestedVersionRequest || source == DownloadSource.AURORA || source == DownloadSource.PLAY) {
+        if (!request.hasRequestedVersionRequest || source == DownloadSource.PLAY) {
             return emptyList()
         }
 
@@ -2467,19 +2463,16 @@ class MainActivity : ComponentActivity() {
         request: HelperRequest,
         source: DownloadSource
     ): FastModeFindResult {
-                val outcome = resolveSourceSection(request, source, CandidateOption.REQUESTED)
+        val fallback = parsers[source]?.requestedFallbackCandidate(request)
+        val outcome = resolveSourceSection(request, source, CandidateOption.REQUESTED)
         // Multiple formats can be selected now, so take the first one in the
         // picker's order (APK before APKM/APKS/XAPK) instead of whichever order
         // the source happened to list.
         val exact = outcome.candidates.withIndex()
             .filter { (_, candidate) ->
-                // Format differences are fine, but the exact version name AND
-                // version code are both required. A captcha-gated page is still an
-                // exact match: the in-app browser can reveal its file after the user
-                // solves the challenge. A candidate that reports a code outside the
-                // request is surfaced as a mismatch the user can accept or skip 
-                // never silently downloaded.
-                (candidate.directDownload || candidate.captchaUrl != null) &&
+                // Unverified fallback web links are for manual browsing, not automated Fast Mode
+                (fallback == null || candidate.url != fallback.url) &&
+                    (candidate.directDownload || candidate.captchaUrl != null) &&
                     request.matchesRequestedVersionStrict(candidate)
             }
             .minWithOrNull(

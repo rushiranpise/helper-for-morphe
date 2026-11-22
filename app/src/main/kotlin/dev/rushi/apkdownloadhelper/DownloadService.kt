@@ -1,4 +1,4 @@
-﻿package dev.rushi.apkdownloadhelper
+package dev.rushi.apkdownloadhelper
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -313,9 +313,14 @@ internal class DownloadService : Service() {
     @Volatile private var transferInProgress = false
     @Volatile private var currentConnections = 1
 
-    private val browserUserAgent =
-        "Mozilla/5.0 (Linux; Android ${Build.VERSION.RELEASE}; ${Build.MODEL}) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
+    private val browserUserAgent: String by lazy {
+        runCatching {
+            android.webkit.WebSettings.getDefaultUserAgent(this)
+        }.getOrNull() ?: (
+            "Mozilla/5.0 (Linux; Android ${Build.VERSION.RELEASE}; ${Build.MODEL}) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+        )
+    }
 
     private val client = OkHttpClient.Builder()
         .followRedirects(true)

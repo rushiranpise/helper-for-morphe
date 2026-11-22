@@ -1,4 +1,4 @@
-﻿package dev.rushi.apkdownloadhelper.download
+package dev.rushi.apkdownloadhelper.download
 
 import dev.rushi.apkdownloadhelper.storage.AppLog
 import dev.rushi.apkdownloadhelper.storage.LogLevel
@@ -33,9 +33,15 @@ internal fun httpLoggingInterceptor(fallbackLabel: String = "HTTP"): Interceptor
     }
 
 private fun logHttpExchange(request: Request, response: Response, fallbackLabel: String) {
+    val cookies = request.header("Cookie")
+    val cookieInfo = if (!cookies.isNullOrBlank()) {
+        " (Cookies: ${cookies.split(';').map { it.trim().substringBefore('=') }.joinToString()})"
+    } else {
+        ""
+    }
     AppLog.record(
         LogLevel.Info,
-        "HTTP > [${sourceLabel(request.url, fallbackLabel)}] ${request.method} ${request.url}"
+        "HTTP > [${sourceLabel(request.url, fallbackLabel)}] ${request.method} ${request.url}$cookieInfo"
     )
     val hops = buildList {
         var prior = response.priorResponse
