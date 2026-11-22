@@ -1,4 +1,4 @@
-﻿package dev.rushi.apkdownloadhelper.ui
+package dev.rushi.apkdownloadhelper.ui
 
 import android.Manifest
 import android.content.Context
@@ -626,9 +626,14 @@ internal fun AppBrowserScreen(
     onOpenApp: (ArchiveApp) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    var apps by remember { mutableStateOf<List<ArchiveApp>?>(null) }
-    var archiveIndex by remember { mutableStateOf<MorpheArchiveIndex?>(null) }
-    var freshness by remember { mutableStateOf<ArchiveFreshness?>(null) }
+    val initialIndex = MorpheArchive.inMemoryIndex
+    var apps by remember {
+        mutableStateOf<List<ArchiveApp>?>(
+            initialIndex?.apps?.sortedBy { it.name.lowercase(Locale.US) }
+        )
+    }
+    var archiveIndex by remember { mutableStateOf(initialIndex) }
+    var freshness by remember { mutableStateOf(initialIndex?.let { archiveFreshness(it.generatedAt) }) }
     var error by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
     var trackPackageQuery by remember { mutableStateOf("") }

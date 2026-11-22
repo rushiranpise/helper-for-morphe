@@ -1,4 +1,4 @@
-﻿package dev.rushi.apkdownloadhelper
+package dev.rushi.apkdownloadhelper
 
 import dev.rushi.apkdownloadhelper.download.*
 import dev.rushi.apkdownloadhelper.sources.*
@@ -127,6 +127,18 @@ class MorpheArchiveSourcesTest {
         val reason = app.matchingReason("anddea")
         assertTrue(reason is MatchReason.SourceRepo)
         assertEquals("Source: revanced-patches", reason?.label)
+    }
+
+    @Test
+    fun `inMemoryIndex caches the loaded index in RAM`() {
+        val testIndex = MorpheArchiveIndex(
+            generatedAt = "2026-11-22 12:00 UTC",
+            apps = listOf(
+                ArchiveApp(name = "TestApp", packageName = "com.test.app")
+            )
+        )
+        MorpheArchive.inMemoryIndex = testIndex
+        assertEquals(testIndex, MorpheArchive.inMemoryIndex)
     }
 }
 

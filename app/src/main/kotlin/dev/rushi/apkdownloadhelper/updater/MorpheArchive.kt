@@ -1,4 +1,4 @@
-﻿package dev.rushi.apkdownloadhelper.updater
+package dev.rushi.apkdownloadhelper.updater
 
 import android.content.Context
 import android.util.Log
@@ -386,6 +386,10 @@ internal object MorpheArchive {
         .build()
 
     @Volatile
+    var inMemoryIndex: MorpheArchiveIndex? = null
+        internal set
+
+    @Volatile
     private var patchListCache = java.util.concurrent.ConcurrentHashMap<String, List<ArchivePatch>>()
 
     /** Call after a successful index refresh to force fresh patch lists next fetch. */
@@ -485,12 +489,13 @@ internal object MorpheArchive {
     private const val CACHE_FILE_NAME = "morphe_archive_cache.json"
 
     fun loadCachedIndex(context: Context): MorpheArchiveIndex? {
+        inMemoryIndex?.let { return it }
         return runCatching {
             val file = File(context.filesDir, CACHE_FILE_NAME)
             if (!file.exists() || file.length() == 0L) return null
             val body = file.readText()
             val parsed = gson.fromJson(body, MorpheArchiveData::class.java) ?: return null
-            hydrateIndex(parsed)
+            hydrateIndex(parsed).also { inMemoryIndex = it }
         }.getOrNull()
     }
 
@@ -579,7 +584,7 @@ internal object MorpheArchive {
                 if (parsed.apps.isEmpty()) {
                     error("Index response contained no apps")
                 }
-                val index = hydrateIndex(parsed)
+                val index = hydrateIndex(parsed).also { inMemoryIndex = it }
                 if (context != null) {
                     runCatching { writeCacheFile(context, body) }
                         .onFailure { Log.w(TAG, "Could not cache the app index", it) }
