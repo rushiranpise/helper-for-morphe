@@ -1,4 +1,4 @@
-﻿package dev.rushi.apkdownloadhelper.ui
+package dev.rushi.apkdownloadhelper.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -62,6 +62,7 @@ internal fun MainPagerScaffold(
         HorizontalPager(
             state = pagerState,
             userScrollEnabled = swipeEnabled,
+            beyondViewportPageCount = 3,
             modifier = Modifier
                 .fillMaxSize()
                 .hazeSource(state = barHaze),

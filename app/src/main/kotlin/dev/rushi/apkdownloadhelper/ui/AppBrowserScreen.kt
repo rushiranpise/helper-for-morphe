@@ -128,6 +128,7 @@ import dev.rushi.apkdownloadhelper.updater.ArchiveApp
 import dev.rushi.apkdownloadhelper.updater.ArchiveFreshness
 import dev.rushi.apkdownloadhelper.updater.ArchiveSource
 import dev.rushi.apkdownloadhelper.updater.MorpheArchive
+import dev.rushi.apkdownloadhelper.updater.MatchReason
 import dev.rushi.apkdownloadhelper.updater.archiveFreshness
 import dev.rushi.apkdownloadhelper.updater.formatBundleRelease
 import dev.rushi.apkdownloadhelper.updater.formatReleaseDate
@@ -479,7 +480,7 @@ private fun TrackPackageField(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.Apps,
+                    imageVector = Icons.Outlined.Search,
                     contentDescription = null,
                     tint = scheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp)
@@ -490,7 +491,7 @@ private fun TrackPackageField(
                 ) {
                     if (value.isEmpty()) {
                         Text(
-                            text = "Package name (com.example.app)",
+                            text = "Search tracked apps or track package",
                             style = MaterialTheme.typography.bodyMedium,
                             color = scheme.onSurfaceVariant.copy(alpha = 0.7f),
                             maxLines = 1,
@@ -625,9 +626,14 @@ internal fun AppBrowserScreen(
     onOpenApp: (ArchiveApp) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    var apps by remember { mutableStateOf<List<ArchiveApp>?>(null) }
-    var archiveIndex by remember { mutableStateOf<MorpheArchiveIndex?>(null) }
-    var freshness by remember { mutableStateOf<ArchiveFreshness?>(null) }
+    val initialIndex = MorpheArchive.inMemoryIndex
+    var apps by remember {
+        mutableStateOf<List<ArchiveApp>?>(
+            initialIndex?.apps?.sortedBy { it.name.lowercase(Locale.US) }
+        )
+    }
+    var archiveIndex by remember { mutableStateOf(initialIndex) }
+    var freshness by remember { mutableStateOf(initialIndex?.let { archiveFreshness(it.generatedAt) }) }
     var error by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
     var trackPackageQuery by remember { mutableStateOf("") }
@@ -638,7 +644,9 @@ internal fun AppBrowserScreen(
     var tab by remember(trackedOnly) {
         mutableStateOf(if (trackedOnly) AppListTab.Tracked else AppListTab.All)
     }
-    var sort by remember { mutableStateOf(AppSort.AZ) }
+    var sort by remember(trackedOnly) {
+        mutableStateOf(if (trackedOnly) AppSort.Updates else AppSort.AZ)
+    }
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -700,6 +708,7 @@ internal fun AppBrowserScreen(
             requestNotificationPermission()
             tab = AppListTab.Tracked
             trackPackageQuery = ""
+            if (trackedOnly) query = ""
             trackPackageNotice = "Waiting for $packageKey to appear in the Morphe index."
             trackPackageNoticeIsError = false
             focusManager.clearFocus(force = true)
@@ -719,6 +728,7 @@ internal fun AppBrowserScreen(
         requestNotificationPermission()
         tab = AppListTab.Tracked
         trackPackageQuery = ""
+        if (trackedOnly) query = ""
         trackPackageNotice = "Tracking ${app.name}."
         trackPackageNoticeIsError = false
         focusManager.clearFocus(force = true)
@@ -923,6 +933,7 @@ internal fun AppBrowserScreen(
                             value = trackPackageQuery,
                             onValueChange = {
                                 trackPackageQuery = it
+                                query = it
                                 trackPackageNotice = null
                             },
                             enabled = loaded != null,
@@ -951,58 +962,60 @@ internal fun AppBrowserScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // Filter Dropdown Button
-                        Box(modifier = Modifier.weight(1f)) {
-                            CompactFilterChip(
-                                label = "Filter: ${tab.label}",
-                                icon = tab.icon,
-                                selected = tab != AppListTab.All,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(40.dp)
-                                    .onSizeChanged { filterWidthPx = it.width },
-                                onClick = { filterMenuOpen = true }
-                            )
-                            DropdownMenu(
-                                expanded = filterMenuOpen,
-                                onDismissRequest = { filterMenuOpen = false },
-                                shape = menuShape,
-                                containerColor = menuContainerColor,
-                                border = menuBorder,
-                                modifier = Modifier.width(with(density) { filterWidthPx.toDp() })
-                            ) {
-                                availableTabs.forEach { itemTab ->
-                                    val isSelected = tab == itemTab
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = itemTab.label,
-                                                style = MaterialTheme.typography.labelMedium,
-                                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                            )
-                                        },
-                                        leadingIcon = {
-                                            Icon(
-                                                imageVector = itemTab.icon,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(16.dp),
-                                                tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        },
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                                        modifier = Modifier.height(38.dp),
-                                        onClick = {
-                                            tab = itemTab
-                                            filterMenuOpen = false
-                                        }
-                                    )
+                        if (!trackedOnly) {
+                            // Filter Dropdown Button
+                            Box(modifier = Modifier.weight(1f)) {
+                                CompactFilterChip(
+                                    label = "Filter: ${tab.label}",
+                                    icon = tab.icon,
+                                    selected = tab != AppListTab.All,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(40.dp)
+                                        .onSizeChanged { filterWidthPx = it.width },
+                                    onClick = { filterMenuOpen = true }
+                                )
+                                DropdownMenu(
+                                    expanded = filterMenuOpen,
+                                    onDismissRequest = { filterMenuOpen = false },
+                                    shape = menuShape,
+                                    containerColor = menuContainerColor,
+                                    border = menuBorder,
+                                    modifier = Modifier.width(with(density) { filterWidthPx.toDp() })
+                                ) {
+                                    availableTabs.forEach { itemTab ->
+                                        val isSelected = tab == itemTab
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = itemTab.label,
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                                )
+                                            },
+                                            leadingIcon = {
+                                                Icon(
+                                                    imageVector = itemTab.icon,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp),
+                                                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            },
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                                            modifier = Modifier.height(38.dp),
+                                            onClick = {
+                                                tab = itemTab
+                                                filterMenuOpen = false
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
 
                         // Sort Dropdown Button
-                        Box(modifier = Modifier.weight(1f)) {
+                        Box(modifier = if (trackedOnly) Modifier.fillMaxWidth() else Modifier.weight(1f)) {
                             CompactFilterChip(
                                 label = "Sort: ${sort.label}",
                                 icon = sort.icon,
@@ -1150,6 +1163,7 @@ internal fun AppBrowserScreen(
                             tracked = trackingPackageKey(app.packageName) in tracked,
                             updates = changes.updates,
                             newPatches = changes.newPatches,
+                            matchReason = if (query.isNotBlank()) app.matchingReason(query) else null,
                             shape = cardShape,
                             useGradient = useGradientCards,
                             onToggleFavourite = {
@@ -1384,16 +1398,15 @@ internal fun AppBrowserScreen(
                             val fresh = freshness
                             Text(
                                 text = when {
-                                    fresh != null && trackedOnly ->
-                                        "${tracked.size} tracked \u00b7 updated ${fresh.label}"
-                                    fresh != null -> "Updated ${fresh.label}"
-                                    apps == null -> "Loading…"
                                     trackedOnly && tracked.isEmpty() ->
                                         "Track updates and new patches"
-                                    trackedOnly -> "${tracked.size} tracked"
+                                    trackedOnly ->
+                                        "${tracked.size} tracked \u00b7 Background check every 6h"
+                                    fresh != null -> "Updated ${fresh.label}"
+                                    apps == null -> "Loading…"
                                     else -> "Community patch index"
                                 },
-                                color = if (fresh?.stale == true) {
+                                color = if (fresh?.stale == true && !trackedOnly) {
                                     MaterialTheme.colorScheme.error
                                 } else {
                                     MaterialTheme.colorScheme.onSurfaceVariant
@@ -1411,14 +1424,22 @@ internal fun AppBrowserScreen(
                         GlassHeaderButton(
                             icon = Icons.Outlined.Refresh,
                             contentDescription = stringResource(R.string.refresh),
-                            onClick = { loadKey++ }
+                            onClick = {
+                                if (trackedOnly) {
+                                    TrackingCheckScheduler.checkNow(context)
+                                    trackingSnapshots = MorpheTracking.loadSnapshots(context, tracked)
+                                }
+                                loadKey++
+                            }
                         )
 
-                        GlassHeaderButton(
-                            icon = Icons.Outlined.Search,
-                            contentDescription = stringResource(R.string.search_apps_or_packages),
-                            onClick = { searchExpanded = true }
-                        )
+                        if (!trackedOnly) {
+                            GlassHeaderButton(
+                                icon = Icons.Outlined.Search,
+                                contentDescription = stringResource(R.string.search_apps_or_packages),
+                                onClick = { searchExpanded = true }
+                            )
+                        }
                     }
                 }
             }
@@ -1517,6 +1538,7 @@ internal fun AppBrowserRow(
     tracked: Boolean = false,
     updates: Int = 0,
     newPatches: Int = 0,
+    matchReason: MatchReason? = null,
     onToggleTracking: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     useGradient: Boolean = true
@@ -1624,8 +1646,11 @@ internal fun AppBrowserRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (updates > 0 || newPatches > 0) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (updates > 0 || newPatches > 0 || matchReason != null) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         if (updates > 0) {
                             TrackingChangeBadge(
                                 text = "$updates update" + if (updates == 1) "" else "s",
@@ -1646,6 +1671,17 @@ internal fun AppBrowserRow(
                                     scheme.tertiaryContainer
                                 },
                                 content = if (effectiveGradient) Color.White else scheme.onTertiaryContainer
+                            )
+                        }
+                        if (matchReason != null) {
+                            TrackingChangeBadge(
+                                text = matchReason.label,
+                                container = if (effectiveGradient) {
+                                    Color.White.copy(alpha = 0.22f)
+                                } else {
+                                    scheme.secondaryContainer
+                                },
+                                content = if (effectiveGradient) Color.White else scheme.onSecondaryContainer
                             )
                         }
                     }
