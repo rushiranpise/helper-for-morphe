@@ -386,6 +386,7 @@ internal object MorpheArchive {
     private const val FETCH_REUSE_WINDOW_NANOS = 10_000_000_000L
 
     private val fetchLock = Any()
+    private val indexLock = Any()
 
     @Volatile
     private var lastFetchAtNanos = 0L
@@ -505,14 +506,24 @@ internal object MorpheArchive {
 
     fun loadCachedIndex(context: Context): MorpheArchiveIndex? {
         inMemoryIndex?.let { return it }
-        return runCatching {
+        val loaded = runCatching {
             val file = File(context.filesDir, CACHE_FILE_NAME)
             if (!file.exists() || file.length() == 0L) return null
             val body = file.readText()
             val parsed = gson.fromJson(body, MorpheArchiveData::class.java) ?: return null
-            hydrateIndex(parsed).also { inMemoryIndex = it }
-        }.getOrNull()
+            hydrateIndex(parsed)
+        }.getOrNull() ?: return null
+        return publishDiskIndex(loaded)
     }
+
+    /**
+     * Publishes a disk snapshot only when no fresher index is in memory. A fetch
+     * that completed while the file was being read keeps its result.
+     */
+    internal fun publishDiskIndex(loaded: MorpheArchiveIndex): MorpheArchiveIndex =
+        synchronized(indexLock) {
+            inMemoryIndex ?: loaded.also { inMemoryIndex = it }
+        }
 
     /**
      * Replaces the cache in one step: a failed or interrupted write leaves the
@@ -631,7 +642,8 @@ internal object MorpheArchive {
                 if (parsed.apps.isEmpty()) {
                     error("Index response contained no apps")
                 }
-                val index = hydrateIndex(parsed).also { inMemoryIndex = it }
+                val index = hydrateIndex(parsed)
+                synchronized(indexLock) { inMemoryIndex = index }
                 if (context != null) {
                     runCatching { writeCacheFile(context, body) }
                         .onFailure { Log.w(TAG, "Could not cache the app index", it) }
