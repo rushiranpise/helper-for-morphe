@@ -23,6 +23,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.rushi.apkdownloadhelper.ui.shared.shape.rememberPressShape
 import dev.rushi.apkdownloadhelper.ui.shared.text.fittedTextAutoSize
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.SemanticTone
@@ -54,7 +55,7 @@ internal fun PillButton(
     Surface(
         onClick = onClick,
         enabled = enabled,
-        shape = AppDefaults.PillShape,
+        shape = rememberPressShape(interactionSource, AppDefaults.PillShape, enabled),
         color = if (enabled) tone.container else tone.container.copy(alpha = 0.4f),
         contentColor = if (enabled) tone.content else tone.content.copy(alpha = 0.5f),
         interactionSource = interactionSource,

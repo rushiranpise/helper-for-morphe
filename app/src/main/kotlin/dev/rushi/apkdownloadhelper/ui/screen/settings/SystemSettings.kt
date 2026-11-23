@@ -33,6 +33,8 @@ import dev.rushi.apkdownloadhelper.ui.util.formatBytes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import dev.rushi.apkdownloadhelper.ui.theme.pressScale
 
 // ==========================================
 // 2. DOWNLOADS TAB
@@ -166,8 +168,8 @@ internal fun SystemTabContent(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         "This permanently deletes cached hand-off files, app external copies, " +
-                            "saved APKs in Downloads/Morphe Helper, and copies saved to your custom folder. " +
-                            "This cannot be undone."
+                                "saved APKs in Downloads/Morphe Helper, and copies saved to your custom folder. " +
+                                "This cannot be undone."
                     )
                     Text(
                         text = storageSummary,
@@ -177,6 +179,7 @@ internal fun SystemTabContent(
                 }
             },
             confirmButton = {
+                val deleteInteraction = remember { MutableInteractionSource() }
                 TextButton(
                     onClick = {
                         showClearStorageDialog = false
@@ -189,13 +192,20 @@ internal fun SystemTabContent(
                                 Toast.LENGTH_SHORT
                             ).show()
                         }
-                    }
+                    },
+                    interactionSource = deleteInteraction,
+                    modifier = Modifier.pressScale(deleteInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
                 ) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showClearStorageDialog = false }) {
+                val cancelInteraction = remember { MutableInteractionSource() }
+                TextButton(
+                    onClick = { showClearStorageDialog = false },
+                    interactionSource = cancelInteraction,
+                    modifier = Modifier.pressScale(cancelInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
+                ) {
                     Text("Cancel")
                 }
             }

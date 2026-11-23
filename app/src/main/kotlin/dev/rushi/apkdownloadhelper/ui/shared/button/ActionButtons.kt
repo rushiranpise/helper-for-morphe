@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import dev.rushi.apkdownloadhelper.ui.shared.shape.rememberPressShape
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.pressScale
 
@@ -53,13 +54,14 @@ internal fun IconActionButton(
     val primary = MaterialTheme.colorScheme.primary
     val contentColor = tint ?: if (selected) primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
     val interactionSource = remember { MutableInteractionSource() }
+    val shape = rememberPressShape(interactionSource, RoundedCornerShape(AppDefaults.CardCornerRadius))
     Surface(
         onClick = onClick,
         modifier = modifier
             .size(AppDefaults.GlassButtonHeight)
             .clip(RoundedCornerShape(AppDefaults.CardCornerRadius))
             .pressScale(interactionSource),
-        shape = RoundedCornerShape(AppDefaults.CardCornerRadius),
+        shape = shape,
         color = if (selected) primary.copy(alpha = 0.28f) else Color.Transparent,
         contentColor = contentColor,
         border = BorderStroke(1.dp, primary.copy(alpha = if (selected) 0.6f else 0.32f)),

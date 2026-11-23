@@ -64,8 +64,8 @@ internal fun AppNavigationBar(
     AnimatedVisibility(
         visible = !covered,
         modifier = modifier,
-        enter = slideInVertically { it } + fadeIn(),
-        exit = slideOutVertically { it } + fadeOut(),
+        enter = fadeIn(),
+        exit = fadeOut(),
     ) {
         Box(
             modifier = Modifier
@@ -75,7 +75,7 @@ internal fun AppNavigationBar(
                     onHeightChanged(measuredHeight)
                 }
                 .navigationBarsPadding()
-                .padding(bottom = 24.dp),
+                .padding(bottom = 14.dp),
             contentAlignment = Alignment.Center
         ) {
             // Exact Morphe Pill Container
@@ -92,7 +92,7 @@ internal fun AppNavigationBar(
 
                     // Sliding indicator
                     SelectionIndicator(
-                        span = slots[pagerState.currentPage],
+                        span = slots[pagerState.targetPage],
                         modifier = Modifier.align(AbsoluteAlignment.CenterLeft)
                     )
 
@@ -114,7 +114,7 @@ internal fun AppNavigationBar(
                                 icon = icon,
                                 label = label,
                                 contentDescription = a11y,
-                                selected = pagerState.currentPage == index,
+                                selected = pagerState.targetPage == index,
                                 onClick = {
                                     scope.launch { pagerState.animateScrollToPage(index) }
                                 },

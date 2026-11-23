@@ -1,6 +1,7 @@
 package dev.rushi.apkdownloadhelper.ui.shared.settings
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -17,6 +18,7 @@ import dev.rushi.apkdownloadhelper.ui.shared.selection.RadioDot
 import dev.rushi.apkdownloadhelper.ui.shared.source.SourceAvatar
 import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
+import dev.rushi.apkdownloadhelper.ui.theme.pressScale
 
 @Composable
 internal fun SettingsOptionCard(
@@ -29,8 +31,18 @@ internal fun SettingsOptionCard(
     source: DownloadSource? = null
 ) {
     val colors = MaterialTheme.colorScheme
+    val interactionSource = remember { MutableInteractionSource() }
     Surface(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(AppDefaults.SettingsCornerRadius)).clickable(enabled = enabled, onClick = onClick),
+        modifier = Modifier
+            .fillMaxWidth()
+            .pressScale(interactionSource, enabled = enabled, pressedScale = 0.97f, restCorner = 16.dp, pressedCorner = 10.dp)
+            .clip(RoundedCornerShape(AppDefaults.SettingsCornerRadius))
+            .clickable(
+                interactionSource = interactionSource,
+                indication = ripple(),
+                enabled = enabled,
+                onClick = onClick
+            ),
         shape = RoundedCornerShape(AppDefaults.SettingsCornerRadius),
         color = if (selected) colors.surfaceVariant else colors.surfaceColorAtElevation(3.dp),
         contentColor = colors.onSurface,

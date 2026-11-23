@@ -121,6 +121,7 @@ import androidx.compose.ui.window.Dialog
 import dev.rushi.apkdownloadhelper.ui.shared.dialog.AppDialogProperties
 import dev.rushi.apkdownloadhelper.ui.shared.dialog.DialogContentPadding
 import dev.rushi.apkdownloadhelper.ui.shared.dialog.DialogSurface
+import dev.rushi.apkdownloadhelper.ui.shared.shape.rememberPressShape
 import dev.rushi.apkdownloadhelper.ui.theme.glassFill
 import dev.rushi.apkdownloadhelper.ui.theme.pressScale
 import kotlin.math.roundToInt
@@ -491,13 +492,16 @@ internal fun HelperRequestContent(
                                     topEnd = if (isLast) outerRadius else innerRadius,
                                     bottomEnd = if (isLast) outerRadius else innerRadius
                                 )
+                                val formatInteraction = remember { MutableInteractionSource() }
                                 Surface(
                                     onClick = { onFormatToggle(kind) },
                                     enabled = !formatsLocked,
+                                    interactionSource = formatInteraction,
                                     modifier = Modifier
+                                        .pressScale(formatInteraction, enabled = !formatsLocked, restCorner = 20.dp, pressedCorner = 10.dp)
                                         .weight(1f)
                                         .height(40.dp),
-                                    shape = pillShape,
+                                    shape = rememberPressShape(formatInteraction, pillShape, enabled = !formatsLocked),
                                     color = if (selected) {
                                         scheme.primaryContainer
                                     } else {

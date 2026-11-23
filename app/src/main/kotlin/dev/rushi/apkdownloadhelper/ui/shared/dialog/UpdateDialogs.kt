@@ -1,5 +1,6 @@
 package dev.rushi.apkdownloadhelper.ui.shared.dialog
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,8 +16,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import dev.rushi.apkdownloadhelper.download.PACKAGE_PATTERN
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
+import dev.rushi.apkdownloadhelper.ui.theme.pressScale
 import dev.rushi.apkdownloadhelper.updater.ShizukuHelper
 import dev.rushi.apkdownloadhelper.updater.UpdateInfo
 
@@ -59,19 +62,35 @@ internal fun ShizukuPackageDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                val trimmed = value.trim()
-                if (trimmed.isNotEmpty() && !PACKAGE_PATTERN.matches(trimmed)) {
-                    error = "Enter a valid package name, for example ${ShizukuHelper.DEFAULT_PACKAGE}."
-                } else {
-                    onSave(trimmed)
-                }
-            }) { Text("Save") }
+            val saveInteraction = remember { MutableInteractionSource() }
+            TextButton(
+                onClick = {
+                    val trimmed = value.trim()
+                    if (trimmed.isNotEmpty() && !PACKAGE_PATTERN.matches(trimmed)) {
+                        error = "Enter a valid package name, for example ${ShizukuHelper.DEFAULT_PACKAGE}."
+                    } else {
+                        onSave(trimmed)
+                    }
+                },
+                interactionSource = saveInteraction,
+                modifier = Modifier.pressScale(saveInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
+            ) { Text("Save") }
         },
         dismissButton = {
             Row {
-                TextButton(onClick = { onSave("") }) { Text("Use default") }
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+                val defaultInteraction = remember { MutableInteractionSource() }
+                TextButton(
+                    onClick = { onSave("") },
+                    interactionSource = defaultInteraction,
+                    modifier = Modifier.pressScale(defaultInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
+                ) { Text("Use default") }
+
+                val cancelInteraction = remember { MutableInteractionSource() }
+                TextButton(
+                    onClick = onDismiss,
+                    interactionSource = cancelInteraction,
+                    modifier = Modifier.pressScale(cancelInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
+                ) { Text("Cancel") }
             }
         }
     )
@@ -95,12 +114,28 @@ internal fun UpdatePromptDialog(
             )
         },
         confirmButton = {
-            TextButton(onClick = onView) { Text("View update") }
+            val viewInteraction = remember { MutableInteractionSource() }
+            TextButton(
+                onClick = onView,
+                interactionSource = viewInteraction,
+                modifier = Modifier.pressScale(viewInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
+            ) { Text("View update") }
         },
         dismissButton = {
             Row {
-                TextButton(onClick = onSkip) { Text("Skip") }
-                TextButton(onClick = onLater) { Text("Later") }
+                val skipInteraction = remember { MutableInteractionSource() }
+                TextButton(
+                    onClick = onSkip,
+                    interactionSource = skipInteraction,
+                    modifier = Modifier.pressScale(skipInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
+                ) { Text("Skip") }
+
+                val laterInteraction = remember { MutableInteractionSource() }
+                TextButton(
+                    onClick = onLater,
+                    interactionSource = laterInteraction,
+                    modifier = Modifier.pressScale(laterInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
+                ) { Text("Later") }
             }
         }
     )

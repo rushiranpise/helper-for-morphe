@@ -94,6 +94,7 @@ import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.LocalMonochromeTheme
 import dev.rushi.apkdownloadhelper.ui.theme.glassFill
 import dev.rushi.apkdownloadhelper.ui.theme.pressScale
+import dev.rushi.apkdownloadhelper.ui.theme.rememberMorphePillShape
 import dev.rushi.apkdownloadhelper.ui.util.openAddSource
 import dev.rushi.apkdownloadhelper.updater.ArchiveApp
 import dev.rushi.apkdownloadhelper.updater.formatReleaseDate
@@ -463,11 +464,9 @@ internal fun AppDetailScreen(
 
         // 3. Pinned bottom actions: Play Store stays available while the list scrolls.
         val closeInteraction = remember { MutableInteractionSource() }
-        val closeBorderColor = if (monochrome) {
-            scheme.outlineVariant.copy(alpha = 0.5f)
-        } else {
-            sourceAccent.copy(alpha = 0.35f)
-        }
+        val closeShape = rememberMorphePillShape(closeInteraction)
+        val playInteraction = remember { MutableInteractionSource() }
+        val playShape = rememberMorphePillShape(playInteraction)
 
         Box(
             modifier = Modifier
@@ -494,15 +493,17 @@ internal fun AppDetailScreen(
                             playStoreUrl(app.packageName)
                         )
                     },
+                    interactionSource = playInteraction,
                     modifier = Modifier
                         .weight(if (onBack != null) 1.4f else 1f)
                         .heightIn(min = 48.dp)
+                        .pressScale(playInteraction, pressedScale = 0.96f)
                         .glassFill(
                             glass = scheme.surfaceVariant.copy(alpha = 0.65f),
-                            shape = CircleShape,
+                            shape = playShape,
                             hazeState = detailHeaderHaze
                         ),
-                    shape = CircleShape,
+                    shape = playShape,
                     color = Color.Transparent,
                     contentColor = scheme.onSurface
                 ) {
@@ -536,14 +537,14 @@ internal fun AppDetailScreen(
                         modifier = Modifier
                             .weight(1f)
                             .heightIn(min = 48.dp)
-                            .pressScale(closeInteraction)
+                            .pressScale(closeInteraction, pressedScale = 0.96f)
                             .glassFill(
                                 glass = Color.Transparent,
-                                shape = CircleShape,
+                                shape = closeShape,
                                 hazeState = detailHeaderHaze
                             ),
                         interactionSource = closeInteraction,
-                        shape = CircleShape,
+                        shape = closeShape,
                         colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
                             containerColor = Color.Transparent,
                             contentColor = scheme.onSurface.copy(alpha = 0.85f)

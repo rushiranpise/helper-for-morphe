@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.rushi.apkdownloadhelper.ui.theme.pressScale
 
 @Composable
 internal fun CompactFilterChip(
@@ -62,7 +63,8 @@ internal fun CompactFilterChip(
 
     Surface(
         onClick = onClick,
-        modifier = modifier.graphicsLayer { scaleX = scale; scaleY = scale },
+        modifier = modifier
+            .pressScale(interactionSource, restCorner = 20.dp, pressedCorner = 10.dp, pressedScale = 0.95f),
         shape = CircleShape,
         color = bgColor,
         contentColor = contentColor,

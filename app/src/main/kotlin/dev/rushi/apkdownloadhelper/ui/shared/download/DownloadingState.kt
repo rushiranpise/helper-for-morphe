@@ -66,6 +66,7 @@ import dev.rushi.apkdownloadhelper.ui.shared.dialog.AppDialogProperties
 import dev.rushi.apkdownloadhelper.ui.shared.dialog.DialogContentPadding
 import dev.rushi.apkdownloadhelper.ui.shared.dialog.DialogSurface
 import dev.rushi.apkdownloadhelper.ui.theme.pressScale
+import dev.rushi.apkdownloadhelper.ui.theme.rememberMorphePillShape
 import dev.rushi.apkdownloadhelper.ui.util.formatBytes
 import dev.rushi.apkdownloadhelper.ui.util.formatTransferEta
 import dev.rushi.apkdownloadhelper.ui.util.formatTransferSpeed
@@ -271,7 +272,7 @@ internal fun DownloadCancelButton(onClick: () -> Unit) {
             .size(36.dp)
             .pressScale(interaction),
         interactionSource = interaction,
-        shape = CircleShape,
+        shape = rememberMorphePillShape(interaction),
         color = scheme.surfaceVariant.copy(alpha = 0.55f),
         contentColor = scheme.onSurface
     ) {
@@ -301,7 +302,7 @@ internal fun DownloadPillButton(
             .height(46.dp)
             .pressScale(interaction),
         interactionSource = interaction,
-        shape = CircleShape,
+        shape = rememberMorphePillShape(interaction),
         border = null,
         colors = ButtonDefaults.buttonColors(
             containerColor = if (primary) {
@@ -504,7 +505,7 @@ internal fun CancelDownloadDialog(
                             .height(48.dp)
                             .pressScale(keepInteraction),
                         interactionSource = keepInteraction,
-                        shape = CircleShape,
+                        shape = rememberMorphePillShape(keepInteraction),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = scheme.primaryContainer,
                             contentColor = scheme.onPrimaryContainer
@@ -525,7 +526,7 @@ internal fun CancelDownloadDialog(
                             .height(48.dp)
                             .pressScale(stopInteraction),
                         interactionSource = stopInteraction,
-                        shape = CircleShape,
+                        shape = rememberMorphePillShape(stopInteraction),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = scheme.errorContainer.copy(alpha = 0.85f),
                             contentColor = scheme.onErrorContainer

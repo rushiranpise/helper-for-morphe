@@ -1,10 +1,12 @@
 package dev.rushi.apkdownloadhelper.ui.shared.settings
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.surfaceColorAtElevation
@@ -26,11 +28,8 @@ import dev.rushi.apkdownloadhelper.ui.shared.shape.SegmentRegistry
 import dev.rushi.apkdownloadhelper.ui.shared.shape.rowShape
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.SegmentGap
+import dev.rushi.apkdownloadhelper.ui.theme.pressScale
 
-/**
- * Settings that belong together, each row a segment of one group: rounded on the group's own
- * edges and nearly square where two rows meet, as Material's segmented lists are.
- */
 @Composable
 internal fun SettingsGroup(
     modifier: Modifier = Modifier,
@@ -47,7 +46,6 @@ internal fun SettingsGroup(
     }
 }
 
-/** Settings item card: a connected segment inside a group, a standalone card outside one. */
 @Composable
 internal fun SettingsItemCard(
     onClick: (() -> Unit)?,
@@ -58,19 +56,38 @@ internal fun SettingsItemCard(
     color: Color = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp),
     content: @Composable () -> Unit
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     val group = LocalSegmentRegistry.current
     if (group == null) {
-        SurfaceCard(
-            onClick = onClick,
-            enabled = enabled,
-            elevation = 1.dp,
-            cornerRadius = AppDefaults.SettingsCornerRadius,
-            borderWidth = borderWidth,
-            borderColor = borderColor,
-            color = color,
-            modifier = modifier
-        ) {
-            content()
+        if (onClick != null) {
+            Surface(
+                onClick = onClick,
+                enabled = enabled,
+                interactionSource = interactionSource,
+                shape = RoundedCornerShape(AppDefaults.SettingsCornerRadius),
+                color = color,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                tonalElevation = 1.dp,
+                border = if (borderWidth > 0.dp) BorderStroke(borderWidth, borderColor) else null,
+                modifier = modifier
+                    .fillMaxWidth()
+                    .pressScale(interactionSource, enabled = enabled, pressedScale = 0.98f)
+            ) {
+                content()
+            }
+        } else {
+            SurfaceCard(
+                onClick = null,
+                enabled = enabled,
+                elevation = 1.dp,
+                cornerRadius = AppDefaults.SettingsCornerRadius,
+                borderWidth = borderWidth,
+                borderColor = borderColor,
+                color = color,
+                modifier = modifier
+            ) {
+                content()
+            }
         }
         return
     }
@@ -81,6 +98,7 @@ internal fun SettingsItemCard(
         .padding(vertical = SegmentGap / 2)
         .onPlaced { group.place(row, it) }
         .fillMaxWidth()
+        .pressScale(interactionSource, enabled = enabled && onClick != null, pressedScale = 0.98f)
     val rowContent: @Composable () -> Unit = {
         CompositionLocalProvider(LocalSegmentRegistry provides null) {
             content()
@@ -90,6 +108,7 @@ internal fun SettingsItemCard(
         Surface(
             onClick = onClick,
             enabled = enabled,
+            interactionSource = interactionSource,
             modifier = rowModifier,
             shape = shape,
             color = color,
@@ -111,7 +130,6 @@ internal fun SettingsItemCard(
     }
 }
 
-/** Standard settings row with icon + chevron. */
 @Composable
 internal fun SettingsItem(
     onClick: () -> Unit,

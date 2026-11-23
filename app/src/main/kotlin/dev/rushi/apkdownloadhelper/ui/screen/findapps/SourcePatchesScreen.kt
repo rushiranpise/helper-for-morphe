@@ -72,6 +72,7 @@ import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.LocalMonochromeTheme
 import dev.rushi.apkdownloadhelper.ui.theme.glassFill
 import dev.rushi.apkdownloadhelper.ui.theme.pressScale
+import dev.rushi.apkdownloadhelper.ui.theme.rememberMorphePillShape
 import dev.rushi.apkdownloadhelper.updater.ArchiveSource
 import dev.rushi.apkdownloadhelper.updater.MorpheArchive
 
@@ -311,11 +312,28 @@ internal fun SourcePatchesScreen(
                 transitionSpec = {
                     val exitDuration = 100
                     val enterDuration = 200
-                    (fadeIn(tween(enterDuration, delayMillis = exitDuration, easing = LinearOutSlowInEasing)) +
-                            expandHorizontally(tween(enterDuration, delayMillis = exitDuration, easing = LinearOutSlowInEasing)))
+                    (fadeIn(
+                        tween(
+                            enterDuration,
+                            delayMillis = exitDuration,
+                            easing = LinearOutSlowInEasing
+                        )
+                    ) +
+                            expandHorizontally(
+                                tween(
+                                    enterDuration,
+                                    delayMillis = exitDuration,
+                                    easing = LinearOutSlowInEasing
+                                )
+                            ))
                         .togetherWith(
                             fadeOut(tween(exitDuration, easing = FastOutLinearInEasing)) +
-                                    shrinkHorizontally(tween(exitDuration, easing = FastOutLinearInEasing))
+                                    shrinkHorizontally(
+                                        tween(
+                                            exitDuration,
+                                            easing = FastOutLinearInEasing
+                                        )
+                                    )
                         )
                 },
                 label = "patches_search_transition",
@@ -412,11 +430,7 @@ internal fun SourcePatchesScreen(
 
         // Pinned Bottom "Close" Frosted Outlined Pill (matching AppDetailScreen)
         val closeInteraction = remember { MutableInteractionSource() }
-        val closeBorderColor = if (monochrome) {
-            colors.outlineVariant.copy(alpha = 0.5f)
-        } else {
-            accentColor.copy(alpha = 0.35f)
-        }
+        val closeShape = rememberMorphePillShape(closeInteraction)
 
         Box(
             modifier = Modifier
@@ -440,14 +454,14 @@ internal fun SourcePatchesScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)
-                    .pressScale(closeInteraction)
+                    .pressScale(closeInteraction, pressedScale = 0.96f)
                     .glassFill(
                         glass = Color.Transparent,
-                        shape = CircleShape,
+                        shape = closeShape,
                         hazeState = headerHaze
                     ),
                 interactionSource = closeInteraction,
-                shape = CircleShape,
+                shape = closeShape,
                 colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
                     containerColor = Color.Transparent,
                     contentColor = colors.onSurface.copy(alpha = 0.85f)

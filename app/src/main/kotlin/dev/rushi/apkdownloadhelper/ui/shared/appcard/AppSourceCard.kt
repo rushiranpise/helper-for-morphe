@@ -3,6 +3,7 @@ package dev.rushi.apkdownloadhelper.ui.shared.appcard
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,8 +46,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.rushi.apkdownloadhelper.R
 import dev.rushi.apkdownloadhelper.ui.shared.layout.AnimatedExpand
+import dev.rushi.apkdownloadhelper.ui.shared.shape.rememberPressShape
 import dev.rushi.apkdownloadhelper.ui.shared.version.ExpandableVersionRow
 import dev.rushi.apkdownloadhelper.ui.theme.SemanticTone
+import dev.rushi.apkdownloadhelper.ui.theme.pressScale
 import dev.rushi.apkdownloadhelper.updater.ArchiveSource
 import dev.rushi.apkdownloadhelper.updater.MorpheArchive
 import dev.rushi.apkdownloadhelper.updater.bundleVersionOf
@@ -251,6 +254,7 @@ internal fun AppSourceCard(
             ) {
                 actionSpecs.forEachIndexed { idx, spec ->
                     val pillShape = segmentedShape(idx, actionSpecs.size)
+                    val pillInteraction = remember { MutableInteractionSource() }
                     val containerColor = if (spec.isPrimary) {
                         SemanticTone.Primary.container
                     } else {
@@ -265,9 +269,11 @@ internal fun AppSourceCard(
                         onClick = spec.onClick,
                         modifier = Modifier
                             .weight(1f)
-                            .height(42.dp),
-                        shape = pillShape,
+                            .height(42.dp)
+                            .pressScale(pillInteraction, pressedScale = 0.96f),
+                        shape = rememberPressShape(pillInteraction, pillShape),
                         color = containerColor,
+                        interactionSource = pillInteraction,
                         contentColor = contentColor
                     ) {
                         Box(
@@ -498,6 +504,7 @@ internal fun AppSourceCard(
                                     ) {
                                         mirrorActions.forEachIndexed { idx, spec ->
                                             val pillShape = segmentedShape(idx, mirrorActions.size)
+                                            val pillInteraction = remember { MutableInteractionSource() }
                                             val containerColor = if (spec.isPrimary) {
                                                 SemanticTone.Primary.container
                                             } else {
@@ -512,9 +519,11 @@ internal fun AppSourceCard(
                                                 onClick = spec.onClick,
                                                 modifier = Modifier
                                                     .weight(1f)
-                                                    .height(34.dp),
-                                                shape = pillShape,
+                                                    .height(34.dp)
+                                                    .pressScale(pillInteraction, pressedScale = 0.96f),
+                                                shape = rememberPressShape(pillInteraction, pillShape),
                                                 color = containerColor,
+                                                interactionSource = pillInteraction,
                                                 contentColor = contentColor
                                             ) {
                                                 Box(

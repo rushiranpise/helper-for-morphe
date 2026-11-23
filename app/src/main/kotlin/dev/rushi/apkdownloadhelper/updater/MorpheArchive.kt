@@ -14,6 +14,8 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Models + fetcher for the Morphe archive index that powers the "Find New
@@ -338,6 +340,10 @@ internal object MorpheArchive {
     const val INDEX_URL =
         "https://raw.githubusercontent.com/rushiforai/morphe-archive/refs/heads/main/docs/data.json"
 
+    private val indexMutex = Mutex()
+    @Volatile private var memoryIndex: MorpheArchiveIndex? = null
+    @Volatile private var memoryIndexFetchedAt: Long = 0L
+
     private const val TAG = "MorpheArchive"
     private const val CONNECT_TIMEOUT_S = 10L
     private const val READ_TIMEOUT_S = 45L
@@ -464,11 +470,12 @@ internal object MorpheArchive {
      */
     private fun writeCacheFile(context: Context, body: String) {
         val directory = context.filesDir
+        val target = File(directory, CACHE_FILE_NAME)
         val temporary = File(directory, "$CACHE_FILE_NAME.tmp")
         try {
             temporary.writeText(body)
-            check(temporary.renameTo(File(directory, CACHE_FILE_NAME))) {
-                "Could not replace $CACHE_FILE_NAME"
+            if (!temporary.renameTo(target)) {
+                temporary.copyTo(target, overwrite = true)
             }
         } finally {
             temporary.delete()
@@ -523,39 +530,56 @@ internal object MorpheArchive {
         )
     }
 
-    suspend fun fetchIndex(context: Context? = null): MorpheArchiveIndex = withContext(Dispatchers.IO) {
-        val request = Request.Builder()
-            .url(INDEX_URL)
-            .header(
-                "User-Agent",
-                "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Mobile Safari/537.36"
-            )
-            .header("Accept", "application/json")
-            .build()
-        try {
-            http.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    error("Index request failed: HTTP ${response.code}")
+    suspend fun fetchIndex(
+        context: Context? = null,
+        forceRefresh: Boolean = false
+    ): MorpheArchiveIndex = withContext(Dispatchers.IO) {
+        indexMutex.withLock {
+            val now = System.currentTimeMillis()
+            val cachedMem = memoryIndex
+            if (!forceRefresh && cachedMem != null && (now - memoryIndexFetchedAt) < 60_000L) {
+                return@withLock cachedMem
+            }
+
+            val request = Request.Builder()
+                .url(INDEX_URL)
+                .header(
+                    "User-Agent",
+                    "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Mobile Safari/537.36"
+                )
+                .header("Accept", "application/json")
+                .build()
+            try {
+                http.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        error("Index request failed: HTTP ${response.code}")
+                    }
+                    val body = response.body?.string().orEmpty()
+                    val parsed = gson.fromJson(body, MorpheArchiveData::class.java)
+                        ?: error("Index response was empty")
+                    if (parsed.apps.isEmpty()) {
+                        error("Index response contained no apps")
+                    }
+                    val index = hydrateIndex(parsed)
+                    memoryIndex = index
+                    memoryIndexFetchedAt = System.currentTimeMillis()
+                    if (context != null) {
+                        runCatching { writeCacheFile(context, body) }
+                            .onFailure { Log.w(TAG, "Could not cache the app index", it) }
+                    }
+                    return@withLock index
                 }
-                val body = response.body?.string().orEmpty()
-                val parsed = gson.fromJson(body, MorpheArchiveData::class.java)
-                    ?: error("Index response was empty")
-                if (parsed.apps.isEmpty()) {
-                    error("Index response contained no apps")
-                }
-                val index = hydrateIndex(parsed)
+            } catch (e: Exception) {
                 if (context != null) {
-                    runCatching { writeCacheFile(context, body) }
-                        .onFailure { Log.w(TAG, "Could not cache the app index", it) }
+                    val cached = loadCachedIndex(context)
+                    if (cached != null) {
+                        memoryIndex = cached
+                        memoryIndexFetchedAt = System.currentTimeMillis()
+                        return@withLock cached
+                    }
                 }
-                index
+                throw e
             }
-        } catch (e: Exception) {
-            if (context != null) {
-                val cached = loadCachedIndex(context)
-                if (cached != null) return@withContext cached
-            }
-            throw e
         }
     }
 

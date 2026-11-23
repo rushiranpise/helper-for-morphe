@@ -60,6 +60,7 @@ import dev.rushi.apkdownloadhelper.ui.shared.chip.StatusBadgeRow
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.SemanticTone
 import dev.rushi.apkdownloadhelper.ui.theme.pressScale
+import dev.rushi.apkdownloadhelper.ui.theme.rememberMorphePillShape
 
 @Composable
 internal fun CandidateCard(
@@ -218,7 +219,7 @@ private fun ModePrimaryPillButton(
             .height(48.dp)
             .pressScale(interaction),
         interactionSource = interaction,
-        shape = CircleShape,
+        shape = rememberMorphePillShape(interaction),
         border = null,
         colors = ButtonDefaults.buttonColors(
             containerColor = scheme.primaryContainer,
@@ -257,7 +258,7 @@ private fun ModeSecondaryPillButton(
             .height(48.dp)
             .pressScale(interaction),
         interactionSource = interaction,
-        shape = CircleShape,
+        shape = rememberMorphePillShape(interaction),
         border = null,
         colors = ButtonDefaults.buttonColors(
             containerColor = scheme.surfaceVariant.copy(alpha = 0.55f),

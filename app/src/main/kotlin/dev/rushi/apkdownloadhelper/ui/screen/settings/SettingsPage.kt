@@ -58,6 +58,7 @@ import dev.rushi.apkdownloadhelper.ui.theme.AppColors
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.glassFill
 import dev.rushi.apkdownloadhelper.ui.theme.pressScale
+import dev.rushi.apkdownloadhelper.ui.theme.rememberMorphePillShape
 
 @Composable
 internal fun SettingsPage(
@@ -207,6 +208,7 @@ internal fun SettingsPageDetail(
 
         // 4. Pinned Bottom Frosted "Close" Pill matching AppDetailScreen
         val closeInteraction = remember { MutableInteractionSource() }
+        val closeShape = rememberMorphePillShape(closeInteraction)
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -225,14 +227,14 @@ internal fun SettingsPageDetail(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)
-                    .pressScale(closeInteraction)
+                    .pressScale(closeInteraction, pressedScale = 0.96f)
                     .glassFill(
                         glass = Color.Transparent,
-                        shape = CircleShape,
+                        shape = closeShape,
                         hazeState = pageHaze
                     ),
                 interactionSource = closeInteraction,
-                shape = CircleShape,
+                shape = closeShape,
                 colors = ButtonDefaults.outlinedButtonColors(
                     containerColor = Color.Transparent,
                     contentColor = scheme.onSurface.copy(alpha = 0.85f)

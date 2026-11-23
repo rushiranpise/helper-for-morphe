@@ -23,6 +23,19 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.composed
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 
 /** True inside a [SettingsGroup], where rows share the group's single card surface. */
 // ---------------------------------------------------------------------------
@@ -68,16 +81,21 @@ internal object AppAnimations {
     val screenExit: ExitTransition = dialogExit
 
     /**
-     * Push transitions: a screen slides up over the one below it and returns by sliding back
-     * down, which is how the manager brings Settings forward.
+     * Popup scale-fade transitions for Settings subpages and overlays (replaces bottom slide-up).
      */
-    val pushEnter: EnterTransition = slideInVertically(
-        animationSpec = defaultTween(AppDefaults.SCREEN_ENTER_DURATION, FastOutSlowInEasing)
-    ) { it } + fadeIn(defaultTween(AppDefaults.SCREEN_ENTER_DURATION))
+    val pushEnter: EnterTransition = fadeIn(
+        animationSpec = tween(220, easing = LinearOutSlowInEasing)
+    ) + scaleIn(
+        initialScale = 0.92f,
+        animationSpec = tween(240, easing = FastOutSlowInEasing)
+    )
 
-    val pushExit: ExitTransition = slideOutVertically(
-        animationSpec = defaultTween(AppDefaults.SCREEN_ENTER_DURATION, FastOutSlowInEasing)
-    ) { it } + fadeOut(tween(AppDefaults.SCREEN_ENTER_DURATION, easing = LinearEasing))
+    val pushExit: ExitTransition = fadeOut(
+        animationSpec = tween(160, easing = LinearEasing)
+    ) + scaleOut(
+        targetScale = 0.95f,
+        animationSpec = tween(180, easing = FastOutSlowInEasing)
+    )
 
     /** Vertical expand/collapse paired with a fade, for collapsible sections. */
     val expandFadeEnter: EnterTransition = expandVertically(defaultTween()) + fadeIn(defaultTween())
@@ -133,4 +151,33 @@ internal fun Modifier.animatedListItem(itemScope: LazyItemScope): Modifier = wit
         fadeOutSpec = tween(AppDefaults.ANIMATION_DURATION_SHORT),
         placementSpec = spring(stiffness = 400f, dampingRatio = 0.8f)
     )
+}
+
+/**
+ * Morphe Manager-style expressive tap animation:
+ * compresses scale and morphs corner radius from pill/circle to a rounded squircle on press.
+ */
+fun Modifier.morphePressShape(
+    interactionSource: MutableInteractionSource,
+    restCorner: Dp = 28.dp,
+    pressedCorner: Dp = 12.dp,
+    pressedScale: Float = 0.92f,
+): Modifier = composed {
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) pressedScale else 1f,
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = 900f),
+        label = "morphePressScale",
+    )
+    val corner by animateDpAsState(
+        targetValue = if (pressed) pressedCorner else restCorner,
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = 900f),
+        label = "morphePressCorner",
+    )
+    this
+        .graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        }
+        .clip(RoundedCornerShape(corner))
 }

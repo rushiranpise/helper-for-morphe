@@ -80,6 +80,8 @@ import dev.rushi.apkdownloadhelper.ui.model.trackingPackageKey
 import dev.rushi.apkdownloadhelper.ui.shared.appcard.AppListCard
 import dev.rushi.apkdownloadhelper.ui.shared.text.SectionTitle
 import dev.rushi.apkdownloadhelper.ui.theme.animatedListItem
+import dev.rushi.apkdownloadhelper.ui.theme.pressScale
+import dev.rushi.apkdownloadhelper.ui.theme.rememberMorphePillShape
 import dev.rushi.apkdownloadhelper.updater.ArchiveApp
 import dev.rushi.apkdownloadhelper.updater.MorpheArchive
 import kotlinx.coroutines.Dispatchers
@@ -95,6 +97,7 @@ private fun loadStoredApkItems(context: android.content.Context): List<StoredApk
     val archiveAppsByPkg = runCatching {
         MorpheArchive.loadCachedIndex(context)?.apps?.associateBy { it.packageName }
     }.getOrNull().orEmpty()
+    val installedCache = mutableMapOf<String, Boolean>()
 
     return DownloadHistoryStore.entries(context)
         .filter { context.isHistoryUriUsable(it.uri) }
@@ -107,9 +110,11 @@ private fun loadStoredApkItems(context: android.content.Context): List<StoredApk
                 name = entry.appName,
                 versions = listOfNotNull(entry.versionName)
             )
-            val installed = runCatching {
-                context.packageManager.getPackageInfo(entry.packageName, 0) != null
-            }.getOrDefault(false)
+            val installed = installedCache.getOrPut(entry.packageName) {
+                runCatching {
+                    context.packageManager.getPackageInfo(entry.packageName, 0) != null
+                }.getOrDefault(false)
+            }
             StoredApkCardItem(entry = entry, app = app, installed = installed)
         }
 }
@@ -135,10 +140,13 @@ internal fun HelperStandaloneContent(
         }
     }
 
-    var storedItems by remember { mutableStateOf(loadStoredApkItems(context)) }
+    var storedItems by remember { mutableStateOf<List<StoredApkCardItem>>(emptyList()) }
     var entryToDelete by remember { mutableStateOf<DownloadHistoryEntry?>(null) }
 
     LaunchedEffect(Unit) {
+        storedItems = withContext(Dispatchers.IO) {
+            loadStoredApkItems(context)
+        }
         val archiveAppsByPkg = withContext(Dispatchers.IO) {
             runCatching {
                 (MorpheArchive.loadCachedIndex(context) ?: MorpheArchive.fetchIndex(context))
@@ -204,17 +212,25 @@ internal fun HelperStandaloneContent(
             },
             text = { Text("Delete ${target.fileName} from storage?") },
             confirmButton = {
+                val deleteInteraction = remember { MutableInteractionSource() }
                 androidx.compose.material3.TextButton(
                     onClick = {
                         entryToDelete = null
                         deleteStoredEntry(target)
-                    }
+                    },
+                    interactionSource = deleteInteraction,
+                    modifier = Modifier.pressScale(deleteInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
                 ) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { entryToDelete = null }) {
+                val cancelInteraction = remember { MutableInteractionSource() }
+                androidx.compose.material3.TextButton(
+                    onClick = { entryToDelete = null },
+                    interactionSource = cancelInteraction,
+                    modifier = Modifier.pressScale(cancelInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
+                ) {
                     Text("Cancel")
                 }
             }
@@ -424,8 +440,8 @@ private fun HelperGlassBoltButton(
         onClick = onClick,
         modifier = Modifier
             .size(40.dp)
-            .graphicsLayer { scaleX = scale; scaleY = scale },
-        shape = CircleShape,
+            .pressScale(interactionSource, restCorner = 20.dp, pressedCorner = 10.dp, pressedScale = 0.90f),
+        shape = rememberMorphePillShape(interactionSource),
         color = containerColor,
         contentColor = contentColor,
         interactionSource = interactionSource

@@ -20,6 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import dev.rushi.apkdownloadhelper.ui.theme.pressScale
+import dev.rushi.apkdownloadhelper.ui.theme.rememberMorphePillShape
 
 /**
  * A single circular icon button matching Morphe's HeaderControlDefaults:
@@ -85,8 +87,8 @@ internal fun GlassHeaderButton(
         onClick = onClick,
         modifier = Modifier
             .size(40.dp)
-            .graphicsLayer { scaleX = scale; scaleY = scale },
-        shape = CircleShape,
+            .pressScale(interactionSource, restCorner = 20.dp, pressedCorner = 10.dp, pressedScale = 0.90f),
+        shape = rememberMorphePillShape(interactionSource),
         color = containerColor,
         contentColor = contentColor,
         interactionSource = interactionSource

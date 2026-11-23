@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.rushi.apkdownloadhelper.ui.shared.shape.rememberPressShape
 import dev.rushi.apkdownloadhelper.ui.shared.text.fittedTextAutoSize
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.pressScale
@@ -68,7 +69,7 @@ internal fun DialogButton(
     val buttonModifier = modifier
         .height(AppDefaults.DialogButtonHeight)
         .pressScale(interactionSource = interactionSource, enabled = enabled)
-    val shape = RoundedCornerShape(AppDefaults.CardCornerRadius)
+    val shape = rememberPressShape(interactionSource, AppDefaults.PillShape, enabled)
     val border = BorderStroke(1.dp, borderColor)
     val contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
     val labelStyle = MaterialTheme.typography.labelLarge

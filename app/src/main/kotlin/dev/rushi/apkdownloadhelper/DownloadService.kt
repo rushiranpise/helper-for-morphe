@@ -897,13 +897,21 @@ internal class DownloadService : Service() {
     }
 
     private fun cancelDownload() {
+        val wasJobActive = downloadJob?.isActive == true
+        val job = DownloadJobManager.activeJob
         paused = false
+        transferInProgress = false
         downloader.cancelCurrent()
         downloadJob?.cancel()
-        // Flag any in-flight scan (ALWAYS or ASK mode) so its next
-        // checkCancelled() poll aborts it even though the scan may be running
-        // in a different coroutine than downloadJob.
         scanAbortRequested = true
+        DownloadJobManager.setPendingScan(null)
+        if (!wasJobActive && job != null) {
+            DownloadJobManager.emit(
+                DownloadJobManager.Event.Cancelled(job.candidate, job.epoch)
+            )
+        }
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     private suspend fun downloadSingleFile(
