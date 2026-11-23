@@ -15,10 +15,12 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -29,6 +31,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
+
+/** True while the page reading this is the pager's selected page. */
+internal val LocalPagerPageSelected = staticCompositionLocalOf { true }
 
 @Composable
 internal fun MainPagerScaffold(
@@ -67,7 +72,11 @@ internal fun MainPagerScaffold(
                 .fillMaxSize()
                 .hazeSource(state = barHaze),
         ) { pageIndex ->
-            content(MainPage.entries[pageIndex], if (covered) 0.dp else barHeight)
+            CompositionLocalProvider(
+                LocalPagerPageSelected provides (pagerState.currentPage == pageIndex)
+            ) {
+                content(MainPage.entries[pageIndex], if (covered) 0.dp else barHeight)
+            }
         }
 
         // 2. Telegram-style bottom dim gradient (sits OVER the scrolling list, BEHIND the floating pill)

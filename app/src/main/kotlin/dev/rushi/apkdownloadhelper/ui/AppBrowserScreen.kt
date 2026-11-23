@@ -792,7 +792,9 @@ internal fun AppBrowserScreen(
         }
     }
 
-    BackHandler(enabled = searchExpanded) {
+    // A kept-composed page must not consume Back while another page is shown.
+    val pageSelected = LocalPagerPageSelected.current
+    BackHandler(enabled = searchExpanded && pageSelected) {
         query = ""
         searchExpanded = false
         focusManager.clearFocus(force = true)
