@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.google.gson.annotations.SerializedName
 import dev.rushi.apkdownloadhelper.gson
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -378,6 +379,17 @@ internal object MorpheArchive {
     private const val CONNECT_TIMEOUT_S = 10L
     private const val READ_TIMEOUT_S = 45L
 
+    /** Short window where callers arriving just after a fetch reuse its result. */
+    private const val FETCH_REUSE_WINDOW_NANOS = 10_000_000_000L
+
+    private val fetchLock = Any()
+
+    @Volatile
+    private var lastFetchAtNanos = 0L
+
+    @Volatile
+    private var inFlightFetch: CompletableDeferred<MorpheArchiveIndex>? = null
+
     /** Shared client: used for the index fetch and for source avatars. */
     val http = OkHttpClient.Builder()
         .connectTimeout(CONNECT_TIMEOUT_S, TimeUnit.SECONDS)
@@ -564,7 +576,39 @@ internal object MorpheArchive {
         )
     }
 
-    suspend fun fetchIndex(context: Context? = null): MorpheArchiveIndex = withContext(Dispatchers.IO) {
+    suspend fun fetchIndex(context: Context? = null): MorpheArchiveIndex {
+        inMemoryIndex?.takeIf { recentlyFetched() }?.let { return it }
+        // A cold launch composes both browser pages at once. Let them share one
+        // request instead of downloading the index twice.
+        val (pending, owner) = synchronized(fetchLock) {
+            val existing = inFlightFetch
+            if (existing != null) {
+                existing to false
+            } else {
+                CompletableDeferred<MorpheArchiveIndex>().also { inFlightFetch = it } to true
+            }
+        }
+        if (!owner) return pending.await()
+        return try {
+            val index = withContext(Dispatchers.IO) { fetchIndexFromNetwork(context) }
+            synchronized(fetchLock) { lastFetchAtNanos = System.nanoTime() }
+            pending.complete(index)
+            index
+        } catch (error: Throwable) {
+            pending.completeExceptionally(error)
+            throw error
+        } finally {
+            synchronized(fetchLock) { inFlightFetch = null }
+        }
+    }
+
+    private fun recentlyFetched(): Boolean {
+        val completedAt = lastFetchAtNanos
+        if (completedAt == 0L) return false
+        return System.nanoTime() - completedAt in 0 until FETCH_REUSE_WINDOW_NANOS
+    }
+
+    private fun fetchIndexFromNetwork(context: Context?): MorpheArchiveIndex {
         val request = Request.Builder()
             .url(INDEX_URL)
             .header(
@@ -573,7 +617,7 @@ internal object MorpheArchive {
             )
             .header("Accept", "application/json")
             .build()
-        try {
+        return try {
             http.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
                     error("Index request failed: HTTP ${response.code}")
@@ -594,7 +638,7 @@ internal object MorpheArchive {
         } catch (e: Exception) {
             if (context != null) {
                 val cached = loadCachedIndex(context)
-                if (cached != null) return@withContext cached
+                if (cached != null) return cached
             }
             throw e
         }
