@@ -35,9 +35,11 @@ internal abstract class ApkCubeSourceParser(
 
     override fun requestedFallbackCandidate(request: HelperRequest): DownloadCandidate? =
         apkCubeFallbackCandidate(request, CandidateOption.REQUESTED)
+            .copy(syntheticFallback = true)
 
     override fun latestFallbackCandidate(request: HelperRequest): DownloadCandidate? =
         apkCubeFallbackCandidate(request, CandidateOption.LATEST)
+            .copy(syntheticFallback = true)
 
     private fun apkCubeFallbackCandidate(
         request: HelperRequest,

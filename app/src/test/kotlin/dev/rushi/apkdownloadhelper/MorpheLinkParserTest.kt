@@ -177,6 +177,7 @@ class MorpheLinkParserTest {
         assertEquals(fallback, candidate?.url)
         assertEquals(DownloadSource.MORPHE_LINK, candidate?.source)
         assertFalse(candidate?.directDownload ?: true)
+        assertTrue(candidate?.syntheticFallback ?: false)
     }
 
     @Test

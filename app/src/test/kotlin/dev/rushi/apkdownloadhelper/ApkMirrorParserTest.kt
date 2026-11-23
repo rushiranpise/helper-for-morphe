@@ -44,6 +44,7 @@ class ApkMirrorParserTest {
 
         assertEquals(searchUrl, candidate.url)
         assertNull(candidate.captchaUrl)
+        assertTrue(candidate.syntheticFallback)
     }
 
     @Test
@@ -58,6 +59,7 @@ class ApkMirrorParserTest {
 
         assertEquals(appPageUrl, candidate.url)
         assertEquals(appPageUrl, candidate.captchaUrl)
+        assertTrue(candidate.syntheticFallback)
     }
 
     private fun apkMirrorPages(

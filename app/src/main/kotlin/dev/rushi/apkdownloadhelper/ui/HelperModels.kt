@@ -495,7 +495,10 @@ internal data class DownloadCandidate(
     // The source whose page a wrapper such as Morphe Link resolved. It keeps the
     // candidate branded as the wrapper while still selecting that source's browser
     // script for a captcha page.
-    val viaSource: DownloadSource? = null
+    val viaSource: DownloadSource? = null,
+    // True only for a web link synthesized from the request when a source has no
+    // answer. A resolved candidate can share that URL and must still be offered.
+    val syntheticFallback: Boolean = false
 ) {
     val sortIndex: Int get() = source.sortIndex
 

@@ -139,7 +139,8 @@ internal class MorpheLinkParser(
     ): DownloadCandidate? {
         val fallback = request.fallbackWebUrl.trim().normalizedHttpUrlOrNull() ?: return null
         return browserCandidate(request, fallback, option, resolvedSource = null).copy(
-            note = "Morphe did not return a link. Open the request's fallback page."
+            note = "Morphe did not return a link. Open the request's fallback page.",
+            syntheticFallback = true
         )
     }
 

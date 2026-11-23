@@ -2463,15 +2463,15 @@ class MainActivity : ComponentActivity() {
         request: HelperRequest,
         source: DownloadSource
     ): FastModeFindResult {
-        val fallback = parsers[source]?.requestedFallbackCandidate(request)
         val outcome = resolveSourceSection(request, source, CandidateOption.REQUESTED)
         // Multiple formats can be selected now, so take the first one in the
         // picker's order (APK before APKM/APKS/XAPK) instead of whichever order
         // the source happened to list.
         val exact = outcome.candidates.withIndex()
             .filter { (_, candidate) ->
-                // Unverified fallback web links are for manual browsing, not automated Fast Mode
-                (fallback == null || candidate.url != fallback.url) &&
+                // Synthetic fallback web links are for manual browsing, not automated
+                // Fast Mode. A resolved captcha candidate can share that URL and stays.
+                !candidate.syntheticFallback &&
                     (candidate.directDownload || candidate.captchaUrl != null) &&
                     request.matchesRequestedVersionStrict(candidate)
             }

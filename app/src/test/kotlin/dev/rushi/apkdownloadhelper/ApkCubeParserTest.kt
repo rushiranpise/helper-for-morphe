@@ -179,6 +179,7 @@ class ApkCubeParserTest {
         )
         assertEquals(candidate?.url, candidate?.captchaUrl)
         assertEquals(CandidateOption.REQUESTED, candidate?.option)
+        assertTrue(candidate?.syntheticFallback ?: false)
     }
 
     @Test

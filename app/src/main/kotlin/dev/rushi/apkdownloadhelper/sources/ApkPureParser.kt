@@ -52,9 +52,11 @@ internal class ApkPureParser(private val ctx: SourceParserContext) : ApkSourcePa
 
     override fun requestedFallbackCandidate(request: HelperRequest): DownloadCandidate? =
         apkPureBrowserCandidate(request, CandidateOption.REQUESTED)
+            ?.copy(syntheticFallback = true)
 
     override fun latestFallbackCandidate(request: HelperRequest): DownloadCandidate? =
         apkPureBrowserCandidate(request, CandidateOption.LATEST)
+            ?.copy(syntheticFallback = true)
 
     /**
      * Continue from the APKPure page the resolver named. The page usually names the

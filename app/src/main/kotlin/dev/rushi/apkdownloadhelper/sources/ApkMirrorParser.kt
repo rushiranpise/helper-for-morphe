@@ -58,10 +58,10 @@ internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSource
     override fun searchUrl(packageName: String): String? = apkMirrorPackageSearchUrl(packageName)
 
     override fun requestedFallbackCandidate(request: HelperRequest): DownloadCandidate =
-        apkMirrorRequested(request)
+        apkMirrorRequested(request).copy(syntheticFallback = true)
 
     override fun latestFallbackCandidate(request: HelperRequest): DownloadCandidate =
-        apkMirrorLatest(request)
+        apkMirrorLatest(request).copy(syntheticFallback = true)
 
     private val historyCache = HashMap<String, List<DownloadCandidate>>()
 
