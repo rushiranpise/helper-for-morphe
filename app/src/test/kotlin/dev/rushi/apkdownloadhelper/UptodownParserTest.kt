@@ -224,6 +224,43 @@ class UptodownParserTest {
     }
 
     @Test
+    fun resolveHistoryCandidate_keepsStoreApkWhenStoreIsRequested() = runBlocking {
+        val storePackage = "com.uptodown"
+        val storePageUrl = "https://uptodown-android.en.uptodown.com/android/download"
+        val storeDownloadPage = """
+            <html><body>
+              <button id="detail-download-button"
+                data-url="https://dw.uptodown.com/dwn/uptodown-app-store-6.0.0"></button>
+            </body></html>
+        """.trimIndent()
+        val parser = UptodownParser(
+            testParserContext(pages = mapOf(storePageUrl to storeDownloadPage))
+        )
+        val candidate = DownloadCandidate(
+            source = DownloadSource.UPTODOWN,
+            name = "Uptodown App Store",
+            packageName = storePackage,
+            versionName = "6.0.0",
+            versionCode = null,
+            url = storePageUrl,
+            fileKind = "apk",
+            option = CandidateOption.LATEST,
+            directDownload = false,
+            versionStatus = VersionStatus.LATEST,
+            formatMatches = true
+        )
+
+        val resolved = parser.resolveHistoryCandidate(
+            testRequest(packageName = storePackage),
+            candidate
+        )
+
+        assertNotNull(resolved)
+        assertEquals("https://dw.uptodown.com/dwn/uptodown-app-store-6.0.0", resolved!!.url)
+        assertTrue(resolved.directDownload)
+    }
+
+    @Test
     fun resolveLatest_rejectsUptodownStoreDownloadButton() = runBlocking {
         val downloadPageWithStoreButton = """
             <html><body>
