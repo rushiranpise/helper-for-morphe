@@ -94,6 +94,26 @@ class SessionCookiesTest {
     }
 
     @Test
+    fun `an unchanged browser cookie keeps the jar's secure flag`() {
+        val secure = Cookie.Builder()
+            .name("cf_clearance")
+            .value("same")
+            .hostOnlyDomain("www.apkmirror.com")
+            .path("/")
+            .secure()
+            .expiresAt(System.currentTimeMillis() + 60_000)
+            .build()
+        SessionCookies.saveFromResponse(variantPage, listOf(secure))
+
+        SessionCookies.importCookieHeader(variantPage, "cf_clearance=same")
+
+        val sent = SessionCookies.loadForRequest(variantPage)
+        assertEquals(1, sent.size)
+        assertTrue(sent.single().secure)
+        assertEquals("same", sent.single().value)
+    }
+
+    @Test
     fun `an imported cookie replaces the jar's stale value`() {
         SessionCookies.saveFromResponse(variantPage, listOf(cookie(value = "stale")))
 

@@ -61,38 +61,23 @@ internal object SessionCookies : CookieJar {
     fun importCookieHeader(url: HttpUrl, header: String?) {
         if (header.isNullOrBlank()) return
         val host = url.host.lowercase(Locale.US)
-        val domain = rootDomain(host)
-        val imported = header.split(';').mapNotNull { raw ->
-            val pair = raw.trim()
-            val separator = pair.indexOf('=')
-            if (separator <= 0) return@mapNotNull null
-            val name = pair.substring(0, separator).trim()
-            val value = pair.substring(separator + 1).trim()
-            if (name.isEmpty()) return@mapNotNull null
-            runCatching {
-                Cookie.Builder()
-                    .name(name)
-                    .value(value)
-                    .domain(domain)
-                    .path("/")
-                    .expiresAt(Long.MAX_VALUE)
-                    .build()
-            }.getOrElse {
-                runCatching {
-                    Cookie.Builder()
-                        .name(name)
-                        .value(value)
-                        .hostOnlyDomain(host)
-                        .path("/")
-                        .expiresAt(Long.MAX_VALUE)
-                        .build()
-                }.getOrNull()
-            }
-        }
+        val imported = parseCookieHeader(url, header, rootDomain(host))
         if (imported.isEmpty()) return
         synchronized(byHost) {
             val keys = candidateDomainKeys(host)
             imported.forEach { cookie ->
+                // A Cookie request header carries no attributes. If the value is
+                // unchanged, keep the structured cookie and its Secure/expiry
+                // metadata instead of replacing it with a reconstructed one.
+                val unchanged = keys.asSequence()
+                    .mapNotNull { byHost[it] }
+                    .flatten()
+                    .any { existing ->
+                        existing.name == cookie.name &&
+                            existing.path == cookie.path &&
+                            existing.value == cookie.value
+                    }
+                if (unchanged) return@forEach
                 keys.forEach { key ->
                     byHost[key]?.removeAll { existing ->
                         existing.name == cookie.name && existing.path == cookie.path
@@ -112,16 +97,21 @@ internal object SessionCookies : CookieJar {
     }
 
     override fun loadForRequest(url: HttpUrl): List<Cookie> {
-        runCatching {
+        // The browser's Cookie header has no attributes, so using it to replace
+        // the jar's cookies would drop their Secure, path and expiry metadata.
+        // Keep it request-scoped instead; CookieManager has already matched it
+        // to this URL, and structured cookies fill in the rest.
+        val browserCookies = runCatching {
             val cm = android.webkit.CookieManager.getInstance()
             cm?.getCookie(url.toString())
         }.getOrNull()?.let { header ->
-            importCookieHeader(url, header)
-        }
+            parseCookieHeader(url, header, rootDomain(url.host))
+        }.orEmpty()
 
         val keys = candidateDomainKeys(url.host)
         val now = System.currentTimeMillis()
         val cookiesByName = LinkedHashMap<String, Cookie>()
+        browserCookies.forEach { cookie -> cookiesByName[cookie.name] = cookie }
         synchronized(byHost) {
             keys.forEach { key ->
                 val stored = byHost[key] ?: return@forEach
@@ -136,6 +126,40 @@ internal object SessionCookies : CookieJar {
             }
         }
         return cookiesByName.values.toList()
+    }
+
+    /**
+     * Parses a `Cookie` request header into session cookies for [url].
+     * The header has no path or expiration, so [domain] is supplied by the caller.
+     */
+    private fun parseCookieHeader(url: HttpUrl, header: String?, domain: String): List<Cookie> {
+        if (header.isNullOrBlank()) return emptyList()
+        val host = url.host.lowercase(Locale.US)
+        return header.split(';').mapNotNull { raw ->
+            val pair = raw.trim()
+            val separator = pair.indexOf('=')
+            if (separator <= 0) return@mapNotNull null
+            val name = pair.substring(0, separator).trim()
+            val value = pair.substring(separator + 1).trim()
+            if (name.isEmpty()) return@mapNotNull null
+            runCatching {
+                Cookie.Builder()
+                    .name(name)
+                    .value(value)
+                    .domain(domain)
+                    .path("/")
+                    .build()
+            }.getOrElse {
+                runCatching {
+                    Cookie.Builder()
+                        .name(name)
+                        .value(value)
+                        .hostOnlyDomain(host)
+                        .path("/")
+                        .build()
+                }.getOrNull()
+            }
+        }
     }
 
     /** Drops everything; used by tests and when a challenge means the session is dead. */
