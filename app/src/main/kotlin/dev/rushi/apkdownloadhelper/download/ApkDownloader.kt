@@ -98,12 +98,10 @@ internal class ApkDownloader(
         val url = download.url.normalizedHttpUrlOrNull()
             ?: error("Source returned an invalid download URL.".withManualModeHint())
         // The in-app browser keeps its session in CookieManager rather than in
-        // this HTTP client, so import it before the first request. A cleared
-        // challenge is only valid for the cookies that solved it.
+        // this HTTP client, so import it before the first request. The captured
+        // header belongs to the file's destination; the referer page keeps its
+        // own cookies in CookieManager and must not inherit the file's tokens.
         url.toHttpUrlOrNull()?.let { SessionCookies.importCookieHeader(it, download.cookieHeader) }
-        download.referer?.normalizedHttpUrlOrNull()?.toHttpUrlOrNull()?.let {
-            SessionCookies.importCookieHeader(it, download.cookieHeader)
-        }
 
         // Resume a partial single-stream file with the existing path. Mixing a
         // byte offset with a segment layout would corrupt the output.
