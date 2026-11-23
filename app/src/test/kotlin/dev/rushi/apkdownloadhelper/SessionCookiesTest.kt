@@ -1,4 +1,4 @@
-package dev.rushi.apkdownloadhelper
+﻿package dev.rushi.apkdownloadhelper
 
 import dev.rushi.apkdownloadhelper.download.*
 import dev.rushi.apkdownloadhelper.sources.*
@@ -112,4 +112,34 @@ class SessionCookiesTest {
         assertEquals(0, SessionCookies.hostCount)
         assertTrue(SessionCookies.loadForRequest(variantPage).isEmpty())
     }
+
+    @Test
+    fun `imported cookies from www subdomain are available on download subdomain for the same site`() {
+        val downloadPage = "https://www.apkmirror.com/apk/google-inc/youtube/".toHttpUrl()
+        val cdnDownload = "https://download.apkmirror.com/files/youtube.apk".toHttpUrl()
+
+        SessionCookies.importCookieHeader(downloadPage, "cf_clearance=cf_pass_123; session=sess_abc")
+
+        val sentToCdn = SessionCookies.loadForRequest(cdnDownload)
+        assertEquals(listOf("cf_clearance", "session"), sentToCdn.map { it.name })
+        assertEquals("cf_pass_123", sentToCdn.first().value)
+
+        // Ensure other domains never receive them
+        val apkPureRequest = "https://download.apkpure.com/b/APK/test".toHttpUrl()
+        assertTrue(SessionCookies.loadForRequest(apkPureRequest).isEmpty())
+    }
+
+    @Test
+    fun `mergeCookieHeaders combines cookies from download url and referer`() {
+        val downloadCookies = "download_token=token456; common=from_download"
+        val refererCookies = "cf_clearance=cf_clear_999; common=from_referer; session=sess_orig"
+
+        val merged = mergeCookieHeaders(downloadCookies, refererCookies)
+
+        assertTrue(merged.contains("cf_clearance=cf_clear_999"))
+        assertTrue(merged.contains("session=sess_orig"))
+        assertTrue(merged.contains("download_token=token456"))
+        assertTrue(merged.contains("common=from_download"))
+    }
 }
+

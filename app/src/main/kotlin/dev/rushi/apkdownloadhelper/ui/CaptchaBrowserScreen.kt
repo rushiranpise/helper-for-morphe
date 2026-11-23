@@ -1021,15 +1021,36 @@ internal fun String.isUptodownFileUrl(): Boolean {
     return uri.path.orEmpty().contains("/dwn/", ignoreCase = true)
 }
 
+internal fun mergeCookieHeaders(first: String, second: String): String {
+    val cookies = LinkedHashMap<String, String>()
+    listOf(second, first).forEach { header ->
+        header.split(';').forEach { pair ->
+            val sep = pair.indexOf('=')
+            if (sep > 0) {
+                val name = pair.substring(0, sep).trim()
+                val value = pair.substring(sep + 1).trim()
+                if (name.isNotEmpty()) {
+                    cookies[name] = value
+                }
+            }
+        }
+    }
+    return cookies.entries.joinToString("; ") { "${it.key}=${it.value}" }
+}
+
 /**
- * Cookies the browser holds for a captured file URL, falling back to the page
- * that produced it. The downloader imports this header into its own jar; it is
- * the same session that passed the challenge, so the file hop must reuse it.
+ * Cookies the browser holds for a captured file URL, combining cookies from both
+ * the download URL and the referer page that produced it (which carries the Cloudflare clearance).
  */
 private fun browserCookieHeader(downloadUrl: String, referer: String?): String? {
     val manager = CookieManager.getInstance()
-    return manager.getCookie(downloadUrl)?.takeIf(String::isNotBlank)
-        ?: referer?.let { manager.getCookie(it) }?.takeIf(String::isNotBlank)
+    val downloadCookies = manager.getCookie(downloadUrl)?.takeIf(String::isNotBlank)
+    val refererCookies = referer?.let { manager.getCookie(it) }?.takeIf(String::isNotBlank)
+    return when {
+        downloadCookies != null && refererCookies != null -> mergeCookieHeaders(downloadCookies, refererCookies)
+        downloadCookies != null -> downloadCookies
+        else -> refererCookies
+    }
 }
 
 /**
