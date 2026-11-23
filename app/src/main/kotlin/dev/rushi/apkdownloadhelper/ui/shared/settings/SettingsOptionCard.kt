@@ -39,7 +39,7 @@ internal fun SettingsOptionCard(
             .clip(RoundedCornerShape(AppDefaults.SettingsCornerRadius))
             .clickable(
                 interactionSource = interactionSource,
-                indication = ripple(),
+                indication = null,
                 enabled = enabled,
                 onClick = onClick
             ),

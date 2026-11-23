@@ -6,11 +6,25 @@ import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+
+/**
+ * Wraps [content] with ripple completely disabled app-wide.
+ * Place this around the root MaterialTheme call in MainActivity / App.kt.
+ */
+@Composable
+fun NoRippleTheme(content: @Composable () -> Unit) {
+    CompositionLocalProvider(
+        LocalRippleConfiguration provides null,
+        content = content
+    )
+}
 
 // ==== ANIMATIONS ====
 object AppSprings {

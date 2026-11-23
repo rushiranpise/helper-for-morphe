@@ -185,6 +185,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.ui.unit.dp
 import dev.rushi.apkdownloadhelper.ui.screen.findapps.AppDetailScreen
 import dev.rushi.apkdownloadhelper.updater.ArchiveApp
@@ -3390,7 +3391,10 @@ internal fun HelperTheme(
     }
     // Decorations the scheme cannot reach (the brand gradient, generated letter
     // tiles) read this to flatten themselves in monochrome mode.
-    CompositionLocalProvider(LocalMonochromeTheme provides (style == ThemeStyle.MONOCHROME)) {
+    CompositionLocalProvider(
+        LocalMonochromeTheme provides (style == ThemeStyle.MONOCHROME),
+        LocalRippleConfiguration provides null
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = AppTypography,
