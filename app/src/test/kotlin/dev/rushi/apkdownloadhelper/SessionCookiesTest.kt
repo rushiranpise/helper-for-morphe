@@ -48,6 +48,22 @@ class SessionCookiesTest {
     }
 
     @Test
+    fun `cookies with the same name on different paths are both sent`() {
+        SessionCookies.saveFromResponse(
+            variantPage,
+            listOf(
+                cookie(name = "session", value = "root", path = "/"),
+                cookie(name = "session", value = "apk", path = "/apk/")
+            )
+        )
+
+        val sent = SessionCookies.loadForRequest(variantPage)
+
+        assertEquals(listOf("/apk/", "/"), sent.map { it.path })
+        assertEquals(listOf("apk", "root"), sent.map { it.value })
+    }
+
+    @Test
     fun `cookies stay on their own host`() {
         SessionCookies.saveFromResponse(variantPage, listOf(cookie()))
 

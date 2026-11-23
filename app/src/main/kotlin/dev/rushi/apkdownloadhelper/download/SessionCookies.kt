@@ -110,8 +110,12 @@ internal object SessionCookies : CookieJar {
 
         val keys = candidateDomainKeys(url.host)
         val now = System.currentTimeMillis()
-        val cookiesByName = LinkedHashMap<String, Cookie>()
-        browserCookies.forEach { cookie -> cookiesByName[cookie.name] = cookie }
+        // A name is not a cookie identity: the same name can exist on a
+        // different path or domain, and the more specific path must go first.
+        val cookiesByIdentity = LinkedHashMap<String, Cookie>()
+        browserCookies.forEach { cookie ->
+            cookiesByIdentity[cookieIdentity(cookie)] = cookie
+        }
         synchronized(byHost) {
             keys.forEach { key ->
                 val stored = byHost[key] ?: return@forEach
@@ -120,13 +124,16 @@ internal object SessionCookies : CookieJar {
                     byHost.remove(key)
                 } else {
                     stored.filter { it.matches(url) }.forEach { cookie ->
-                        cookiesByName.putIfAbsent(cookie.name, cookie)
+                        cookiesByIdentity.putIfAbsent(cookieIdentity(cookie), cookie)
                     }
                 }
             }
         }
-        return cookiesByName.values.toList()
+        return cookiesByIdentity.values.sortedByDescending { it.path.length }
     }
+
+    private fun cookieIdentity(cookie: Cookie): String =
+        "${cookie.name}\u0000${cookie.domain.lowercase(Locale.US)}\u0000${cookie.path}"
 
     /**
      * Parses a `Cookie` request header into session cookies for [url].
