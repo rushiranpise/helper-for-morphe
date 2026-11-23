@@ -3,6 +3,7 @@ package dev.rushi.apkdownloadhelper.download
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.util.Locale
 
 /**
@@ -179,19 +180,38 @@ internal object SessionCookies : CookieJar {
         get() = synchronized(byHost) { byHost.size }
 }
 
+/**
+ * The registrable domain for [host], using the public suffix list so a
+ * host such as `www.example.co.uk` yields `example.co.uk`, not `co.uk`.
+ * IP addresses and hosts without a registrable domain stay host-only.
+ */
 internal fun rootDomain(host: String): String {
-    val parts = host.lowercase(Locale.US).split('.').filter { it.isNotBlank() }
-    if (parts.size <= 2) return host
-    return parts.takeLast(2).joinToString(".")
+    val normalized = host.lowercase(Locale.US)
+    return registrableDomainOrNull(normalized) ?: normalized
+}
+
+/**
+ * The public-suffix-aware registrable domain, or null when the lookup data is
+ * unavailable (plain JVM tests) or the host has no registrable domain (IPs).
+ */
+private fun registrableDomainOrNull(host: String): String? {
+    val url = runCatching { "https://$host/".toHttpUrl() }.getOrNull() ?: return null
+    return runCatching { url.topPrivateDomain() }
+        .getOrNull()
+        ?.lowercase(Locale.US)
 }
 
 internal fun candidateDomainKeys(host: String): List<String> {
-    val parts = host.lowercase(Locale.US).split('.').filter { it.isNotBlank() }
-    if (parts.size <= 1) return listOf(host.lowercase(Locale.US))
+    val normalized = host.lowercase(Locale.US)
+    val parts = normalized.split('.').filter { it.isNotBlank() }
+    if (parts.size <= 1) return listOf(normalized)
     val keys = mutableListOf<String>()
     for (i in 0 until parts.size - 1) {
         keys.add(parts.subList(i, parts.size).joinToString("."))
     }
-    return keys
+    // Never look above the registrable domain: `co.uk` is not a cookie scope.
+    val registrable = registrableDomainOrNull(normalized) ?: return keys
+    val boundary = keys.indexOf(registrable)
+    return if (boundary >= 0) keys.take(boundary + 1) else keys
 }
 

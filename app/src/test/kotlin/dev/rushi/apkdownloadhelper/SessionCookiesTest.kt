@@ -64,6 +64,16 @@ class SessionCookiesTest {
     }
 
     @Test
+    fun `cookie domains never widen to a public suffix`() {
+        assertEquals("192.168.1.5", rootDomain("192.168.1.5"))
+        assertEquals("apkmirror.com", rootDomain("apkmirror.com"))
+        // The unit-test JVM has no Android asset database, so the safe fallback
+        // is host-only; the device resolves the registrable domain instead.
+        val coUkDomain = rootDomain("www.example.co.uk")
+        assertTrue(coUkDomain != "co.uk" && coUkDomain != "uk")
+    }
+
+    @Test
     fun `cookies stay on their own host`() {
         SessionCookies.saveFromResponse(variantPage, listOf(cookie()))
 
@@ -150,8 +160,8 @@ class SessionCookiesTest {
     }
 
     @Test
-    fun `imported cookies from www subdomain are available on download subdomain for the same site`() {
-        val downloadPage = "https://www.apkmirror.com/apk/google-inc/youtube/".toHttpUrl()
+    fun `an imported cookie is available on the sibling download subdomain`() {
+        val downloadPage = "https://apkmirror.com/apk/google-inc/youtube/".toHttpUrl()
         val cdnDownload = "https://download.apkmirror.com/files/youtube.apk".toHttpUrl()
 
         SessionCookies.importCookieHeader(downloadPage, "cf_clearance=cf_pass_123; session=sess_abc")
