@@ -604,10 +604,12 @@ internal object MorpheArchive {
         }
         if (!owner) return pending.await()
         return try {
-            val index = withContext(Dispatchers.IO) { fetchIndexFromNetwork(context) }
-            synchronized(fetchLock) { lastFetchAtNanos = System.nanoTime() }
-            pending.complete(index)
-            index
+            val result = withContext(Dispatchers.IO) { fetchIndexFromNetwork(context) }
+            if (result.fromNetwork) {
+                synchronized(fetchLock) { lastFetchAtNanos = System.nanoTime() }
+            }
+            pending.complete(result.index)
+            result.index
         } catch (error: Throwable) {
             pending.completeExceptionally(error)
             throw error
@@ -622,7 +624,12 @@ internal object MorpheArchive {
         return System.nanoTime() - completedAt in 0 until FETCH_REUSE_WINDOW_NANOS
     }
 
-    private fun fetchIndexFromNetwork(context: Context?): MorpheArchiveIndex {
+    private data class IndexFetchResult(
+        val index: MorpheArchiveIndex,
+        val fromNetwork: Boolean
+    )
+
+    private fun fetchIndexFromNetwork(context: Context?): IndexFetchResult {
         val request = Request.Builder()
             .url(INDEX_URL)
             .header(
@@ -648,12 +655,14 @@ internal object MorpheArchive {
                     runCatching { writeCacheFile(context, body) }
                         .onFailure { Log.w(TAG, "Could not cache the app index", it) }
                 }
-                index
+                IndexFetchResult(index, fromNetwork = true)
             }
         } catch (e: Exception) {
             if (context != null) {
                 val cached = loadCachedIndex(context)
-                if (cached != null) return cached
+                // A disk fallback is not a fresh fetch: a later Retry must
+                // still reach the network instead of reusing this result.
+                if (cached != null) return IndexFetchResult(cached, fromNetwork = false)
             }
             throw e
         }
