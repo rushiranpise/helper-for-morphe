@@ -81,7 +81,10 @@ internal class AuroraParser(private val ctx: SourceParserContext) : ApkSourcePar
             val fileKind = if (files.size > 1) "apks" else "apk"
             if (!request.acceptsFormat(fileKind)) continue
 
-            val versionName = request.requestedVersionName ?: app.versionName
+            // AppDetailsHelper describes the latest release. A historical build
+            // must not borrow its name; the APK metadata fills it in later.
+            val versionName = request.requestedVersionName
+                ?: app.versionName.takeIf { code == app.versionCode }
             return listOf(
                 DownloadCandidate(
                     source = DownloadSource.AURORA,
