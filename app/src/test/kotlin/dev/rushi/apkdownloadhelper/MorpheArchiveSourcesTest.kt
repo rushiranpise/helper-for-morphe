@@ -116,6 +116,20 @@ class MorpheArchiveSourcesTest {
     }
 
     @Test
+    fun `matchingReason identifies a patch detail name match`() {
+        val app = ArchiveApp(
+            name = "YouTube",
+            packageName = "com.google.android.youtube",
+            patchDetails = listOf(
+                ArchivePatch(name = "SponsorBlock", description = "Skips sponsor segments")
+            )
+        )
+        val reason = app.matchingReason("sponsorblock")
+        assertTrue(reason is MatchReason.Patch)
+        assertEquals("Patch: SponsorBlock", reason?.label)
+    }
+
+    @Test
     fun `matchingReason identifies source repo match`() {
         val app = ArchiveApp(
             name = "YouTube",

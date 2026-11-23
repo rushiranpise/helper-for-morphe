@@ -152,6 +152,9 @@ internal data class ArchiveApp(
             val repoName = it.repo.substringAfterLast('/')
             return MatchReason.SourceRepo(repoName.ifBlank { it.repo })
         }
+        patchDetails.firstOrNull { it.name.lowercase(Locale.US).contains(q) }?.let {
+            return MatchReason.Patch(it.name)
+        }
         patchDetails.firstOrNull { it.description?.lowercase(Locale.US)?.contains(q) == true }?.let {
             return MatchReason.Patch(it.name.ifBlank { "Matches description" })
         }
