@@ -52,6 +52,7 @@ import dev.chrisbanes.haze.HazeState
 import dev.rushi.apkdownloadhelper.ui.theme.AppColors
 import dev.rushi.apkdownloadhelper.ui.theme.glassFill
 import androidx.compose.material3.Surface
+import dev.rushi.apkdownloadhelper.ui.theme.rememberMorphePillShape
 
 @Composable
 internal fun SelectedSourceBar(source: DownloadSource) {
@@ -123,6 +124,7 @@ internal fun SourceBottomBar(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val cancelShape = rememberMorphePillShape(cancelInteraction)
             Surface(
                 onClick = onCancel,
                 modifier = Modifier
@@ -130,11 +132,11 @@ internal fun SourceBottomBar(
                     .pressScale(cancelInteraction)
                     .glassFill(
                         glass = AppColors.glassContainerColor(),
-                        shape = CircleShape,
+                        shape = cancelShape,
                         hazeState = hazeState
                     ),
                 interactionSource = cancelInteraction,
-                shape = CircleShape,
+                shape = cancelShape,
                 color = Color.Transparent,
                 contentColor = scheme.onSurface
             ) {
@@ -147,6 +149,7 @@ internal fun SourceBottomBar(
                 }
             }
 
+            val primaryShape = rememberMorphePillShape(primaryInteraction)
             Button(
                 onClick = action.run,
                 enabled = action.enabled,
@@ -156,11 +159,11 @@ internal fun SourceBottomBar(
                     .pressScale(primaryInteraction, enabled = action.enabled)
                     .glassFill(
                         glass = AppColors.glassContainerColor(selected = true),
-                        shape = CircleShape,
+                        shape = primaryShape,
                         hazeState = hazeState
                     ),
                 interactionSource = primaryInteraction,
-                shape = CircleShape,
+                shape = primaryShape,
                 border = null,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color.Transparent,

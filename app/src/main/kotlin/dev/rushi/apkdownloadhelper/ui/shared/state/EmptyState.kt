@@ -34,6 +34,7 @@ import dev.rushi.apkdownloadhelper.ui.shared.card.HelperSetupCard
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.pressScale
 import androidx.compose.material3.Button
+import dev.rushi.apkdownloadhelper.ui.theme.rememberMorphePillShape
 
 @Composable
 internal fun EmptyLaunchState(
@@ -53,7 +54,7 @@ internal fun EmptyLaunchState(
                 .height(48.dp)
                 .pressScale(openMorpheInteraction),
             interactionSource = openMorpheInteraction,
-            shape = CircleShape,
+            shape = rememberMorphePillShape(openMorpheInteraction),
             border = null,
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primaryContainer,

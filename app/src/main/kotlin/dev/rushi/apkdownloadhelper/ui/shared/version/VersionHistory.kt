@@ -45,6 +45,7 @@ import dev.rushi.apkdownloadhelper.ui.model.VersionHistoryState
 import dev.rushi.apkdownloadhelper.ui.model.identityKey
 import dev.rushi.apkdownloadhelper.ui.shared.source.ModeNoticeCard
 import dev.rushi.apkdownloadhelper.ui.theme.pressScale
+import dev.rushi.apkdownloadhelper.ui.theme.rememberMorphePillShape
 import java.util.Locale
 
 internal fun LazyListScope.versionHistoryItems(
@@ -163,6 +164,7 @@ internal fun VersionHistoryRow(
             }
             else -> {
                 val downloadInteraction = remember { MutableInteractionSource() }
+                val downloadShape = rememberMorphePillShape(downloadInteraction)
                 Button(
                     onClick = onDownloadVersion,
                     enabled = !anyResolving,
@@ -170,7 +172,7 @@ internal fun VersionHistoryRow(
                         .height(40.dp)
                         .pressScale(downloadInteraction),
                     interactionSource = downloadInteraction,
-                    shape = CircleShape,
+                    shape = downloadShape,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = scheme.primaryContainer,
                         contentColor = scheme.onPrimaryContainer,
@@ -221,13 +223,14 @@ private fun HistoryActionPill(
 ) {
     val scheme = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
+    val pillShape = rememberMorphePillShape(interaction)
     Button(
         onClick = onClick,
         modifier = Modifier
             .height(40.dp)
             .pressScale(interaction),
         interactionSource = interaction,
-        shape = CircleShape,
+        shape = pillShape,
         border = null,
         colors = ButtonDefaults.buttonColors(
             containerColor = if (primary) {
