@@ -9,6 +9,7 @@ import dev.rushi.apkdownloadhelper.updater.*
 import okhttp3.Cookie
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -173,6 +174,28 @@ class SessionCookiesTest {
         // Ensure other domains never receive them
         val apkPureRequest = "https://download.apkpure.com/b/APK/test".toHttpUrl()
         assertTrue(SessionCookies.loadForRequest(apkPureRequest).isEmpty())
+    }
+
+    @Test
+    fun `referer cookies only merge within the same site`() {
+        assertTrue(
+            sameCookieSite(
+                "https://www.apkmirror.com/wp-content/download.php?id=1",
+                "https://www.apkmirror.com/apk/example/"
+            )
+        )
+        assertFalse(
+            sameCookieSite(
+                "https://files.example.net/app.apk",
+                "https://www.apkmirror.com/apk/example/"
+            )
+        )
+        assertFalse(
+            sameCookieSite(
+                "https://www.example.co.uk/app.apk",
+                "https://other.co.uk/page"
+            )
+        )
     }
 
     @Test

@@ -53,6 +53,7 @@ import dev.rushi.apkdownloadhelper.R
 import dev.rushi.apkdownloadhelper.TAG
 import dev.rushi.apkdownloadhelper.download.AdGuardDns
 import dev.rushi.apkdownloadhelper.download.orderedFileKinds
+import dev.rushi.apkdownloadhelper.download.rootDomain
 import kotlinx.coroutines.delay
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
@@ -1045,12 +1046,29 @@ internal fun mergeCookieHeaders(first: String, second: String): String {
 private fun browserCookieHeader(downloadUrl: String, referer: String?): String? {
     val manager = CookieManager.getInstance()
     val downloadCookies = manager.getCookie(downloadUrl)?.takeIf(String::isNotBlank)
-    val refererCookies = referer?.let { manager.getCookie(it) }?.takeIf(String::isNotBlank)
+    // A referer on another site has no business supplying cookies for the file.
+    // Same-site page cookies stay useful for Cloudflare's clearance pair.
+    val refererCookies = referer
+        ?.takeIf { sameCookieSite(downloadUrl, it) }
+        ?.let { manager.getCookie(it) }
+        ?.takeIf(String::isNotBlank)
     return when {
         downloadCookies != null && refererCookies != null -> mergeCookieHeaders(downloadCookies, refererCookies)
         downloadCookies != null -> downloadCookies
         else -> refererCookies
     }
+}
+
+/** True when both URLs belong to the same host or registrable domain. */
+internal fun sameCookieSite(downloadUrl: String, refererUrl: String): Boolean {
+    val downloadHost = runCatching { java.net.URI(downloadUrl.urlDecoded()).host }.getOrNull()
+        ?.lowercase(Locale.US)
+        ?: return false
+    val refererHost = runCatching { java.net.URI(refererUrl.urlDecoded()).host }.getOrNull()
+        ?.lowercase(Locale.US)
+        ?: return false
+    if (downloadHost == refererHost) return true
+    return rootDomain(downloadHost) == rootDomain(refererHost)
 }
 
 /**

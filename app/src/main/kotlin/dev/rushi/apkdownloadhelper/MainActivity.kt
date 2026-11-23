@@ -1990,8 +1990,9 @@ class MainActivity : ComponentActivity() {
             ?.takeIf(String::isNotBlank)
             ?: candidate.captchaUrl
             ?: candidate.url
+        // Only the destination's own cookies may accompany the captured file.
         val cookieHeader = capture.cookieHeader
-            ?: CookieManager.getInstance().getCookie(referer)
+            ?: CookieManager.getInstance().getCookie(capture.downloadUrl)
         appendLog(
             "Captured download link from ${candidate.source.label} in the in-app browser " +
                 "($fileKind): ${capture.downloadUrl}",
