@@ -3,6 +3,7 @@ package dev.rushi.apkdownloadhelper.ui.theme
 import androidx.compose.foundation.background
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -14,6 +15,10 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
+
+/** False when the user turns off blur, which also skips the capture work. */
+val LocalBlurEnabled = compositionLocalOf { true }
 
 // ==== GLASS BLUR ====
 fun glassBlurStyle(tint: Color, background: Color): HazeStyle {
@@ -32,9 +37,14 @@ fun Modifier.glassFill(
     hazeState: HazeState?
 ): Modifier {
     val screen = MaterialTheme.colorScheme.background
-    if (hazeState == null) {
+    if (hazeState == null || !LocalBlurEnabled.current) {
         return this.background(glass.compositeOver(screen), shape)
     }
     val style = remember(glass, screen) { glassBlurStyle(glass, screen) }
     return this.clip(shape).hazeEffect(state = hazeState, style = style)
 }
+
+/** Capture content for glassFill only while blur is enabled. */
+@Composable
+fun Modifier.hazeSourceIfEnabled(state: HazeState): Modifier =
+    if (LocalBlurEnabled.current) hazeSource(state = state) else this

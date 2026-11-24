@@ -78,7 +78,6 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
 import dev.rushi.apkdownloadhelper.R
 import dev.rushi.apkdownloadhelper.download.openPlayStoreListing
 import dev.rushi.apkdownloadhelper.download.playStoreUrl
@@ -91,6 +90,7 @@ import dev.rushi.apkdownloadhelper.ui.shared.state.EmptyState
 import dev.rushi.apkdownloadhelper.ui.theme.AppAnimations
 import dev.rushi.apkdownloadhelper.ui.theme.AppColors
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
+import dev.rushi.apkdownloadhelper.ui.theme.hazeSourceIfEnabled
 import dev.rushi.apkdownloadhelper.ui.theme.LocalMonochromeTheme
 import dev.rushi.apkdownloadhelper.ui.theme.glassFill
 import dev.rushi.apkdownloadhelper.ui.theme.pressScale
@@ -260,7 +260,7 @@ internal fun AppDetailScreen(
             state = detailListState,
             modifier = Modifier
                 .fillMaxSize()
-                .hazeSource(state = detailHeaderHaze),
+                .hazeSourceIfEnabled(detailHeaderHaze),
             contentPadding = PaddingValues(
                 top = unfoldedHeaderHeightDp + 12.dp,
                 start = AppDefaults.ContentPadding,

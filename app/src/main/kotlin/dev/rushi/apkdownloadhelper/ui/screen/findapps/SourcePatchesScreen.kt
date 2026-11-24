@@ -61,7 +61,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
 import dev.rushi.apkdownloadhelper.R
 import dev.rushi.apkdownloadhelper.ui.shared.button.GlassHeaderButton
 import dev.rushi.apkdownloadhelper.ui.shared.card.InfoCard
@@ -69,6 +68,7 @@ import dev.rushi.apkdownloadhelper.ui.shared.input.SearchField
 import dev.rushi.apkdownloadhelper.ui.shared.version.ExpandableVersionRow
 import dev.rushi.apkdownloadhelper.ui.theme.AppColors
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
+import dev.rushi.apkdownloadhelper.ui.theme.hazeSourceIfEnabled
 import dev.rushi.apkdownloadhelper.ui.theme.LocalMonochromeTheme
 import dev.rushi.apkdownloadhelper.ui.theme.glassFill
 import dev.rushi.apkdownloadhelper.ui.theme.pressScale
@@ -161,7 +161,7 @@ internal fun SourcePatchesScreen(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .hazeSource(state = headerHaze),
+                .hazeSourceIfEnabled(headerHaze),
             contentPadding = PaddingValues(
                 top = headerHeightDp + 10.dp,
                 start = AppDefaults.ContentPadding,

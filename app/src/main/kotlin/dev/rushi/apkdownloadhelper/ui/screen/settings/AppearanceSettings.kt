@@ -99,6 +99,16 @@ internal fun AppearanceTabContent(
                         onSettingsChange(settings.copy(animatedBackground = !settings.animatedBackground))
                     }
                 )
+
+                SettingsSwitchItem(
+                    icon = Icons.Outlined.BlurOn,
+                    title = "Blur effects",
+                    subtitle = "Frosted headers and cards. Turn off to reduce GPU load on slower devices.",
+                    checked = settings.blurEffects,
+                    onToggle = {
+                        onSettingsChange(settings.copy(blurEffects = !settings.blurEffects))
+                    }
+                )
             }
         }
 

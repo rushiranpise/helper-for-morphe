@@ -27,9 +27,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
 import dev.rushi.apkdownloadhelper.ui.shared.layout.AppBackground
 import dev.rushi.apkdownloadhelper.ui.shared.navigation.AppNavigationBar
+import dev.rushi.apkdownloadhelper.ui.theme.hazeSourceIfEnabled
 
 /** True while the page reading this is the pager's selected page. */
 internal val LocalPagerPageSelected = compositionLocalOf { true }
@@ -70,7 +70,7 @@ internal fun MainPagerScaffold(
             key = { index -> MainPage.entries[index] },
             modifier = Modifier
                 .fillMaxSize()
-                .hazeSource(state = barHaze),
+                .hazeSourceIfEnabled(barHaze),
         ) { pageIndex ->
             CompositionLocalProvider(
                 LocalPagerPageSelected provides (pagerState.currentPage == pageIndex)

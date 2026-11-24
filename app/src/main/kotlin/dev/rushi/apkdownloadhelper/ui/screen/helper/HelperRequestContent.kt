@@ -77,7 +77,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
 import dev.rushi.apkdownloadhelper.R
 import dev.rushi.apkdownloadhelper.download.isPackageInstalled
 import dev.rushi.apkdownloadhelper.download.orderedFileKinds
@@ -112,6 +111,7 @@ import dev.rushi.apkdownloadhelper.ui.shared.state.ErrorState
 import dev.rushi.apkdownloadhelper.ui.shared.state.LoadingState
 import dev.rushi.apkdownloadhelper.ui.theme.AppColors
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
+import dev.rushi.apkdownloadhelper.ui.theme.hazeSourceIfEnabled
 import dev.rushi.apkdownloadhelper.ui.theme.LocalMonochromeTheme
 import dev.rushi.apkdownloadhelper.ui.theme.SemanticTone
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -427,7 +427,7 @@ internal fun HelperRequestContent(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .hazeSource(state = pageHaze),
+                .hazeSourceIfEnabled(pageHaze),
             contentPadding = PaddingValues(
                 top = unfoldedHeaderHeightDp + 12.dp,
                 start = AppDefaults.ContentPadding,

@@ -74,7 +74,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
 import dev.rushi.apkdownloadhelper.HelperButton
 import dev.rushi.apkdownloadhelper.R
 import dev.rushi.apkdownloadhelper.tracking.TrackingCheckScheduler
@@ -102,6 +101,7 @@ import dev.rushi.apkdownloadhelper.ui.screen.home.LocalPagerPageSelected
 import dev.rushi.apkdownloadhelper.ui.theme.AppColors
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.SemanticTone
+import dev.rushi.apkdownloadhelper.ui.theme.hazeSourceIfEnabled
 import dev.rushi.apkdownloadhelper.ui.theme.animatedListItem
 import dev.rushi.apkdownloadhelper.ui.theme.glassFill
 import dev.rushi.apkdownloadhelper.updater.ArchiveApp
@@ -458,7 +458,7 @@ internal fun AppBrowserScreen(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .hazeSource(state = headerHaze),
+                .hazeSourceIfEnabled(headerHaze),
             contentPadding = PaddingValues(
                 top = headerHeightDp + 10.dp,
                 start = AppDefaults.ContentPadding,

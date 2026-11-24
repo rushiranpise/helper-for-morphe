@@ -131,6 +131,7 @@ import dev.rushi.apkdownloadhelper.ui.screen.home.HomePagerScreen
 import dev.rushi.apkdownloadhelper.ui.theme.LocalMonochromeTheme
 import dev.rushi.apkdownloadhelper.ui.screen.settings.LogsTabContent
 import dev.rushi.apkdownloadhelper.ui.theme.AppAnimations
+import dev.rushi.apkdownloadhelper.ui.theme.LocalBlurEnabled
 import dev.rushi.apkdownloadhelper.ui.shared.button.DialogButton
 import dev.rushi.apkdownloadhelper.ui.shared.layout.PushedScreen
 import dev.rushi.apkdownloadhelper.ui.theme.AppTypography
@@ -546,7 +547,8 @@ class MainActivity : ComponentActivity() {
                 themeMode = helperSettings.themeMode,
                 themeStyle = helperSettings.themeStyle,
                 pureBlackTheme = helperSettings.pureBlackTheme,
-                accentColorHex = helperSettings.customAccentColor
+                accentColorHex = helperSettings.customAccentColor,
+                blurEnabled = helperSettings.blurEffects
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     val captcha = captchaBrowser
@@ -3353,6 +3355,7 @@ internal fun HelperTheme(
     themeStyle: ThemeStyle,
     pureBlackTheme: Boolean,
     accentColorHex: String,
+    blurEnabled: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
@@ -3424,6 +3427,7 @@ internal fun HelperTheme(
     // tiles) read this to flatten themselves in monochrome mode.
     CompositionLocalProvider(
         LocalMonochromeTheme provides (style == ThemeStyle.MONOCHROME),
+        LocalBlurEnabled provides blurEnabled,
         LocalRippleConfiguration provides null
     ) {
         MaterialTheme(

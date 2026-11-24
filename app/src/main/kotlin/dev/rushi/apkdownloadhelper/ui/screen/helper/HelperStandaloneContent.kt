@@ -46,7 +46,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
 import dev.rushi.apkdownloadhelper.BuildConfig
 import dev.rushi.apkdownloadhelper.R
 import dev.rushi.apkdownloadhelper.storage.HelperSettings
@@ -54,6 +53,7 @@ import dev.rushi.apkdownloadhelper.ui.shared.layout.AppWordmark
 import dev.rushi.apkdownloadhelper.ui.shared.state.EmptyLaunchState
 import dev.rushi.apkdownloadhelper.ui.theme.AppColors
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
+import dev.rushi.apkdownloadhelper.ui.theme.hazeSourceIfEnabled
 import dev.rushi.apkdownloadhelper.ui.theme.glassFill
 import android.Manifest
 import android.content.pm.PackageManager
@@ -233,7 +233,7 @@ internal fun HelperStandaloneContent(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .hazeSource(state = headerHaze),
+                .hazeSourceIfEnabled(headerHaze),
             contentPadding = PaddingValues(
                 top = headerHeightDp + 10.dp,
                 start = AppDefaults.ContentPadding,

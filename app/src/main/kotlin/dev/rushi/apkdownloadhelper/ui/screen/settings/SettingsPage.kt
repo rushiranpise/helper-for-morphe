@@ -45,7 +45,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
 import dev.rushi.apkdownloadhelper.R
 import dev.rushi.apkdownloadhelper.ui.shared.layout.HeaderBar
 import dev.rushi.apkdownloadhelper.ui.shared.layout.PinnedHeaderPage
@@ -56,6 +55,7 @@ import dev.rushi.apkdownloadhelper.ui.shared.settings.SettingsItem
 import dev.rushi.apkdownloadhelper.ui.shared.settings.SettingsSearch
 import dev.rushi.apkdownloadhelper.ui.theme.AppColors
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
+import dev.rushi.apkdownloadhelper.ui.theme.hazeSourceIfEnabled
 import dev.rushi.apkdownloadhelper.ui.theme.glassFill
 import dev.rushi.apkdownloadhelper.ui.theme.pressScale
 import dev.rushi.apkdownloadhelper.ui.theme.rememberMorphePillShape
@@ -133,7 +133,7 @@ internal fun SettingsPageDetail(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .hazeSource(state = pageHaze)
+                .hazeSourceIfEnabled(pageHaze)
                 .verticalScroll(scrollState)
                 .padding(
                     top = headerHeightDp + 12.dp,
