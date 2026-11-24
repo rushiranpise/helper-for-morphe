@@ -142,13 +142,19 @@ internal fun AppBrowserScreen(
     var trackPackageNoticeIsError by remember { mutableStateOf(false) }
     var searchExpanded by remember { mutableStateOf(false) }
     var loadKey by remember { mutableIntStateOf(0) }
+    val context = LocalContext.current
     var tab by remember(trackedOnly) {
-        mutableStateOf(if (trackedOnly) AppListTab.Tracked else AppListTab.All)
+        mutableStateOf(AppBrowserPreferences.loadTab(context, trackedOnly))
     }
     var sort by remember(trackedOnly) {
-        mutableStateOf(if (trackedOnly) AppSort.Updates else AppSort.AZ)
+        mutableStateOf(AppBrowserPreferences.loadSort(context, trackedOnly))
     }
-    val context = LocalContext.current
+    LaunchedEffect(tab, trackedOnly) {
+        AppBrowserPreferences.saveTab(context, trackedOnly, tab)
+    }
+    LaunchedEffect(sort, trackedOnly) {
+        AppBrowserPreferences.saveSort(context, trackedOnly, sort)
+    }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     var favourites by remember { mutableStateOf<Set<String>>(emptySet()) }
