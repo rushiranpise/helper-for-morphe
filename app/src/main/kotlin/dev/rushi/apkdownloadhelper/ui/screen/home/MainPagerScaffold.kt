@@ -1,8 +1,5 @@
 package dev.rushi.apkdownloadhelper.ui.screen.home
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -44,7 +41,6 @@ internal fun MainPagerScaffold(
     overlay: @Composable BoxScope.() -> Unit = {},
     content: @Composable (page: MainPage, bottomBarHeight: Dp) -> Unit,
 ) {
-    val covered = navigationCovered()
     var barHeight by remember { mutableStateOf(0.dp) }
     val barHaze = remember { HazeState() }
     val navBarHeight = with(LocalDensity.current) {
@@ -60,26 +56,25 @@ internal fun MainPagerScaffold(
             AppBackground(modifier = Modifier.matchParentSize())
         }
 
-        // 1. Pager content (marked as haze source so it blurs inside the floating pill)
+        // Keep currentPage/navigationCovered reads out of the pager composable itself
+        // so swiping between tabs does not recompose all pager pages every frame.
         HorizontalPager(
             state = pagerState,
             userScrollEnabled = swipeEnabled,
+            key = { index -> MainPage.entries[index] },
             modifier = Modifier
                 .fillMaxSize()
                 .hazeSource(state = barHaze),
         ) { pageIndex ->
-            content(MainPage.entries[pageIndex], if (covered) 0.dp else barHeight)
+            val bottomInset = if (navigationCovered()) 0.dp else barHeight
+            content(MainPage.entries[pageIndex], bottomInset)
         }
 
-        // 2. Telegram-style bottom dim gradient (sits OVER the scrolling list, BEHIND the floating pill)
-        AnimatedVisibility(
-            visible = !covered,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.align(Alignment.BottomCenter)
-        ) {
+        val showBottomChrome = !navigationCovered()
+        if (showBottomChrome) {
             Box(
                 modifier = Modifier
+                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .height(navBarHeight + 96.dp)
                     .background(
@@ -93,10 +88,9 @@ internal fun MainPagerScaffold(
             )
         }
 
-        // 3. Floating pill drawn ON TOP of the dim scrim so the pill stays bright & crisp
         AppNavigationBar(
             pagerState = pagerState,
-            covered = covered,
+            covered = !showBottomChrome,
             hazeState = barHaze,
             modifier = Modifier.align(Alignment.BottomCenter),
             settingsIcon = settingsIcon,

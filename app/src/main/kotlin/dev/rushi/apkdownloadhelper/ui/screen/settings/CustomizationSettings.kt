@@ -21,6 +21,9 @@ import dev.rushi.apkdownloadhelper.ui.shared.settings.SettingsSection
 import dev.rushi.apkdownloadhelper.ui.shared.settings.SettingsSwitchItem
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.LocalMonochromeTheme
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 // ==========================================
 // 1B. MORE CUSTOMIZATION TAB
@@ -37,13 +40,14 @@ internal fun CustomizationTabContent(
     var liveYoutubeApp by remember {
         mutableStateOf<dev.rushi.apkdownloadhelper.updater.ArchiveApp?>(null)
     }
+    val context = LocalContext.current
     LaunchedEffect(Unit) {
-        runCatching {
-            val index = dev.rushi.apkdownloadhelper.updater.MorpheArchive.fetchIndex()
-            liveYoutubeApp = index.apps.firstOrNull {
-                it.packageName == "com.google.android.youtube"
-            }
-        }
+        liveYoutubeApp = withContext(Dispatchers.IO) {
+            runCatching {
+                dev.rushi.apkdownloadhelper.updater.MorpheArchive
+                    .loadCachedIndex(context)
+            }.getOrNull()
+        }?.apps?.firstOrNull { it.packageName == "com.google.android.youtube" }
     }
 
     val previewApp = liveYoutubeApp ?: dev.rushi.apkdownloadhelper.updater.ArchiveApp(

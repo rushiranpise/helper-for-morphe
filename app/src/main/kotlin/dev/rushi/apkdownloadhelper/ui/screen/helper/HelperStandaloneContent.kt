@@ -93,6 +93,11 @@ private data class StoredApkCardItem(
     val installed: Boolean
 )
 
+private val usableUriCache = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+
+private fun android.content.Context.isHistoryUriUsableCached(uri: String): Boolean =
+    usableUriCache[uri] ?: isHistoryUriUsable(uri).also { usableUriCache[uri] = it }
+
 private fun loadStoredApkItems(context: android.content.Context): List<StoredApkCardItem> {
     val archiveAppsByPkg = runCatching {
         MorpheArchive.loadCachedIndex(context)?.apps?.associateBy { it.packageName }
@@ -100,7 +105,7 @@ private fun loadStoredApkItems(context: android.content.Context): List<StoredApk
     val installedCache = mutableMapOf<String, Boolean>()
 
     return DownloadHistoryStore.entries(context)
-        .filter { context.isHistoryUriUsable(it.uri) }
+        .filter { context.isHistoryUriUsableCached(it.uri) }
         .map { entry ->
             val baseApp = archiveAppsByPkg[entry.packageName]
             val app = baseApp?.copy(
@@ -140,27 +145,12 @@ internal fun HelperStandaloneContent(
         }
     }
 
-    var storedItems by remember { mutableStateOf<List<StoredApkCardItem>>(emptyList()) }
+    var storedItems by remember { mutableStateOf<List<StoredApkCardItem>?>(null) }
     var entryToDelete by remember { mutableStateOf<DownloadHistoryEntry?>(null) }
 
     LaunchedEffect(Unit) {
         storedItems = withContext(Dispatchers.IO) {
             loadStoredApkItems(context)
-        }
-        val archiveAppsByPkg = withContext(Dispatchers.IO) {
-            runCatching {
-                (MorpheArchive.loadCachedIndex(context) ?: MorpheArchive.fetchIndex(context))
-                    .apps
-                    .associateBy { it.packageName }
-            }.getOrDefault(emptyMap())
-        }
-        if (archiveAppsByPkg.isNotEmpty()) {
-            storedItems = storedItems.map { item ->
-                val matched = archiveAppsByPkg[item.entry.packageName] ?: return@map item
-                item.copy(
-                    app = matched.copy(name = item.entry.appName.ifBlank { matched.name })
-                )
-            }
         }
     }
 
@@ -173,7 +163,7 @@ internal fun HelperStandaloneContent(
                 uri.path?.let { java.io.File(it).delete() }
             }
         }
-        storedItems = storedItems.filterNot {
+        storedItems = storedItems?.filterNot {
             it.entry.uri == entry.uri && it.entry.timestamp == entry.timestamp
         }
     }
@@ -238,6 +228,7 @@ internal fun HelperStandaloneContent(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
+        val items = storedItems
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -250,20 +241,20 @@ internal fun HelperStandaloneContent(
                 bottom = 160.dp
             ),
             verticalArrangement = Arrangement.spacedBy(
-                if (storedItems.isNotEmpty()) 3.dp else AppDefaults.ItemSpacing
+                if (!items.isNullOrEmpty()) 3.dp else AppDefaults.ItemSpacing
             )
         ) {
-            if (storedItems.isEmpty()) {
+            if (items.isNullOrEmpty()) {
                 item(key = "empty_launch") {
                     EmptyLaunchState(onOpenMorphe = onOpenMorphe)
                 }
             } else {
                 itemsIndexed(
-                    items = storedItems,
+                    items = items,
                     key = { index, item -> "${item.entry.uri}_${item.entry.timestamp}_$index" }
                 ) { index, item ->
                     val isFirst = index == 0
-                    val isLast = index == storedItems.lastIndex
+                    val isLast = index == items.lastIndex
                     val outerRadius = 22.dp
                     val innerRadius = 10.dp
                     val cardShape = RoundedCornerShape(

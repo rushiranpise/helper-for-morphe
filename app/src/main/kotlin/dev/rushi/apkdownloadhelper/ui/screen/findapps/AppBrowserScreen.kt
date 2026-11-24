@@ -253,26 +253,64 @@ internal fun AppBrowserScreen(
         onDispose { observer.close() }
     }
 
-    LaunchedEffect(loadKey) {
+    // 1. Load cached index immediately for both Find apps and Tracking so local opens are instant
+    LaunchedEffect(loadKey, trackedOnly) {
         val cached = withContext(Dispatchers.IO) { MorpheArchive.loadCachedIndex(context) }
-        if (cached != null && apps == null) {
-            apps = cached.apps.sortedBy { it.name.lowercase(Locale.US) }
-            archiveIndex = cached
-            freshness = archiveFreshness(cached.generatedAt)
-        } else if (cached == null && apps == null) {
+        if (cached != null) {
+            val sortedCached = cached.apps.sortedBy { it.name.lowercase(Locale.US) }
+            if (apps == null || cached.generatedAt != archiveIndex?.generatedAt) {
+                apps = sortedCached
+                archiveIndex = cached
+                freshness = archiveFreshness(cached.generatedAt)
+            }
+            if (trackedOnly) {
+                TrackingStore.cacheTrackedApps(context, sortedCached)
+            }
+        } else if (apps == null) {
             archiveIndex = null
             error = null
         }
+
+        // forceRefresh = true bypasses the 60-second in-memory cache so the reload
+        // button always triggers a real network fetch, not a silent cache hit.
+        val forceRefresh = loadKey > 0
+        if (forceRefresh) {
+            // Reset displayed state so the UI shows a loading indicator while
+            // the fresh data arrives, and so the cache-guard below never blocks
+            // applying the new result.
+            apps = null
+            archiveIndex = null
+            freshness = null
+            error = null
+        }
         try {
-            val index = MorpheArchive.fetchIndex(context)
-            MorpheArchive.invalidatePatchListCache()
-            apps = index.apps.sortedBy { it.name.lowercase(Locale.US) }
+            val index = MorpheArchive.fetchIndex(context, forceRefresh = forceRefresh)
+            val sortedFresh = withContext(Dispatchers.Default) {
+                index.apps.sortedBy { it.name.lowercase(Locale.US) }
+            }
+            withContext(Dispatchers.IO) {
+                MorpheArchive.invalidatePatchListCache()
+                if (trackedOnly) {
+                    TrackingStore.cacheTrackedApps(context, sortedFresh)
+                }
+            }
+            apps = sortedFresh
             archiveIndex = index
             freshness = archiveFreshness(index.generatedAt)
             error = null
         } catch (e: Exception) {
             if (apps == null) {
-                error = e.message ?: "Failed to load the app index"
+                val fallbackTracked = if (trackedOnly) {
+                    withContext(Dispatchers.IO) { TrackingStore.loadCachedTrackedApps(context) }
+                } else {
+                    emptyList()
+                }
+                if (fallbackTracked.isNotEmpty()) {
+                    apps = fallbackTracked
+                    error = null
+                } else {
+                    error = e.message ?: "Failed to load the app index"
+                }
             }
         }
     }
@@ -291,7 +329,9 @@ internal fun AppBrowserScreen(
     }
 
     LaunchedEffect(query) {
-        if (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0) {
+        if (query.isNotEmpty() &&
+            (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0)
+        ) {
             listState.scrollToItem(0)
         }
     }
@@ -340,10 +380,11 @@ internal fun AppBrowserScreen(
             }
             val matches = withContext(Dispatchers.Default) {
                 val qLower = q.lowercase(Locale.US)
-                val matches = loaded.orEmpty()
+                loaded.orEmpty()
+                    .asSequence()
                     .filter { app ->
                         (!trackedOnly || trackingPackageKey(app.packageName) in tracked) &&
-                            (q.isBlank() || app.matchesQuery(qLower))
+                                (q.isBlank() || app.matchesQuery(qLower))
                     }
                     .filter { app ->
                         when (tab) {
@@ -354,6 +395,7 @@ internal fun AppBrowserScreen(
                             AppListTab.NotInstalled -> app.packageName !in installedPackages
                         }
                     }
+                    .toList()
                     .let { list ->
                         if (q.isNotBlank()) {
                             list
@@ -386,7 +428,6 @@ internal fun AppBrowserScreen(
                             }
                         }
                     }
-                matches
             }
             filtered = matches
         }
@@ -673,7 +714,6 @@ internal fun AppBrowserScreen(
                                 onOpenApp(app)
                             },
                             modifier = Modifier
-                                .animatedListItem(this)
                                 .padding(bottom = if (isLast) 0.dp else 3.dp)
                         )
                     }

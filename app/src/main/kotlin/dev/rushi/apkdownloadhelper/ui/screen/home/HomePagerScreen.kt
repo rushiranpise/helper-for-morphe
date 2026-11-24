@@ -27,13 +27,13 @@ internal fun HomePagerScreen(
 
     LaunchedEffect(requestResetToken) {
         if (requestResetToken > 0) {
-            pagerState.scrollToPage(MainPage.HOME.ordinal)
+            pagerState.turnTo(MainPage.HOME)
         }
     }
 
     LaunchedEffect(openTrackingToken) {
         if (openTrackingToken > 0) {
-            pagerState.animateScrollToPage(MainPage.TRACKING.ordinal)
+            pagerState.turnTo(MainPage.TRACKING)
         }
     }
 

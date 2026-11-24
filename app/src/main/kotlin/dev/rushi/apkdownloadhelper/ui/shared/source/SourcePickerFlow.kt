@@ -33,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -109,15 +110,20 @@ internal fun rememberSourcePickerState(
         }
     }
 
+    val currentOnResolve by rememberUpdatedState(onResolve)
+    val currentOnDownload by rememberUpdatedState(onDownload)
+    val currentOnVersionHistory by rememberUpdatedState(onVersionHistory)
+    val currentOpenLink by rememberUpdatedState(openCandidateLink)
+
     val action = remember(currentGroup, currentSubTab) {
         currentGroup?.let { group ->
             buildPrimaryAction(
                 group = group,
                 tab = currentSubTab,
-                onResolve = onResolve,
-                onDownload = onDownload,
-                onVersionHistory = onVersionHistory,
-                openLink = openCandidateLink
+                onResolve = { s, o -> currentOnResolve(s, o) },
+                onDownload = { c -> currentOnDownload(c) },
+                onVersionHistory = { s -> currentOnVersionHistory(s) },
+                openLink = { c -> currentOpenLink(c) }
             )
         }
     }

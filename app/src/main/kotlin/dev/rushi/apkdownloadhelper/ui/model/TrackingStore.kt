@@ -159,6 +159,47 @@ internal object TrackingStore {
         return AutoCloseable { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
+    private const val KEY_CACHED_APPS_JSON = "cached_tracked_apps_json"
+
+    fun cacheTrackedApps(context: Context, allApps: List<ArchiveApp>) {
+        val trackedSet = load(context)
+        val trackedApps = allApps.filter { trackingPackageKey(it.packageName) in trackedSet }
+        val array = org.json.JSONArray()
+        trackedApps.forEach { app ->
+            array.put(
+                org.json.JSONObject().apply {
+                    put("packageName", app.packageName)
+                    put("name", app.name)
+                    put("iconColor", app.iconColor ?: "")
+                    put("iconUrl", app.iconUrl ?: "")
+                }
+            )
+        }
+        prefs(context).edit().putString(KEY_CACHED_APPS_JSON, array.toString()).apply()
+    }
+
+    fun loadCachedTrackedApps(context: Context): List<ArchiveApp> {
+        val raw = prefs(context).getString(KEY_CACHED_APPS_JSON, null).orEmpty()
+        if (raw.isBlank()) return emptyList()
+        return runCatching {
+            val array = org.json.JSONArray(raw)
+            buildList(array.length()) {
+                for (i in 0 until array.length()) {
+                    val obj = array.optJSONObject(i) ?: continue
+                    val pkg = obj.optString("packageName").takeIf { it.isNotBlank() } ?: continue
+                    add(
+                        ArchiveApp(
+                            packageName = pkg,
+                            name = obj.optString("name").ifBlank { pkg },
+                            iconColor = obj.optString("iconColor").ifBlank { null },
+                            iconUrl = obj.optString("iconUrl").ifBlank { null }
+                        )
+                    )
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
     private fun prefs(context: Context): SharedPreferences =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 

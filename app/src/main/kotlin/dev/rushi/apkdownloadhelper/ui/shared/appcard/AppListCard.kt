@@ -96,7 +96,6 @@ internal fun AppListCard(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 88.dp)
-            .pressScale(interactionSource)
             .clip(shape)
             .drawWithCache {
                 val topLeft = CornerRadius(shape.topStart.toPx(size, this))

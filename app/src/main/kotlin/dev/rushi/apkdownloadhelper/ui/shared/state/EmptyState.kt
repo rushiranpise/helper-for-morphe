@@ -1,5 +1,6 @@
 package dev.rushi.apkdownloadhelper.ui.shared.state
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -47,6 +48,7 @@ internal fun EmptyLaunchState(
         )
         HelperSetupCard()
         val openMorpheInteraction = remember { MutableInteractionSource() }
+        val primaryColor = MaterialTheme.colorScheme.primary
         Button(
             onClick = onOpenMorphe,
             modifier = Modifier
@@ -55,10 +57,9 @@ internal fun EmptyLaunchState(
                 .pressScale(openMorpheInteraction),
             interactionSource = openMorpheInteraction,
             shape = rememberMorphePillShape(openMorpheInteraction),
-            border = null,
             colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                containerColor = primaryColor.copy(alpha = 0.28f),
+                contentColor = MaterialTheme.colorScheme.onSurface
             ),
             contentPadding = PaddingValues(horizontal = 16.dp)
         ) {

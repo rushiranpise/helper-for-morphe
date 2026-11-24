@@ -362,6 +362,7 @@ internal fun HelperRequestContent(
                         color = scheme.onSurfaceVariant
                     )
 
+                    val primaryColor = MaterialTheme.colorScheme.primary
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -379,8 +380,8 @@ internal fun HelperRequestContent(
                             interactionSource = confirmInteraction,
                             shape = CircleShape,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = scheme.primaryContainer,
-                                contentColor = scheme.onPrimaryContainer
+                                containerColor = primaryColor.copy(alpha = 0.28f),
+                                contentColor = MaterialTheme.colorScheme.onSurface
                             )
                         ) {
                             Text(
@@ -400,8 +401,8 @@ internal fun HelperRequestContent(
                             interactionSource = cancelInteraction,
                             shape = CircleShape,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = scheme.surfaceVariant.copy(alpha = 0.55f),
-                                contentColor = scheme.onSurface
+                                containerColor = primaryColor.copy(alpha = 0.28f),
+                                contentColor = MaterialTheme.colorScheme.onSurface
                             )
                         ) {
                             Text(

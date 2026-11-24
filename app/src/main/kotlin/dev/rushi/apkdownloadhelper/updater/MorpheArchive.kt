@@ -55,7 +55,7 @@ internal data class ArchiveApp(
     @SerializedName("sources") val sources: List<ArchiveSource> = emptyList(),
     @SerializedName("iconColor") val iconColor: String? = null,
     @SerializedName("iconUrl") val iconUrl: String? = null
-) {
+)  {
     val patchCount: Int
         get() = patches.size
 

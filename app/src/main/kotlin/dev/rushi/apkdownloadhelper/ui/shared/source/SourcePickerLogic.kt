@@ -88,19 +88,19 @@ internal fun buildPrimaryAction(
 
     SourceSubTab.History -> when (group.history) {
         VersionHistoryState.Idle -> PrimaryAction(
-            label = "Load versions",
+            label = "Find all versions",
             icon = Icons.Outlined.History,
             run = { onVersionHistory(group.source) }
         )
         VersionHistoryState.Loading -> PrimaryAction(
-            label = "Loading versions...",
+            label = "Loading all versions...",
             icon = Icons.Outlined.History,
             enabled = false,
             loading = true,
             run = {}
         )
         else -> PrimaryAction(
-            label = "Reload versions",
+            label = "Reload history",
             icon = Icons.Outlined.Refresh,
             run = { onVersionHistory(group.source) }
         )

@@ -190,6 +190,7 @@ import androidx.compose.ui.unit.dp
 import dev.rushi.apkdownloadhelper.ui.screen.findapps.AppDetailScreen
 import dev.rushi.apkdownloadhelper.updater.ArchiveApp
 import dev.rushi.apkdownloadhelper.ui.screen.settings.CustomizationTabContent
+import dev.rushi.apkdownloadhelper.updater.MorpheArchive
 
 
 internal const val AURORA_AUTH_URL = "https://auroraoss.com/api/auth"
@@ -225,7 +226,7 @@ class MainActivity : ComponentActivity() {
 
     private val browserUserAgent =
         "Mozilla/5.0 (Linux; Android ${Build.VERSION.RELEASE}; ${Build.MODEL}) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
+                "(KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
 
     /** APKMirror challenges browser user agents but serves this one normally. */
     private val apkMirrorUserAgent = "HelperForMorphe/1.0"
@@ -328,7 +329,8 @@ class MainActivity : ComponentActivity() {
     )
 
     private val parsers: Map<DownloadSource, ApkSourceParser> by lazy {
-        val playHttpClient = PlayHttpClient(Cache(File(cacheDir, "play-cache"), 64L * 1024L * 1024L))
+        val playHttpClient =
+            PlayHttpClient(Cache(File(cacheDir, "play-cache"), 64L * 1024L * 1024L))
         val parserContext = SourceParserContext(
             fetcher = sourceTextFetcher,
             apkPureApi = apkPureApi,
@@ -387,8 +389,10 @@ class MainActivity : ComponentActivity() {
     private var updateRefreshToken by mutableIntStateOf(0)
     private val historyTimeFormat = SimpleDateFormat("MMM d, HH:mm", Locale.US)
     private var pendingDownload: PendingDownload? = null
+
     // Source picked from the download screen; the next Cancelled event starts it.
     private var pendingSwitchSource: DownloadSource? = null
+
     // The file the current download was fetching, kept so a source switch can
     // resolve the same version mode and variant instead of starting over from
     // whatever the new source lists first.
@@ -396,9 +400,11 @@ class MainActivity : ComponentActivity() {
     private var pendingSwitchTarget: DownloadCandidate? = null
     private var pendingSwitchOption: CandidateOption? = null
     private var switchCandidatePrompt by mutableStateOf<SwitchCandidatePrompt?>(null)
+
     // Non-null while the in-app browser is open for a candidate whose source
     // needs a real browser to reach the APK download.
     private var captchaBrowser by mutableStateOf<DownloadCandidate?>(null)
+
     // Set when a repeat request matches previous downloads that still exist;
     // the user picks one to reuse or chooses to download a fresh copy.
     private var reuseOffer by mutableStateOf<List<ReuseOption>?>(null)
@@ -406,6 +412,7 @@ class MainActivity : ComponentActivity() {
     private var failedAttempts by mutableStateOf<Set<FailedAttempt>>(emptySet())
     private var lastFailureMessage by mutableStateOf<String?>(null)
     private var lastFailureOption by mutableStateOf<CandidateOption?>(null)
+
     // Set while Retry all / Retry failed sources is walking sources and
     // downloading. Fast Mode failures keep using fastModeActive instead.
     private var autoRetryActive = false
@@ -414,8 +421,10 @@ class MainActivity : ComponentActivity() {
     private var fastModeActive = false
     private var fastModeQueue: MutableList<DownloadSource>? = null
     private var fastModeDecision: CompletableDeferred<FastModeChoice?>? = null
+
     // ALWAYS_ASK: which version the user picked for the current request.
     private var fastModeVersionDecision: CompletableDeferred<FastModePolicy?>? = null
+
     // Effective policy for the current run (chosen interactively for ALWAYS_ASK).
     private var fastModeRunPolicy = FastModePolicy.REQUESTED
 
@@ -459,7 +468,7 @@ class MainActivity : ComponentActivity() {
         // update check still runs and can post a notification, but it must not
         // put an update popup on top of the download flow.
         val normalLaunch = request == null &&
-            intent?.action != DownloadHelperContract.ACTION_DOWNLOAD_ORIGINAL_APK
+                intent?.action != DownloadHelperContract.ACTION_DOWNLOAD_ORIGINAL_APK
         lifecycleScope.launch {
             val prompt = UpdateManager.checkOnLaunch(applicationContext)
             if (prompt != null &&
@@ -469,6 +478,13 @@ class MainActivity : ComponentActivity() {
                 !showUpdates
             ) {
                 updatePrompt = prompt
+            }
+            // Refresh and persist the archive index cache in the background so local opens
+            // and Tracking mode already have up-to-date data on disk.
+            runCatching {
+                dev.rushi.apkdownloadhelper.updater.MorpheArchive.fetchIndex(
+                    context = applicationContext
+                )
             }
         }
         startRequestLog(request)
@@ -488,7 +504,12 @@ class MainActivity : ComponentActivity() {
             DownloadJobManager.events.collect(::handleDownloadEvent)
         }
         if (deliverPendingResultIfPresent(request)) return
-        if (request != null) offerExistingDownloadIfPresent(request!!)
+        val activeRequest = request
+        if (activeRequest != null) {
+            offerExistingDownloadIfPresent(activeRequest)
+            loadCandidates()
+            if (reuseOffer == null) startFastModeIfEnabled(activeRequest)
+        }
 
         setContent {
             var isSettingsSubpageOpen by remember { mutableStateOf(false) }
@@ -545,13 +566,14 @@ class MainActivity : ComponentActivity() {
                             onChallengeTimeout = ::onBrowserChallengeTimeout
                         )
                     } else {
-                        val backgroundModifier = if (showUpdates || activeSettingsCategory != null || showSourcesScreen || selectedArchiveApp != null) {
-                            Modifier
-                                .focusProperties { canFocus = false }
-                                .clearAndSetSemantics {}
-                        } else {
-                            Modifier
-                        }
+                        val backgroundModifier =
+                            if (showUpdates || activeSettingsCategory != null || showSourcesScreen || selectedArchiveApp != null) {
+                                Modifier
+                                    .focusProperties { canFocus = false }
+                                    .clearAndSetSemantics {}
+                            } else {
+                                Modifier
+                            }
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -619,7 +641,11 @@ class MainActivity : ComponentActivity() {
                                         onDownloadVersion = ::downloadVersion,
                                         onOpenHistoryEntry = ::openHistoryEntry,
                                         onShareHistoryEntry = ::shareHistoryEntry,
-                                        onClearHistory = { DownloadHistoryStore.clear(applicationContext) },
+                                        onClearHistory = {
+                                            DownloadHistoryStore.clear(
+                                                applicationContext
+                                            )
+                                        },
                                         onClearLogs = { AppLog.clear() },
                                         onCancel = {
                                             appendLog("Query canceled by user.", LogLevel.Warning)
@@ -699,32 +725,44 @@ class MainActivity : ComponentActivity() {
                                             onSettingsChange = ::updateHelperSettings,
                                             parentScrollState = settingsDetailScrollState
                                         )
+
                                         SettingsCategory.APPEARANCE -> AppearanceTabContent(
                                             settings = helperSettings,
                                             onSettingsChange = ::updateHelperSettings
                                         )
+
                                         SettingsCategory.CUSTOMIZATION -> CustomizationTabContent(
                                             settings = helperSettings,
                                             onSettingsChange = ::updateHelperSettings
                                         )
+
                                         SettingsCategory.DOWNLOADS -> SystemTabContent(
                                             settings = helperSettings,
                                             onSettingsChange = ::updateHelperSettings
                                         )
+
                                         SettingsCategory.SECURITY_NETWORK -> AdvancedTabContent(
                                             settings = helperSettings,
                                             onSettingsChange = ::updateHelperSettings
                                         )
+
                                         SettingsCategory.SYSTEM_LOGS -> LogsTabContent(
                                             settings = helperSettings,
                                             onSettingsChange = ::updateHelperSettings,
                                             logs = AppLog.entries,
                                             onClearLogs = { AppLog.clear() },
-                                            historyEntries = DownloadHistoryStore.entries(applicationContext),
+                                            historyEntries = DownloadHistoryStore.entries(
+                                                applicationContext
+                                            ),
                                             onOpenHistoryEntry = ::openHistoryEntry,
                                             onShareHistoryEntry = ::shareHistoryEntry,
-                                            onClearHistory = { DownloadHistoryStore.clear(applicationContext) }
+                                            onClearHistory = {
+                                                DownloadHistoryStore.clear(
+                                                    applicationContext
+                                                )
+                                            }
                                         )
+
                                         SettingsCategory.ABOUT -> AboutTabContent(
                                             settings = helperSettings,
                                             onSettingsChange = ::updateHelperSettings,
@@ -809,12 +847,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-        }
-
-        val activeRequest = request
-        if (activeRequest != null) {
-            loadCandidates()
-            if (reuseOffer == null) startFastModeIfEnabled(activeRequest)
         }
     }
 
@@ -1212,6 +1244,11 @@ class MainActivity : ComponentActivity() {
             updateHistoryState(source, VersionHistoryState.Error(message))
             return
         }
+        // Clear cached misses and in-flight/cached prefetch so Reload history fetches fresh data
+        SourceNegativeCache.clear(this, source, activeRequest, CandidateOption.REQUESTED)
+        SourceNegativeCache.clear(this, source, activeRequest, CandidateOption.LATEST)
+        sourcePrefetch.cancel()
+
         updateHistoryState(source, VersionHistoryState.Loading)
         appendLog("Loading ${source.label} version history.")
         lifecycleScope.launch {

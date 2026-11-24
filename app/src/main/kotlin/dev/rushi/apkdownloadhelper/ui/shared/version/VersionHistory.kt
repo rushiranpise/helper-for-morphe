@@ -1,5 +1,6 @@
 package dev.rushi.apkdownloadhelper.ui.shared.version
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -44,6 +45,7 @@ import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
 import dev.rushi.apkdownloadhelper.ui.model.VersionHistoryState
 import dev.rushi.apkdownloadhelper.ui.model.identityKey
 import dev.rushi.apkdownloadhelper.ui.shared.source.ModeNoticeCard
+import dev.rushi.apkdownloadhelper.ui.shared.state.LoadingState
 import dev.rushi.apkdownloadhelper.ui.theme.pressScale
 import dev.rushi.apkdownloadhelper.ui.theme.rememberMorphePillShape
 import java.util.Locale
@@ -54,8 +56,12 @@ internal fun LazyListScope.versionHistoryItems(
     onSolveCaptcha: (DownloadCandidate) -> Unit
 ) {
     when (state) {
-        VersionHistoryState.Idle,
-        VersionHistoryState.Loading -> Unit
+        VersionHistoryState.Idle -> Unit
+        VersionHistoryState.Loading -> {
+            item(key = "history_loading") {
+                LoadingState()
+            }
+        }
 
         is VersionHistoryState.Error -> {
             item(key = "history_error") {
@@ -163,6 +169,7 @@ internal fun VersionHistoryRow(
                 )
             }
             else -> {
+                val primaryColor = MaterialTheme.colorScheme.primary
                 val downloadInteraction = remember { MutableInteractionSource() }
                 val downloadShape = rememberMorphePillShape(downloadInteraction)
                 Button(
@@ -174,10 +181,10 @@ internal fun VersionHistoryRow(
                     interactionSource = downloadInteraction,
                     shape = downloadShape,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = scheme.primaryContainer,
-                        contentColor = scheme.onPrimaryContainer,
-                        disabledContainerColor = scheme.primaryContainer.copy(alpha = 0.65f),
-                        disabledContentColor = scheme.onPrimaryContainer.copy(alpha = 0.85f)
+                        containerColor = primaryColor.copy(alpha = 0.28f),
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        disabledContainerColor = primaryColor.copy(alpha = 0.28f),
+                        disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                     ),
                     contentPadding = PaddingValues(horizontal = 14.dp)
                 ) {
@@ -185,7 +192,7 @@ internal fun VersionHistoryRow(
                         CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
                             strokeWidth = 2.dp,
-                            color = scheme.onPrimaryContainer
+                            color = scheme.onSurface
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
@@ -221,7 +228,7 @@ private fun HistoryActionPill(
     primary: Boolean,
     onClick: () -> Unit
 ) {
-    val scheme = MaterialTheme.colorScheme
+    val primaryColor = MaterialTheme.colorScheme.primary
     val interaction = remember { MutableInteractionSource() }
     val pillShape = rememberMorphePillShape(interaction)
     Button(
@@ -233,16 +240,8 @@ private fun HistoryActionPill(
         shape = pillShape,
         border = null,
         colors = ButtonDefaults.buttonColors(
-            containerColor = if (primary) {
-                scheme.primaryContainer
-            } else {
-                scheme.surfaceVariant.copy(alpha = 0.55f)
-            },
-            contentColor = if (primary) {
-                scheme.onPrimaryContainer
-            } else {
-                scheme.onSurface
-            }
+            containerColor = primaryColor.copy(alpha = 0.28f),
+            contentColor = MaterialTheme.colorScheme.onSurface
         ),
         contentPadding = PaddingValues(horizontal = 14.dp)
     ) {

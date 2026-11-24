@@ -211,7 +211,7 @@ private fun ModePrimaryPillButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val scheme = MaterialTheme.colorScheme
+    val primaryColor = MaterialTheme.colorScheme.primary
     val interaction = remember { MutableInteractionSource() }
     Button(
         onClick = onClick,
@@ -222,8 +222,8 @@ private fun ModePrimaryPillButton(
         shape = rememberMorphePillShape(interaction),
         border = null,
         colors = ButtonDefaults.buttonColors(
-            containerColor = scheme.primaryContainer,
-            contentColor = scheme.onPrimaryContainer
+            containerColor = primaryColor.copy(alpha = 0.28f),
+            contentColor = MaterialTheme.colorScheme.onSurface
         ),
         contentPadding = PaddingValues(horizontal = 16.dp)
     ) {
@@ -250,7 +250,7 @@ private fun ModeSecondaryPillButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val scheme = MaterialTheme.colorScheme
+    val primaryColor = MaterialTheme.colorScheme.primary
     val interaction = remember { MutableInteractionSource() }
     Button(
         onClick = onClick,
@@ -261,8 +261,8 @@ private fun ModeSecondaryPillButton(
         shape = rememberMorphePillShape(interaction),
         border = null,
         colors = ButtonDefaults.buttonColors(
-            containerColor = scheme.surfaceVariant.copy(alpha = 0.55f),
-            contentColor = scheme.onSurface
+            containerColor = primaryColor.copy(alpha = 0.28f),
+            contentColor = MaterialTheme.colorScheme.onSurface
         ),
         contentPadding = PaddingValues(horizontal = 16.dp)
     ) {

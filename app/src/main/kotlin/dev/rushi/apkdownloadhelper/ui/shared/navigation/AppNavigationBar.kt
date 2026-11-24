@@ -44,6 +44,7 @@ import dev.rushi.apkdownloadhelper.ui.theme.AppColors
 import dev.rushi.apkdownloadhelper.ui.theme.AppSprings
 import dev.rushi.apkdownloadhelper.ui.theme.glassFill
 import dev.rushi.apkdownloadhelper.ui.theme.pressScale
+import dev.rushi.apkdownloadhelper.ui.util.turnTo
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -83,16 +84,20 @@ internal fun AppNavigationBar(
                 modifier = Modifier
                     .widthIn(max = 320.dp)
                     .height(64.dp)
-                    .glassFill(AppColors.glassContainerColor(), CircleShape, hazeState),
+                    .glassFill(
+                        glass = AppColors.glassContainerColor(),
+                        shape = CircleShape,
+                        hazeState = if (covered) null else hazeState
+                    ),
                 shape = CircleShape,
                 color = Color.Transparent,
-            ) {
+            )  {
                 Box(modifier = Modifier.padding(horizontal = 6.dp)) {
                     val slots = remember { mutableStateMapOf<Int, IntRange>() }
 
                     // Sliding indicator
                     SelectionIndicator(
-                        span = slots[pagerState.targetPage],
+                        span = slots[pagerState.currentPage],
                         modifier = Modifier.align(AbsoluteAlignment.CenterLeft)
                     )
 
@@ -114,9 +119,9 @@ internal fun AppNavigationBar(
                                 icon = icon,
                                 label = label,
                                 contentDescription = a11y,
-                                selected = pagerState.targetPage == index,
+                                selected = pagerState.currentPage == index,
                                 onClick = {
-                                    scope.launch { pagerState.animateScrollToPage(index) }
+                                    scope.launch { pagerState.turnTo(page) }
                                 },
                                 modifier = Modifier
                                     .weight(1f)

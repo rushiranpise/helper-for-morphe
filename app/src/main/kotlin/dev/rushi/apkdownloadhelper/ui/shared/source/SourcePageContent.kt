@@ -86,10 +86,10 @@ internal fun LazyListScope.sourcePageItems(
         SourceSubTab.Latest -> {
             when (group.source) {
                 DownloadSource.AURORA -> item(key = "latest_hint_aurora") {
-                    ModeNoticeCard("Aurora only provides the latest Play Store version. Use Manual mode if you need a specific version.")
+                    ModeNoticeCard("Aurora only provides the latest Play Store version. Use other source if you need a specific version.")
                 }
                 DownloadSource.PLAY -> item(key = "latest_hint_play") {
-                    ModeNoticeCard("Play opens the official Play Store listing for this app. Use Manual mode if you need a specific version.")
+                    ModeNoticeCard("Play opens the official Play Store listing for this app. Use other source if you need a specific version.")
                 }
                 else -> Unit
             }

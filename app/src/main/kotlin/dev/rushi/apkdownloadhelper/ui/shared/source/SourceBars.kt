@@ -158,16 +158,15 @@ internal fun SourceBottomBar(
                     .height(48.dp)
                     .pressScale(primaryInteraction, enabled = action.enabled)
                     .glassFill(
-                        glass = AppColors.glassContainerColor(selected = true),
+                        glass = AppColors.glassContainerColor(),
                         shape = primaryShape,
                         hazeState = hazeState
                     ),
                 interactionSource = primaryInteraction,
                 shape = primaryShape,
-                border = null,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color.Transparent,
-                    contentColor = AppColors.glassContentColor(selected = true),
+                    contentColor = scheme.onSurface,
                     disabledContainerColor = Color.Transparent,
                     disabledContentColor = scheme.onSurfaceVariant.copy(alpha = 0.5f)
                 ),
@@ -176,7 +175,8 @@ internal fun SourceBottomBar(
                 if (action.loading) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp
+                        strokeWidth = 2.dp,
+                        color = scheme.onSurface
                     )
                 } else {
                     Icon(

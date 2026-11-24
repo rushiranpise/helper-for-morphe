@@ -264,7 +264,7 @@ internal fun DownloadPercentPill(
 
 @Composable
 internal fun DownloadCancelButton(onClick: () -> Unit) {
-    val scheme = MaterialTheme.colorScheme
+    val primaryColor = MaterialTheme.colorScheme.primary
     val interaction = remember { MutableInteractionSource() }
     Surface(
         onClick = onClick,
@@ -273,8 +273,8 @@ internal fun DownloadCancelButton(onClick: () -> Unit) {
             .pressScale(interaction),
         interactionSource = interaction,
         shape = rememberMorphePillShape(interaction),
-        color = scheme.surfaceVariant.copy(alpha = 0.55f),
-        contentColor = scheme.onSurface
+        color = primaryColor.copy(alpha = 0.28f),
+        contentColor = MaterialTheme.colorScheme.onSurface
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
@@ -294,7 +294,7 @@ internal fun DownloadPillButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val scheme = MaterialTheme.colorScheme
+    val primaryColor = MaterialTheme.colorScheme.primary
     val interaction = remember { MutableInteractionSource() }
     Button(
         onClick = onClick,
@@ -305,16 +305,8 @@ internal fun DownloadPillButton(
         shape = rememberMorphePillShape(interaction),
         border = null,
         colors = ButtonDefaults.buttonColors(
-            containerColor = if (primary) {
-                scheme.primaryContainer
-            } else {
-                scheme.surfaceVariant.copy(alpha = 0.55f)
-            },
-            contentColor = if (primary) {
-                scheme.onPrimaryContainer
-            } else {
-                scheme.onSurface
-            }
+            containerColor = primaryColor.copy(alpha = 0.28f),
+            contentColor = MaterialTheme.colorScheme.onSurface
         ),
         contentPadding = PaddingValues(horizontal = 14.dp)
     ) {
@@ -497,6 +489,7 @@ internal fun CancelDownloadDialog(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    val primaryColor = MaterialTheme.colorScheme.primary
                     val keepInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
                     Button(
                         onClick = onKeepDownloading,
@@ -507,8 +500,8 @@ internal fun CancelDownloadDialog(
                         interactionSource = keepInteraction,
                         shape = rememberMorphePillShape(keepInteraction),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = scheme.primaryContainer,
-                            contentColor = scheme.onPrimaryContainer
+                            containerColor = primaryColor.copy(alpha = 0.28f),
+                            contentColor = MaterialTheme.colorScheme.onSurface
                         )
                     ) {
                         Text(
