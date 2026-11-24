@@ -64,23 +64,44 @@ internal class ResolvedLinkCache(
 }
 
 /**
- * `pkg~version~abi` plus the build code when the request names exactly one.
+ * The resolver queries for [request], best first.
  *
+ * Each is `pkg~version~abi`, with a build code appended when the request carries one.
  * Morphe added the build code (and an optional form factor after it) so the resolver
  * can pick one APKMirror variant instead of a release page. The helper has no form
- * factor in the intent, and a request with several candidate build codes cannot name
- * one safely, so those requests keep the shorter three-part form.
+ * factor in the intent.
+ *
+ * A patch source can declare one build per ABI (Hushfacebook names an arm64-v8a build
+ * and an armeabi-v7a build for the same version), and Morphe then sends every code
+ * without saying which is which. Dropping them all and asking for `pkg~version~abi`
+ * alone lets the resolver pick its default variant for the ABI, which need not be any
+ * of the builds the patches want. So there is one query per code, in the order Morphe
+ * sent them, and the bare three-part query last as the fallback it always was.
  */
-internal fun morpheResolveQuery(request: HelperRequest): String {
+internal fun morpheResolveQueries(request: HelperRequest): List<String> {
     val version = request.requestedVersionNames.firstOrNull()?.takeIf(String::isNotBlank)
         ?: request.versionName?.trim()?.takeIf(String::isNotBlank)
         ?: "any"
     val abi = request.availableAbis.firstOrNull()?.takeIf(String::isNotBlank) ?: "arm64-v8a"
-    val parts = mutableListOf(request.packageName, version, abi)
-    val buildCode = request.versionCode ?: request.versionCodes.singleOrNull()
-    if (buildCode != null && buildCode > 0L) parts += buildCode.toString()
-    return parts.joinToString("~")
+    val base = listOf(request.packageName, version, abi)
+    val buildCodes = (listOfNotNull(request.versionCode) + request.versionCodes)
+        .filter { it > 0L }
+        .distinct()
+    return buildCodes.map { code -> (base + code.toString()).joinToString("~") } +
+        base.joinToString("~")
 }
+
+/** The best of [morpheResolveQueries]: the query a request with at most one build code sends. */
+internal fun morpheResolveQuery(request: HelperRequest): String =
+    morpheResolveQueries(request).first()
+
+/**
+ * Whether a resolver answer settles on one build: an APKMirror variant page or an
+ * Uptodown file page. A release page, an app page or the resolver's Google fallback
+ * still leaves the build to be chosen.
+ */
+internal fun resolvedUrlNamesOneBuild(url: String): Boolean =
+    apkMirrorPageOf(url) == ApkMirrorPage.VARIANT || uptodownResolvedPageOf(url) != null
 
 /** The host of [url], lowercased, or null when it cannot be read. */
 internal fun urlHostOf(url: String): String? =
@@ -185,8 +206,26 @@ internal object MorpheResolver {
     private val cache = ResolvedLinkCache()
     private val inFlight = ConcurrentHashMap<String, FutureTask<String?>>()
 
+    /**
+     * The page the resolver names for [request], or null when no query produces one.
+     *
+     * With several build codes, the first query whose answer names one build wins, so
+     * a code the resolver does not know (or a code for another ABI that it answers with
+     * a release page) does not stop a later code from landing on its variant page. When
+     * no query names a build, the first answer of any kind is kept, as before.
+     */
     fun resolve(request: HelperRequest): String? {
-        val query = morpheResolveQuery(request)
+        val queries = morpheResolveQueries(request)
+        var fallback: String? = null
+        for (query in queries) {
+            val resolved = resolveQuery(query) ?: continue
+            if (queries.size == 1 || resolvedUrlNamesOneBuild(resolved)) return resolved
+            if (fallback == null) fallback = resolved
+        }
+        return fallback
+    }
+
+    private fun resolveQuery(query: String): String? {
         cache.get(query)?.let { return it }
 
         // Sources can resolve in parallel. Coalesce the same query so they wait
