@@ -1,6 +1,6 @@
 package dev.rushi.apkdownloadhelper
 
-import dev.rushi.apkdownloadhelper.ui.*
+import dev.rushi.apkdownloadhelper.ui.model.*
 import dev.rushi.apkdownloadhelper.updater.*
 import org.junit.Assert.assertEquals
 import org.junit.Test

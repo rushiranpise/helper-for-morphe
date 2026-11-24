@@ -1,6 +1,6 @@
-﻿package dev.rushi.apkdownloadhelper.sources
+package dev.rushi.apkdownloadhelper.sources
 
-import dev.rushi.apkdownloadhelper.ui.HelperRequest
+import dev.rushi.apkdownloadhelper.ui.model.HelperRequest
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.URLEncoder

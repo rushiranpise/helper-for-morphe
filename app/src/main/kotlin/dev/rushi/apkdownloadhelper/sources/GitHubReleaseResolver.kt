@@ -1,14 +1,14 @@
-﻿package dev.rushi.apkdownloadhelper.sources
+package dev.rushi.apkdownloadhelper.sources
 
 import com.google.gson.annotations.SerializedName
 import dev.rushi.apkdownloadhelper.DOWNLOAD_FILE_KIND_ORDER
 import dev.rushi.apkdownloadhelper.download.sanitizeFileName
 import dev.rushi.apkdownloadhelper.gson
-import dev.rushi.apkdownloadhelper.ui.CandidateDownloadFile
-import dev.rushi.apkdownloadhelper.ui.CandidateOption
-import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
-import dev.rushi.apkdownloadhelper.ui.DownloadSource
-import dev.rushi.apkdownloadhelper.ui.HelperRequest
+import dev.rushi.apkdownloadhelper.ui.model.CandidateDownloadFile
+import dev.rushi.apkdownloadhelper.ui.model.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.model.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.model.HelperRequest
 import java.net.URI
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets

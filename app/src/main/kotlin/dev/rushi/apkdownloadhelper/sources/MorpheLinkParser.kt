@@ -1,4 +1,4 @@
-﻿package dev.rushi.apkdownloadhelper.sources
+package dev.rushi.apkdownloadhelper.sources
 
 import dev.rushi.apkdownloadhelper.DOWNLOAD_FILE_KIND_ORDER
 import dev.rushi.apkdownloadhelper.DOWNLOAD_FILE_KIND_SET
@@ -6,16 +6,16 @@ import dev.rushi.apkdownloadhelper.TAG
 import dev.rushi.apkdownloadhelper.download.fileKindFromUrlOrNull
 import dev.rushi.apkdownloadhelper.download.normalizedHttpUrlOrNull
 import dev.rushi.apkdownloadhelper.download.sanitizeFileName
-import dev.rushi.apkdownloadhelper.ui.CandidateDownloadFile
-import dev.rushi.apkdownloadhelper.ui.CandidateOption
-import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
-import dev.rushi.apkdownloadhelper.ui.DownloadSource
-import dev.rushi.apkdownloadhelper.ui.HelperRequest
-import dev.rushi.apkdownloadhelper.ui.isApkMirrorFileUrl
-import dev.rushi.apkdownloadhelper.ui.isApkPureFileUrl
-import dev.rushi.apkdownloadhelper.ui.isCapturableDownload
-import dev.rushi.apkdownloadhelper.ui.isUptodownFileUrl
-import dev.rushi.apkdownloadhelper.ui.looksLikeApkDownload
+import dev.rushi.apkdownloadhelper.ui.model.CandidateDownloadFile
+import dev.rushi.apkdownloadhelper.ui.model.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.model.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.model.HelperRequest
+import dev.rushi.apkdownloadhelper.ui.screen.captcha.isApkMirrorFileUrl
+import dev.rushi.apkdownloadhelper.ui.screen.captcha.isApkPureFileUrl
+import dev.rushi.apkdownloadhelper.ui.screen.captcha.isCapturableDownload
+import dev.rushi.apkdownloadhelper.ui.screen.captcha.isUptodownFileUrl
+import dev.rushi.apkdownloadhelper.ui.screen.captcha.looksLikeApkDownload
 import java.net.URI
 import java.util.Locale
 

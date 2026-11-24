@@ -54,7 +54,7 @@ internal data class ArchiveApp(
     @SerializedName("sources") val sources: List<ArchiveSource> = emptyList(),
     @SerializedName("iconColor") val iconColor: String? = null,
     @SerializedName("iconUrl") val iconUrl: String? = null
-) {
+)  {
     val patchCount: Int
         get() = patches.size
 
@@ -531,11 +531,12 @@ internal object MorpheArchive {
      */
     private fun writeCacheFile(context: Context, body: String) {
         val directory = context.filesDir
+        val target = File(directory, CACHE_FILE_NAME)
         val temporary = File(directory, "$CACHE_FILE_NAME.tmp")
         try {
             temporary.writeText(body)
-            check(temporary.renameTo(File(directory, CACHE_FILE_NAME))) {
-                "Could not replace $CACHE_FILE_NAME"
+            if (!temporary.renameTo(target)) {
+                temporary.copyTo(target, overwrite = true)
             }
         } finally {
             temporary.delete()
@@ -590,8 +591,13 @@ internal object MorpheArchive {
         )
     }
 
-    suspend fun fetchIndex(context: Context? = null): MorpheArchiveIndex {
-        inMemoryIndex?.takeIf { recentlyFetched() }?.let { return it }
+    suspend fun fetchIndex(
+        context: Context? = null,
+        forceRefresh: Boolean = false
+    ): MorpheArchiveIndex {
+        if (!forceRefresh) {
+            inMemoryIndex?.takeIf { recentlyFetched() }?.let { return it }
+        }
         // A cold launch composes both browser pages at once. Let them share one
         // request instead of downloading the index twice.
         val (pending, owner) = synchronized(fetchLock) {

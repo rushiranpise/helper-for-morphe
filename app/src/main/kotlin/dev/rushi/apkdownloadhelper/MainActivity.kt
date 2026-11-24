@@ -18,18 +18,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -117,69 +108,64 @@ import dev.rushi.apkdownloadhelper.storage.scheduleHandoffCleanup
 import dev.rushi.apkdownloadhelper.storage.temporaryDownloadsDir
 import dev.rushi.apkdownloadhelper.tracking.EXTRA_OPEN_TRACKING
 import dev.rushi.apkdownloadhelper.tracking.TrackingCheckScheduler
-import dev.rushi.apkdownloadhelper.ui.AboutTabContent
-import dev.rushi.apkdownloadhelper.ui.AdvancedTabContent
-import dev.rushi.apkdownloadhelper.ui.AppBrowserScreen
-import dev.rushi.apkdownloadhelper.ui.AppearanceTabContent
-import dev.rushi.apkdownloadhelper.ui.BrowserDownloadCapture
-import dev.rushi.apkdownloadhelper.ui.CandidateDownloadFile
-import dev.rushi.apkdownloadhelper.ui.CandidateOption
-import dev.rushi.apkdownloadhelper.ui.CandidateResult
-import dev.rushi.apkdownloadhelper.ui.CaptchaBrowserScreen
-import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
-import dev.rushi.apkdownloadhelper.ui.DownloadHelperContract
-import dev.rushi.apkdownloadhelper.ui.DownloadSource
-import dev.rushi.apkdownloadhelper.ui.FailedAttempt
-import dev.rushi.apkdownloadhelper.ui.definitiveNotFoundReason
-import dev.rushi.apkdownloadhelper.ui.FastModeChoice
-import dev.rushi.apkdownloadhelper.ui.FastModeFindResult
-import dev.rushi.apkdownloadhelper.ui.FastModeProgress
-import dev.rushi.apkdownloadhelper.ui.HelperRequest
-import dev.rushi.apkdownloadhelper.ui.HelperScreen
-import dev.rushi.apkdownloadhelper.ui.HomePagerScreen
-import dev.rushi.apkdownloadhelper.ui.LocalMonochromeTheme
-import dev.rushi.apkdownloadhelper.ui.LogsTabContent
-import dev.rushi.apkdownloadhelper.ui.MorpheAnimations
-import dev.rushi.apkdownloadhelper.ui.MorpheDefaults
-import dev.rushi.apkdownloadhelper.ui.MorpheDialogButton
-import dev.rushi.apkdownloadhelper.ui.MorphePushedScreen
-import dev.rushi.apkdownloadhelper.ui.MorpheTypography
-import dev.rushi.apkdownloadhelper.ui.ResolveOutcome
-import dev.rushi.apkdownloadhelper.ui.ResolveState
-import dev.rushi.apkdownloadhelper.ui.ReuseOfferDialog
-import dev.rushi.apkdownloadhelper.ui.ReuseOption
-import dev.rushi.apkdownloadhelper.ui.SettingsCategory
-import dev.rushi.apkdownloadhelper.ui.SettingsPage
-import dev.rushi.apkdownloadhelper.ui.SettingsPageDetail
-import dev.rushi.apkdownloadhelper.ui.SourceCandidateGroup
-import dev.rushi.apkdownloadhelper.ui.SourcesSettingsScreen
-import dev.rushi.apkdownloadhelper.ui.SwitchCandidateDialog
-import dev.rushi.apkdownloadhelper.ui.SwitchCandidatePrompt
-import dev.rushi.apkdownloadhelper.ui.SystemTabContent
-import dev.rushi.apkdownloadhelper.ui.UiState
-import dev.rushi.apkdownloadhelper.ui.UpdatePromptDialog
-import dev.rushi.apkdownloadhelper.ui.UpdateScreen
-import dev.rushi.apkdownloadhelper.ui.VersionHistoryState
-import dev.rushi.apkdownloadhelper.ui.VersionStatus
-import dev.rushi.apkdownloadhelper.ui.browserBuildMismatchMessage
-import dev.rushi.apkdownloadhelper.ui.capturedDownloadFileName
-import dev.rushi.apkdownloadhelper.ui.formatBytes
-import dev.rushi.apkdownloadhelper.ui.identityKey
-import dev.rushi.apkdownloadhelper.ui.labelForLogs
-import dev.rushi.apkdownloadhelper.ui.matchingSourceSwitchCandidates
-import dev.rushi.apkdownloadhelper.ui.monochromeDarkColorScheme
-import dev.rushi.apkdownloadhelper.ui.monochromeLightColorScheme
-import dev.rushi.apkdownloadhelper.ui.morpheDarkColorScheme
-import dev.rushi.apkdownloadhelper.ui.morpheLightColorScheme
-import dev.rushi.apkdownloadhelper.ui.scanResultDetail
-import dev.rushi.apkdownloadhelper.ui.searchDomain
-import dev.rushi.apkdownloadhelper.ui.toAccentColorOrNull
-import dev.rushi.apkdownloadhelper.ui.withCustomAccent
-import dev.rushi.apkdownloadhelper.ui.withPureBlack
-import dev.rushi.apkdownloadhelper.ui.MorphePinnedHeaderPage
-import dev.rushi.apkdownloadhelper.ui.MorpheHeaderBar
-import dev.rushi.apkdownloadhelper.ui.MorpheSubpageScaffold
-import dev.rushi.apkdownloadhelper.ui.SettingsItem
+import dev.rushi.apkdownloadhelper.ui.screen.settings.AboutTabContent
+import dev.rushi.apkdownloadhelper.ui.screen.settings.AdvancedTabContent
+import dev.rushi.apkdownloadhelper.ui.screen.findapps.AppBrowserScreen
+import dev.rushi.apkdownloadhelper.ui.screen.settings.AppearanceTabContent
+import dev.rushi.apkdownloadhelper.ui.model.BrowserDownloadCapture
+import dev.rushi.apkdownloadhelper.ui.model.CandidateDownloadFile
+import dev.rushi.apkdownloadhelper.ui.model.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.model.CandidateResult
+import dev.rushi.apkdownloadhelper.ui.screen.captcha.CaptchaBrowserScreen
+import dev.rushi.apkdownloadhelper.ui.model.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.model.DownloadHelperContract
+import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.model.FailedAttempt
+import dev.rushi.apkdownloadhelper.ui.model.definitiveNotFoundReason
+import dev.rushi.apkdownloadhelper.ui.model.FastModeChoice
+import dev.rushi.apkdownloadhelper.ui.model.FastModeFindResult
+import dev.rushi.apkdownloadhelper.ui.model.FastModeProgress
+import dev.rushi.apkdownloadhelper.ui.model.HelperRequest
+import dev.rushi.apkdownloadhelper.ui.screen.helper.HelperScreen
+import dev.rushi.apkdownloadhelper.ui.screen.home.HomePagerScreen
+import dev.rushi.apkdownloadhelper.ui.theme.LocalMonochromeTheme
+import dev.rushi.apkdownloadhelper.ui.screen.settings.LogsTabContent
+import dev.rushi.apkdownloadhelper.ui.theme.AppAnimations
+import dev.rushi.apkdownloadhelper.ui.shared.button.DialogButton
+import dev.rushi.apkdownloadhelper.ui.shared.layout.PushedScreen
+import dev.rushi.apkdownloadhelper.ui.theme.AppTypography
+import dev.rushi.apkdownloadhelper.ui.model.ResolveOutcome
+import dev.rushi.apkdownloadhelper.ui.model.ResolveState
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.ReuseOfferDialog
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.ReuseOption
+import dev.rushi.apkdownloadhelper.ui.screen.settings.SettingsCategory
+import dev.rushi.apkdownloadhelper.ui.screen.settings.SettingsPage
+import dev.rushi.apkdownloadhelper.ui.screen.settings.SettingsPageDetail
+import dev.rushi.apkdownloadhelper.ui.model.SourceCandidateGroup
+import dev.rushi.apkdownloadhelper.ui.screen.settings.SourcesSettingsScreen
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.SwitchCandidateDialog
+import dev.rushi.apkdownloadhelper.ui.model.SwitchCandidatePrompt
+import dev.rushi.apkdownloadhelper.ui.screen.settings.SystemTabContent
+import dev.rushi.apkdownloadhelper.ui.model.UiState
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.UpdatePromptDialog
+import dev.rushi.apkdownloadhelper.ui.screen.update.UpdateScreen
+import dev.rushi.apkdownloadhelper.ui.model.VersionHistoryState
+import dev.rushi.apkdownloadhelper.ui.model.VersionStatus
+import dev.rushi.apkdownloadhelper.ui.screen.captcha.browserBuildMismatchMessage
+import dev.rushi.apkdownloadhelper.ui.model.capturedDownloadFileName
+import dev.rushi.apkdownloadhelper.ui.util.formatBytes
+import dev.rushi.apkdownloadhelper.ui.model.identityKey
+import dev.rushi.apkdownloadhelper.ui.model.labelForLogs
+import dev.rushi.apkdownloadhelper.ui.model.matchingSourceSwitchCandidates
+import dev.rushi.apkdownloadhelper.ui.theme.monochromeDarkColorScheme
+import dev.rushi.apkdownloadhelper.ui.theme.monochromeLightColorScheme
+import dev.rushi.apkdownloadhelper.ui.theme.appDarkColorScheme
+import dev.rushi.apkdownloadhelper.ui.theme.appLightColorScheme
+import dev.rushi.apkdownloadhelper.ui.shared.download.scanResultDetail
+import dev.rushi.apkdownloadhelper.ui.model.searchDomain
+import dev.rushi.apkdownloadhelper.ui.theme.toAccentColorOrNull
+import dev.rushi.apkdownloadhelper.ui.theme.withCustomAccent
+import dev.rushi.apkdownloadhelper.ui.theme.withPureBlack
 import dev.rushi.apkdownloadhelper.updater.UpdateInfo
 import dev.rushi.apkdownloadhelper.updater.UpdateManager
 import kotlinx.coroutines.CompletableDeferred
@@ -198,23 +184,13 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.ui.unit.dp
-import dev.rushi.apkdownloadhelper.ui.AppDetailView
+import dev.rushi.apkdownloadhelper.ui.screen.findapps.AppDetailScreen
 import dev.rushi.apkdownloadhelper.updater.ArchiveApp
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.windowInsetsBottomHeight
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.foundation.layout.height
-import dev.rushi.apkdownloadhelper.ui.CustomizationTabContent
+import dev.rushi.apkdownloadhelper.ui.screen.settings.CustomizationTabContent
+import dev.rushi.apkdownloadhelper.updater.MorpheArchive
 
 
 internal const val AURORA_AUTH_URL = "https://auroraoss.com/api/auth"
@@ -349,7 +325,8 @@ class MainActivity : ComponentActivity() {
     )
 
     private val parsers: Map<DownloadSource, ApkSourceParser> by lazy {
-        val playHttpClient = PlayHttpClient(Cache(File(cacheDir, "play-cache"), 64L * 1024L * 1024L))
+        val playHttpClient =
+            PlayHttpClient(Cache(File(cacheDir, "play-cache"), 64L * 1024L * 1024L))
         val parserContext = SourceParserContext(
             fetcher = sourceTextFetcher,
             apkPureApi = apkPureApi,
@@ -408,8 +385,10 @@ class MainActivity : ComponentActivity() {
     private var updateRefreshToken by mutableIntStateOf(0)
     private val historyTimeFormat = SimpleDateFormat("MMM d, HH:mm", Locale.US)
     private var pendingDownload: PendingDownload? = null
+
     // Source picked from the download screen; the next Cancelled event starts it.
     private var pendingSwitchSource: DownloadSource? = null
+
     // The file the current download was fetching, kept so a source switch can
     // resolve the same version mode and variant instead of starting over from
     // whatever the new source lists first.
@@ -417,9 +396,11 @@ class MainActivity : ComponentActivity() {
     private var pendingSwitchTarget: DownloadCandidate? = null
     private var pendingSwitchOption: CandidateOption? = null
     private var switchCandidatePrompt by mutableStateOf<SwitchCandidatePrompt?>(null)
+
     // Non-null while the in-app browser is open for a candidate whose source
     // needs a real browser to reach the APK download.
     private var captchaBrowser by mutableStateOf<DownloadCandidate?>(null)
+
     // Set when a repeat request matches previous downloads that still exist;
     // the user picks one to reuse or chooses to download a fresh copy.
     private var reuseOffer by mutableStateOf<List<ReuseOption>?>(null)
@@ -427,6 +408,7 @@ class MainActivity : ComponentActivity() {
     private var failedAttempts by mutableStateOf<Set<FailedAttempt>>(emptySet())
     private var lastFailureMessage by mutableStateOf<String?>(null)
     private var lastFailureOption by mutableStateOf<CandidateOption?>(null)
+
     // Set while Retry all / Retry failed sources is walking sources and
     // downloading. Fast Mode failures keep using fastModeActive instead.
     private var autoRetryActive = false
@@ -435,8 +417,10 @@ class MainActivity : ComponentActivity() {
     private var fastModeActive = false
     private var fastModeQueue: MutableList<DownloadSource>? = null
     private var fastModeDecision: CompletableDeferred<FastModeChoice?>? = null
+
     // ALWAYS_ASK: which version the user picked for the current request.
     private var fastModeVersionDecision: CompletableDeferred<FastModePolicy?>? = null
+
     // Effective policy for the current run (chosen interactively for ALWAYS_ASK).
     private var fastModeRunPolicy = FastModePolicy.REQUESTED
 
@@ -480,7 +464,7 @@ class MainActivity : ComponentActivity() {
         // update check still runs and can post a notification, but it must not
         // put an update popup on top of the download flow.
         val normalLaunch = request == null &&
-            intent?.action != DownloadHelperContract.ACTION_DOWNLOAD_ORIGINAL_APK
+                intent?.action != DownloadHelperContract.ACTION_DOWNLOAD_ORIGINAL_APK
         lifecycleScope.launch {
             val prompt = UpdateManager.checkOnLaunch(applicationContext)
             if (prompt != null &&
@@ -490,6 +474,13 @@ class MainActivity : ComponentActivity() {
                 !showUpdates
             ) {
                 updatePrompt = prompt
+            }
+            // Refresh and persist the archive index cache in the background so local opens
+            // and Tracking mode already have up-to-date data on disk.
+            runCatching {
+                dev.rushi.apkdownloadhelper.updater.MorpheArchive.fetchIndex(
+                    context = applicationContext
+                )
             }
         }
         startRequestLog(request)
@@ -509,7 +500,12 @@ class MainActivity : ComponentActivity() {
             DownloadJobManager.events.collect(::handleDownloadEvent)
         }
         if (deliverPendingResultIfPresent(request)) return
-        if (request != null) offerExistingDownloadIfPresent(request!!)
+        val activeRequest = request
+        if (activeRequest != null) {
+            offerExistingDownloadIfPresent(activeRequest)
+            loadCandidates()
+            if (reuseOffer == null) startFastModeIfEnabled(activeRequest)
+        }
 
         setContent {
             var isSettingsSubpageOpen by remember { mutableStateOf(false) }
@@ -566,13 +562,14 @@ class MainActivity : ComponentActivity() {
                             onChallengeTimeout = ::onBrowserChallengeTimeout
                         )
                     } else {
-                        val backgroundModifier = if (showUpdates || activeSettingsCategory != null || showSourcesScreen || selectedArchiveApp != null) {
-                            Modifier
-                                .focusProperties { canFocus = false }
-                                .clearAndSetSemantics {}
-                        } else {
-                            Modifier
-                        }
+                        val backgroundModifier =
+                            if (showUpdates || activeSettingsCategory != null || showSourcesScreen || selectedArchiveApp != null) {
+                                Modifier
+                                    .focusProperties { canFocus = false }
+                                    .clearAndSetSemantics {}
+                            } else {
+                                Modifier
+                            }
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -640,7 +637,11 @@ class MainActivity : ComponentActivity() {
                                         onDownloadVersion = ::downloadVersion,
                                         onOpenHistoryEntry = ::openHistoryEntry,
                                         onShareHistoryEntry = ::shareHistoryEntry,
-                                        onClearHistory = { DownloadHistoryStore.clear(applicationContext) },
+                                        onClearHistory = {
+                                            DownloadHistoryStore.clear(
+                                                applicationContext
+                                            )
+                                        },
                                         onClearLogs = { AppLog.clear() },
                                         onCancel = {
                                             appendLog("Query canceled by user.", LogLevel.Warning)
@@ -675,11 +676,13 @@ class MainActivity : ComponentActivity() {
                                             activeSettingsCategory != null ||
                                             showSourcesScreen ||
                                             selectedArchiveApp != null ||
-                                            uiState is UiState.Downloading ||
-                                            uiState is UiState.FastMode ||
-                                            uiState is UiState.ScanAsk ||
-                                            uiState is UiState.ScanResult ||
-                                            (uiState is UiState.Ready && request != null)
+                                            (request != null && (
+                                                    uiState is UiState.Ready ||
+                                                            uiState is UiState.Downloading ||
+                                                            uiState is UiState.FastMode ||
+                                                            uiState is UiState.ScanAsk ||
+                                                            uiState is UiState.ScanResult
+                                                    ))
                                 }
                             )
                         }
@@ -700,13 +703,13 @@ class MainActivity : ComponentActivity() {
                     // --- OVERLAY FOR SETTINGS SUBPAGE ---
                     AnimatedVisibility(
                         visible = activeSettingsCategory != null,
-                        enter = MorpheAnimations.pushEnter,
-                        exit = MorpheAnimations.pushExit
+                        enter = AppAnimations.pushEnter,
+                        exit = AppAnimations.pushExit
                     ) {
                         val category = lastActiveCategory
                         if (category != null) {
                             val settingsDetailScrollState = rememberScrollState()
-                            MorphePushedScreen {
+                            PushedScreen {
                                 SettingsPageDetail(
                                     title = category.title,
                                     onBack = { activeSettingsCategory = null },
@@ -718,32 +721,44 @@ class MainActivity : ComponentActivity() {
                                             onSettingsChange = ::updateHelperSettings,
                                             parentScrollState = settingsDetailScrollState
                                         )
+
                                         SettingsCategory.APPEARANCE -> AppearanceTabContent(
                                             settings = helperSettings,
                                             onSettingsChange = ::updateHelperSettings
                                         )
+
                                         SettingsCategory.CUSTOMIZATION -> CustomizationTabContent(
                                             settings = helperSettings,
                                             onSettingsChange = ::updateHelperSettings
                                         )
+
                                         SettingsCategory.DOWNLOADS -> SystemTabContent(
                                             settings = helperSettings,
                                             onSettingsChange = ::updateHelperSettings
                                         )
+
                                         SettingsCategory.SECURITY_NETWORK -> AdvancedTabContent(
                                             settings = helperSettings,
                                             onSettingsChange = ::updateHelperSettings
                                         )
+
                                         SettingsCategory.SYSTEM_LOGS -> LogsTabContent(
                                             settings = helperSettings,
                                             onSettingsChange = ::updateHelperSettings,
                                             logs = AppLog.entries,
                                             onClearLogs = { AppLog.clear() },
-                                            historyEntries = DownloadHistoryStore.entries(applicationContext),
+                                            historyEntries = DownloadHistoryStore.entries(
+                                                applicationContext
+                                            ),
                                             onOpenHistoryEntry = ::openHistoryEntry,
                                             onShareHistoryEntry = ::shareHistoryEntry,
-                                            onClearHistory = { DownloadHistoryStore.clear(applicationContext) }
+                                            onClearHistory = {
+                                                DownloadHistoryStore.clear(
+                                                    applicationContext
+                                                )
+                                            }
                                         )
+
                                         SettingsCategory.ABOUT -> AboutTabContent(
                                             settings = helperSettings,
                                             onSettingsChange = ::updateHelperSettings,
@@ -758,8 +773,8 @@ class MainActivity : ComponentActivity() {
                     // --- OVERLAY FOR FIND APPS DETAIL ---
                     AnimatedVisibility(
                         visible = selectedArchiveApp != null,
-                        enter = MorpheAnimations.pushEnter,
-                        exit = MorpheAnimations.pushExit
+                        enter = AppAnimations.pushEnter,
+                        exit = AppAnimations.pushExit
                     ) {
                         val appDetail = lastSelectedArchiveApp
                         if (appDetail != null) {
@@ -767,8 +782,8 @@ class MainActivity : ComponentActivity() {
                             val isInstalled = remember(appDetail.packageName) {
                                 context.isPackageInstalled(appDetail.packageName)
                             }
-                            MorphePushedScreen {
-                                AppDetailView(
+                            PushedScreen {
+                                AppDetailScreen(
                                     app = appDetail,
                                     installed = isInstalled,
                                     useGradientHeader = helperSettings.useGradientCardColors,
@@ -782,10 +797,10 @@ class MainActivity : ComponentActivity() {
                     // --- OVERLAY FOR UPDATES ---
                     AnimatedVisibility(
                         visible = showUpdates,
-                        enter = MorpheAnimations.pushEnter,
-                        exit = MorpheAnimations.pushExit
+                        enter = AppAnimations.pushEnter,
+                        exit = AppAnimations.pushExit
                     ) {
-                        MorphePushedScreen {
+                        PushedScreen {
                             UpdateScreen(
                                 settings = helperSettings,
                                 onSettingsChange = ::updateHelperSettings,
@@ -829,12 +844,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-
-        val activeRequest = request
-        if (activeRequest != null) {
-            loadCandidates()
-            if (reuseOffer == null) startFastModeIfEnabled(activeRequest)
-        }
     }
 
     override fun onResume() {
@@ -865,6 +874,20 @@ class MainActivity : ComponentActivity() {
         // keep the in-flight request on screen: only a fresh Morphe request
         // replaces the current session.
         if (intent.action != DownloadHelperContract.ACTION_DOWNLOAD_ORIGINAL_APK) {
+            // If no download/scan is actively running in the background, clear any
+            // finished Morphe request session so returning via the launcher opens
+            // the standalone screen with the bottom navigation bar visible.
+            val hasActiveTransfer = DownloadJobManager.activeJob != null ||
+                DownloadJobManager.pendingScan != null ||
+                fastModeActive ||
+                autoRetryActive
+            if (!hasActiveTransfer && request != null) {
+                request = null
+                reuseOffer = null
+                switchCandidatePrompt = null
+                captchaBrowser = null
+                uiState = UiState.Idle
+            }
             installedPackageRefreshToken++
             return
         }
@@ -1217,6 +1240,11 @@ class MainActivity : ComponentActivity() {
             updateHistoryState(source, VersionHistoryState.Error(message))
             return
         }
+        // Clear cached misses and in-flight/cached prefetch so Reload history fetches fresh data
+        SourceNegativeCache.clear(this, source, activeRequest, CandidateOption.REQUESTED)
+        SourceNegativeCache.clear(this, source, activeRequest, CandidateOption.LATEST)
+        sourcePrefetch.cancel()
+
         updateHistoryState(source, VersionHistoryState.Loading)
         appendLog("Loading ${source.label} version history.")
         lifecycleScope.launch {
@@ -1244,38 +1272,53 @@ class MainActivity : ComponentActivity() {
 
     private fun downloadVersion(candidate: DownloadCandidate) {
         val activeRequest = request ?: return
-        // Capture the current result before Loading replaces it, so a failed
-        // resolution can restore the history list with this row flipped to
-        // "Open link" instead of wiping back to a fresh screen.
         val currentResult = (uiState as? UiState.Ready)?.result
             ?: initialCandidateResult(activeRequest)
+        val candidateKey = candidate.identityKey()
         appendLog("Resolving ${candidate.versionDisplay} from ${candidate.source.label} for download...")
-        uiState = UiState.Loading
+        // Keep the History list visible and show an inline spinner on this row's button
+        // instead of replacing the screen with UiState.Loading.
+        uiState = UiState.Ready(
+            currentResult.setHistoryResolvingKey(
+                source = candidate.source,
+                candidateKey = candidateKey
+            )
+        )
         lifecycleScope.launch {
             val resolved = withContext(Dispatchers.IO) {
                 runCatching { resolveHistoryCandidate(activeRequest, candidate) }
             }
+            val latestResult = (uiState as? UiState.Ready)?.result ?: currentResult
             resolved
                 .onSuccess { direct ->
                     if (direct == null) {
-                        // No direct download exists for this version. Keep the
-                        // history list usable by flipping this row to an
-                        // "Open link" action instead of erroring the whole screen.
                         val message =
                             "No direct download was available for ${candidate.versionDisplay} " +
                                 "on ${candidate.source.label}. Open the version page manually."
                         appendLog(message, LogLevel.Warning)
                         uiState = UiState.Ready(
-                            currentResult.markHistoryCandidateNoDirectDownload(
+                            latestResult.markHistoryCandidateNoDirectDownload(
                                 source = candidate.source,
-                                candidateKey = candidate.identityKey()
+                                candidateKey = candidateKey
                             )
                         )
                     } else {
+                        uiState = UiState.Ready(
+                            latestResult.setHistoryResolvingKey(
+                                source = candidate.source,
+                                candidateKey = null
+                            )
+                        )
                         downloadAndReturn(direct)
                     }
                 }
                 .onFailure { error ->
+                    uiState = UiState.Ready(
+                        latestResult.setHistoryResolvingKey(
+                            source = candidate.source,
+                            candidateKey = null
+                        )
+                    )
                     val message = downloadFailureMessage(candidate, error)
                     appendLog(message, LogLevel.Error)
                     showFailure(message, candidate.source, candidate.option)
@@ -1408,9 +1451,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun updateHelperSettings(settings: HelperSettings) {
+        val fastModeChanged = helperSettings.fastMode != settings.fastMode
         val sourcesChanged = helperSettings.disabledSources != settings.disabledSources ||
-            helperSettings.sourceOrder != settings.sourceOrder ||
-            helperSettings.preferredSource != settings.preferredSource
+                helperSettings.sourceOrder != settings.sourceOrder ||
+                helperSettings.preferredSource != settings.preferredSource
         val densityPreferenceChanged =
             helperSettings.preferDensitySpecificVariants != settings.preferDensitySpecificVariants
         helperSettings = settings
@@ -1420,13 +1464,40 @@ class MainActivity : ComponentActivity() {
                 preferDensitySpecificVariants = settings.preferDensitySpecificVariants
             )
         }
+
+        val activeRequest = request
+        if (fastModeChanged && activeRequest != null) {
+            // Stop any in-flight prefetch, decision gate, or background download job
+            sourcePrefetch.cancel()
+            autoRetryActive = false
+            autoRetryQueue = null
+            autoRetryTarget = null
+            fastModeActive = false
+            fastModeQueue = null
+            fastModeDecision?.complete(null)
+            fastModeDecision = null
+            fastModeVersionDecision?.complete(null)
+            fastModeVersionDecision = null
+            if (DownloadJobManager.activeJob != null) {
+                cancelDownload()
+            }
+            DownloadJobManager.clearEvent()
+
+            if (settings.fastMode) {
+                startFastModeIfEnabled(activeRequest)
+            } else {
+                uiState = UiState.Ready(initialCandidateResult(activeRequest))
+            }
+            return
+        }
+
         // Rebuild the picker so enabled/disabled sources take effect immediately.
         if (
             (sourcesChanged || densityPreferenceChanged) &&
-            request != null &&
+            activeRequest != null &&
             uiState is UiState.Ready
         ) {
-            uiState = UiState.Ready(initialCandidateResult(request!!))
+            uiState = UiState.Ready(initialCandidateResult(activeRequest))
         }
     }
 
@@ -1741,6 +1812,13 @@ class MainActivity : ComponentActivity() {
 
     private fun pauseDownload() {
         appendLog("Pausing download…", LogLevel.Info)
+        when (val current = uiState) {
+            is UiState.Downloading -> uiState = current.copy(paused = true)
+            is UiState.FastMode -> uiState = current.copy(
+                progress = current.progress.copy(paused = true)
+            )
+            else -> Unit
+        }
         runCatching {
             startService(
                 Intent(this, DownloadService::class.java).setAction(ACTION_PAUSE_DOWNLOAD)
@@ -1752,6 +1830,13 @@ class MainActivity : ComponentActivity() {
 
     private fun resumeDownload() {
         appendLog("Resuming download…", LogLevel.Info)
+        when (val current = uiState) {
+            is UiState.Downloading -> uiState = current.copy(paused = false)
+            is UiState.FastMode -> uiState = current.copy(
+                progress = current.progress.copy(paused = false)
+            )
+            else -> Unit
+        }
         runCatching {
             startService(
                 Intent(this, DownloadService::class.java).setAction(ACTION_RESUME_DOWNLOAD)
@@ -2531,9 +2616,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
             is DownloadJobManager.Event.Progress -> {
-                val wasPaused = (uiState as? UiState.Downloading)?.paused
-                    ?: (uiState as? UiState.FastMode)?.progress?.paused
-                    ?: false
+                val currentFastTitle = (uiState as? UiState.FastMode)?.progress?.title
                 uiState = if (fastModeActive) {
                     UiState.FastMode(
                         FastModeProgress(
@@ -2542,18 +2625,23 @@ class MainActivity : ComponentActivity() {
                             percent = event.percent,
                             speedBytesPerSec = event.speedBytesPerSec,
                             etaMs = event.etaMs,
-                            paused = wasPaused,
-                            connections = event.connections
+                            paused = event.paused,
+                            connections = event.connections,
+                            downloadedBytes = event.downloadedBytes,
+                            totalBytes = event.totalBytes,
+                            title = currentFastTitle
                         )
                     )
                 } else {
                     UiState.Downloading(
-                        event.candidate,
-                        event.percent,
-                        event.speedBytesPerSec,
-                        event.etaMs,
-                        paused = wasPaused,
-                        connections = event.connections
+                        candidate = event.candidate,
+                        percent = event.percent,
+                        speedBytesPerSec = event.speedBytesPerSec,
+                        etaMs = event.etaMs,
+                        paused = event.paused,
+                        connections = event.connections,
+                        downloadedBytes = event.downloadedBytes,
+                        totalBytes = event.totalBytes
                     )
                 }
             }
@@ -3287,10 +3375,10 @@ internal fun HelperTheme(
         ThemeStyle.MATERIAL_YOU -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         } else {
-            if (dark) morpheDarkColorScheme() else morpheLightColorScheme()
+            if (dark) appDarkColorScheme() else appLightColorScheme()
         }
 
-        ThemeStyle.MORPHE -> if (dark) morpheDarkColorScheme() else morpheLightColorScheme()
+        ThemeStyle.MORPHE -> if (dark) appDarkColorScheme() else appLightColorScheme()
     }
     val colorScheme = base
         .let { if (dark && pureBlackTheme) it.withPureBlack() else it }
@@ -3334,10 +3422,13 @@ internal fun HelperTheme(
     }
     // Decorations the scheme cannot reach (the brand gradient, generated letter
     // tiles) read this to flatten themselves in monochrome mode.
-    CompositionLocalProvider(LocalMonochromeTheme provides (style == ThemeStyle.MONOCHROME)) {
+    CompositionLocalProvider(
+        LocalMonochromeTheme provides (style == ThemeStyle.MONOCHROME),
+        LocalRippleConfiguration provides null
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
-            typography = MorpheTypography,
+            typography = AppTypography,
             content = content
         )
     }
@@ -3350,7 +3441,7 @@ internal fun HelperButton(
     modifier: Modifier = Modifier,
     icon: ImageVector? = null
 ) {
-    MorpheDialogButton(
+    DialogButton(
         text = text,
         onClick = onClick,
         modifier = modifier,
@@ -3366,7 +3457,7 @@ internal fun HelperOutlinedButton(
     modifier: Modifier = Modifier,
     icon: ImageVector? = null
 ) {
-    MorpheDialogButton(
+    DialogButton(
         text = text,
         onClick = onClick,
         modifier = modifier,

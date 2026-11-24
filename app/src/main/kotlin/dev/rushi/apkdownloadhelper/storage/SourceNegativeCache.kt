@@ -1,10 +1,10 @@
-﻿package dev.rushi.apkdownloadhelper.storage
+package dev.rushi.apkdownloadhelper.storage
 
 import android.content.Context
 import dev.rushi.apkdownloadhelper.BuildConfig
-import dev.rushi.apkdownloadhelper.ui.CandidateOption
-import dev.rushi.apkdownloadhelper.ui.DownloadSource
-import dev.rushi.apkdownloadhelper.ui.HelperRequest
+import dev.rushi.apkdownloadhelper.ui.model.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.model.HelperRequest
 
 /**
  * Remembers explicit "this source does not have it" answers for a short time.

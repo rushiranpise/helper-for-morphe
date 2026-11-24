@@ -48,12 +48,12 @@ import dev.rushi.apkdownloadhelper.storage.recordHandOff
 import dev.rushi.apkdownloadhelper.storage.restoreAndPersistRateLimiter
 import dev.rushi.apkdownloadhelper.storage.scheduleHandoffCleanup
 import dev.rushi.apkdownloadhelper.storage.temporaryDownloadsDir
-import dev.rushi.apkdownloadhelper.ui.CandidateDownloadFile
-import dev.rushi.apkdownloadhelper.ui.CandidateOption
-import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
-import dev.rushi.apkdownloadhelper.ui.DownloadHelperContract
-import dev.rushi.apkdownloadhelper.ui.DownloadSource
-import dev.rushi.apkdownloadhelper.ui.HelperRequest
+import dev.rushi.apkdownloadhelper.ui.model.CandidateDownloadFile
+import dev.rushi.apkdownloadhelper.ui.model.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.model.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.model.DownloadHelperContract
+import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.model.HelperRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -128,7 +128,10 @@ internal object DownloadJobManager {
             val percent: Int,
             val speedBytesPerSec: Double = 0.0,
             val etaMs: Long? = null,
-            val connections: Int = 1
+            val connections: Int = 1,
+            val paused: Boolean = false,
+            val downloadedBytes: Long = 0L,
+            val totalBytes: Long = 0L
         ) : Event
         data class Completed(val result: PendingDownloadResult, val epoch: Long = 0) : Event
         data class Paused(
@@ -900,13 +903,21 @@ internal class DownloadService : Service() {
     }
 
     private fun cancelDownload() {
+        val wasJobActive = downloadJob?.isActive == true
+        val job = DownloadJobManager.activeJob
         paused = false
+        transferInProgress = false
         downloader.cancelCurrent()
         downloadJob?.cancel()
-        // Flag any in-flight scan (ALWAYS or ASK mode) so its next
-        // checkCancelled() poll aborts it even though the scan may be running
-        // in a different coroutine than downloadJob.
         scanAbortRequested = true
+        DownloadJobManager.setPendingScan(null)
+        if (!wasJobActive && job != null) {
+            DownloadJobManager.emit(
+                DownloadJobManager.Event.Cancelled(job.candidate, job.epoch)
+            )
+        }
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     private suspend fun downloadSingleFile(
@@ -1058,11 +1069,14 @@ internal class DownloadService : Service() {
         } else null
         DownloadJobManager.emit(
             DownloadJobManager.Event.Progress(
-                candidate,
-                percent,
-                currentSpeedBytesPerSec,
-                etaMs,
-                currentConnections
+                candidate = candidate,
+                percent = percent,
+                speedBytesPerSec = currentSpeedBytesPerSec,
+                etaMs = etaMs,
+                connections = currentConnections,
+                paused = paused,
+                downloadedBytes = copied,
+                totalBytes = total
             )
         )
         // Refresh at least once a second so speed/ETA stay fresh even when

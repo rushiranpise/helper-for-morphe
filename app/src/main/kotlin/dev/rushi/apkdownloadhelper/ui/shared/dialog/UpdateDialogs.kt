@@ -1,0 +1,142 @@
+package dev.rushi.apkdownloadhelper.ui.shared.dialog
+
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import dev.rushi.apkdownloadhelper.download.PACKAGE_PATTERN
+import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
+import dev.rushi.apkdownloadhelper.ui.theme.pressScale
+import dev.rushi.apkdownloadhelper.updater.ShizukuHelper
+import dev.rushi.apkdownloadhelper.updater.UpdateInfo
+
+@Composable
+internal fun ShizukuPackageDialog(
+    initial: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var value by remember { mutableStateOf(initial) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AppAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Shizuku app package", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(AppDefaults.ItemSpacing)) {
+                Text(
+                    text = "Leave blank for the default package. Only change this for a Shizuku fork with a different package name.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = {
+                        value = it
+                        error = null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = error != null,
+                    placeholder = { Text(ShizukuHelper.DEFAULT_PACKAGE) }
+                )
+                error?.let { message ->
+                    Text(
+                        text = message,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            val saveInteraction = remember { MutableInteractionSource() }
+            TextButton(
+                onClick = {
+                    val trimmed = value.trim()
+                    if (trimmed.isNotEmpty() && !PACKAGE_PATTERN.matches(trimmed)) {
+                        error = "Enter a valid package name, for example ${ShizukuHelper.DEFAULT_PACKAGE}."
+                    } else {
+                        onSave(trimmed)
+                    }
+                },
+                interactionSource = saveInteraction,
+                modifier = Modifier.pressScale(saveInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
+            ) { Text("Save") }
+        },
+        dismissButton = {
+            Row {
+                val defaultInteraction = remember { MutableInteractionSource() }
+                TextButton(
+                    onClick = { onSave("") },
+                    interactionSource = defaultInteraction,
+                    modifier = Modifier.pressScale(defaultInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
+                ) { Text("Use default") }
+
+                val cancelInteraction = remember { MutableInteractionSource() }
+                TextButton(
+                    onClick = onDismiss,
+                    interactionSource = cancelInteraction,
+                    modifier = Modifier.pressScale(cancelInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
+                ) { Text("Cancel") }
+            }
+        }
+    )
+}
+
+@Composable
+internal fun UpdatePromptDialog(
+    info: UpdateInfo,
+    currentVersion: String,
+    onView: () -> Unit,
+    onLater: () -> Unit,
+    onSkip: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AppAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Update available", fontWeight = FontWeight.Bold) },
+        text = {
+            Text(
+                "Helper v${info.version} is available. You have v$currentVersion."
+            )
+        },
+        confirmButton = {
+            val viewInteraction = remember { MutableInteractionSource() }
+            TextButton(
+                onClick = onView,
+                interactionSource = viewInteraction,
+                modifier = Modifier.pressScale(viewInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
+            ) { Text("View update") }
+        },
+        dismissButton = {
+            Row {
+                val skipInteraction = remember { MutableInteractionSource() }
+                TextButton(
+                    onClick = onSkip,
+                    interactionSource = skipInteraction,
+                    modifier = Modifier.pressScale(skipInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
+                ) { Text("Skip") }
+
+                val laterInteraction = remember { MutableInteractionSource() }
+                TextButton(
+                    onClick = onLater,
+                    interactionSource = laterInteraction,
+                    modifier = Modifier.pressScale(laterInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
+                ) { Text("Later") }
+            }
+        }
+    )
+}

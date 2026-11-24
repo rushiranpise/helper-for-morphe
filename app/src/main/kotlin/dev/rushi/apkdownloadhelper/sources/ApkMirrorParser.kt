@@ -1,4 +1,4 @@
-﻿package dev.rushi.apkdownloadhelper.sources
+package dev.rushi.apkdownloadhelper.sources
 
 import android.net.Uri
 import android.util.Log
@@ -16,15 +16,15 @@ import dev.rushi.apkdownloadhelper.download.slugForUrl
 import dev.rushi.apkdownloadhelper.download.sourceFailureMessage
 import dev.rushi.apkdownloadhelper.download.variantFileSuffix
 import dev.rushi.apkdownloadhelper.download.versionNameEquals
-import dev.rushi.apkdownloadhelper.ui.ApkMirrorLatestInfo
-import dev.rushi.apkdownloadhelper.ui.ApkMirrorVariant
-import dev.rushi.apkdownloadhelper.ui.CandidateDownloadFile
-import dev.rushi.apkdownloadhelper.ui.CandidateOption
-import dev.rushi.apkdownloadhelper.ui.DownloadCandidate
-import dev.rushi.apkdownloadhelper.ui.DownloadSource
-import dev.rushi.apkdownloadhelper.ui.HelperRequest
-import dev.rushi.apkdownloadhelper.ui.VersionStatus
-import dev.rushi.apkdownloadhelper.ui.identityKey
+import dev.rushi.apkdownloadhelper.ui.model.ApkMirrorLatestInfo
+import dev.rushi.apkdownloadhelper.ui.model.ApkMirrorVariant
+import dev.rushi.apkdownloadhelper.ui.model.CandidateDownloadFile
+import dev.rushi.apkdownloadhelper.ui.model.CandidateOption
+import dev.rushi.apkdownloadhelper.ui.model.DownloadCandidate
+import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
+import dev.rushi.apkdownloadhelper.ui.model.HelperRequest
+import dev.rushi.apkdownloadhelper.ui.model.VersionStatus
+import dev.rushi.apkdownloadhelper.ui.model.identityKey
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -38,10 +38,10 @@ private val APKMIRROR_EDITION_SLUG_REGEX = Regex(
 )
 
 private const val APKMIRROR_BROWSER_NOTE =
-    "Complete any browser check, then choose the file on the APKMirror page."
+    "Solve captcha in the in-app browser — the app will handle everything else automatically."
 
 private const val APKMIRROR_SEARCH_NOTE =
-    "Open APKMirror's search results, then choose the app and version."
+    "Solve captcha in the in-app browser — the app will handle everything else automatically."
 
 internal class ApkMirrorParser(private val ctx: SourceParserContext) : ApkSourceParser {
     override val source: DownloadSource = DownloadSource.APK_MIRROR

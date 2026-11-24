@@ -14,10 +14,10 @@ import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import dev.rushi.apkdownloadhelper.MainActivity
-import dev.rushi.apkdownloadhelper.ui.MorpheTracking
-import dev.rushi.apkdownloadhelper.ui.TrackedAppChanges
-import dev.rushi.apkdownloadhelper.ui.trackedChanges
-import dev.rushi.apkdownloadhelper.ui.trackingPackageKey
+import dev.rushi.apkdownloadhelper.ui.model.TrackingStore
+import dev.rushi.apkdownloadhelper.ui.model.TrackedAppChanges
+import dev.rushi.apkdownloadhelper.ui.model.trackedChanges
+import dev.rushi.apkdownloadhelper.ui.model.trackingPackageKey
 import dev.rushi.apkdownloadhelper.updater.ArchiveApp
 import dev.rushi.apkdownloadhelper.updater.MorpheArchive
 import kotlinx.coroutines.CancellationException
@@ -50,7 +50,7 @@ class TrackingCheckWorker(
 
     override suspend fun doWork(): Result {
         val context = applicationContext
-        val tracked = MorpheTracking.load(context)
+        val tracked = TrackingStore.load(context)
         if (tracked.isEmpty()) return Result.success()
         if (!canPostNotifications(context)) return Result.success()
 
@@ -63,8 +63,8 @@ class TrackingCheckWorker(
         }
 
         val apps = index.apps.associateBy { trackingPackageKey(it.packageName) }
-        val seen = MorpheTracking.loadSnapshots(context, tracked)
-        val notified = MorpheTracking.loadNotifiedSnapshots(context, tracked)
+        val seen = TrackingStore.loadSnapshots(context, tracked)
+        val notified = TrackingStore.loadNotifiedSnapshots(context, tracked)
         val changes = tracked.mapNotNull { packageName ->
             val app = apps[packageName] ?: return@mapNotNull null
             val baseline = notified[packageName] ?: seen[packageName]
@@ -87,8 +87,8 @@ class TrackingCheckWorker(
         if (changes.isEmpty()) return Result.success()
         if (!showNotification(context, changes)) return Result.success()
 
-        MorpheTracking.markNotified(context, changes.map { it.app })
-        MorpheTracking.seedSeen(
+        TrackingStore.markNotified(context, changes.map { it.app })
+        TrackingStore.seedSeen(
             context,
             changes.filter { it.newlyAvailable }.map { it.app }
         )
