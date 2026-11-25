@@ -1,4 +1,4 @@
-name: Build and release APK
+name: Build and release APKs
 
 on:
   push:
@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   release:
-    name: Build release APK
+    name: Build release and debug APKs
     runs-on: ubuntu-latest
 
     steps:
@@ -103,7 +103,7 @@ jobs:
           printf '%s' "$HELPER_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$store_file"
           echo "store_file=$store_file" >> "$GITHUB_OUTPUT"
 
-      - name: Build release APK
+      - name: Build release and debug APKs
         env:
           HELPER_RELEASE_STORE_FILE: ${{ steps.signing.outputs.store_file }}
           HELPER_RELEASE_STORE_PASSWORD: ${{ secrets.HELPER_RELEASE_STORE_PASSWORD }}
@@ -112,19 +112,20 @@ jobs:
         shell: bash
         run: |
           chmod +x ./gradlew
-          ./gradlew :app:assembleRelease \
+          ./gradlew :app:assembleRelease :app:assembleDebug \
             -PhelperVersionName="${{ steps.release_tag.outputs.version_name }}" \
             -PhelperVersionCode="${{ steps.release_tag.outputs.version_code }}"
 
       - name: Prepare release files
-        id: release_files
         shell: bash
         run: |
           tag="${{ steps.release_tag.outputs.tag }}"
           apk_name="apk-download-helper-${tag}.apk"
+          debug_name="apk-download-helper-${tag}-debug.apk"
           mkdir -p dist
           cp app/build/outputs/apk/release/app-release.apk "dist/${apk_name}"
-          echo "apk_path=dist/${apk_name}" >> "$GITHUB_OUTPUT"
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/${debug_name}"
+          ls -l dist
 
       - name: Generate release notes
         shell: bash
@@ -139,15 +140,14 @@ jobs:
         shell: bash
         run: |
           tag="${{ steps.release_tag.outputs.tag }}"
-          apk_path="${{ steps.release_files.outputs.apk_path }}"
 
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" "$apk_path" --clobber
+            gh release upload "$tag" dist/*.apk --clobber
             gh release edit "$tag" \
               --title "Release ${tag}" \
               --notes-file release-notes.md
           else
-            gh release create "$tag" "$apk_path" \
+            gh release create "$tag" dist/*.apk \
               --title "Release ${tag}" \
               --notes-file release-notes.md \
               --verify-tag
