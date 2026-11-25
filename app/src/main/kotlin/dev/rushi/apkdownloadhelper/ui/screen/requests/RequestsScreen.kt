@@ -17,9 +17,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -73,6 +79,7 @@ internal fun RequestsScreen(
     var loading by remember { mutableStateOf(true) }
     var failed by remember { mutableStateOf(false) }
     var canGoBack by remember { mutableStateOf(false) }
+    var hasLoadedOnce by remember { mutableStateOf(false) }
 
     val webView = remember {
         WebView(context).apply {
@@ -124,6 +131,7 @@ internal fun RequestsScreen(
 
                 override fun onPageFinished(view: WebView, url: String?) {
                     loading = false
+                    hasLoadedOnce = true
                     canGoBack = view.canGoBack()
                     view.evaluateJavascript(
                         requestsPageScript(dark.value, bottomPadding.value),
@@ -191,8 +199,45 @@ internal fun RequestsScreen(
                 .statusBarsPadding()
         )
 
-        if (loading && !failed) {
+        if (loading && !failed && !hasLoadedOnce) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+        }
+
+        if (hasLoadedOnce && !failed) {
+            Surface(
+                onClick = {
+                    loading = true
+                    webView.reload()
+                },
+                enabled = !loading,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(top = 8.dp, end = 12.dp)
+                    .size(44.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (loading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Outlined.Refresh,
+                            contentDescription = "Reload the request board",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
         }
 
         if (failed) {
