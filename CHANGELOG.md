@@ -6,6 +6,14 @@ matches the tag (see `tools/release-notes.sh`), so a new version needs a section
 before it is tagged. Commit subjects are only used as a fallback when a section is
 missing.
 
+## 7.0.1 - 2026-11-25
+
+A fresh install no longer crashes on first launch.
+
+### Fixed
+
+- Fixed a crash on the first launch after a fresh install. The Requests board is now prepared outside the navigation bar's blur layer.
+
 ## 7.0.0 - 2026-11-25
 
 The community request board, a redesigned Helper screen, and faster source handling.
