@@ -44,6 +44,7 @@ internal fun MainPagerScaffold(
     settingsIcon: ImageVector = MainPage.SETTINGS.icon,
     settingsDescription: String? = null,
     overlay: @Composable BoxScope.() -> Unit = {},
+    requestsOverlay: @Composable (bottomBarHeight: Dp) -> Unit = {},
     content: @Composable (page: MainPage, bottomBarHeight: Dp) -> Unit,
 ) {
     var barHeight by remember { mutableStateOf(0.dp) }
@@ -88,6 +89,15 @@ internal fun MainPagerScaffold(
             ) {
                 val bottomInset = if (navigationCovered()) 0.dp else barHeight
                 content(MainPage.entries[pageIndex], bottomInset)
+            }
+        }
+
+        // The request board's WebView must stay outside the pager's Haze source.
+        // Drawing a WebView GL functor into the blur layer crashes libhwui on
+        // some devices, so the board is hosted just above the pager instead.
+        if (page == MainPage.REQUESTS) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                requestsOverlay(if (navigationCovered()) 0.dp else barHeight)
             }
         }
 
