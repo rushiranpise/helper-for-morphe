@@ -23,7 +23,7 @@ previous="${2:-}"
 changelog="$(git rev-parse --show-toplevel 2>/dev/null || echo .)/CHANGELOG.md"
 
 if [[ -z "$previous" ]]; then
-	previous="$(git describe --tags --abbrev=0 "${tag}^" 2>/dev/null || true)"
+	previous="$(git describe --tags --match 'v*' --abbrev=0 "${tag}^" 2>/dev/null || true)"
 fi
 
 range="$tag"
