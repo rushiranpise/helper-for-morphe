@@ -149,7 +149,8 @@ internal object UpdateChecker {
                 if (release.optBoolean("draft", false)) continue
                 if (!includePrereleases && release.optBoolean("prerelease", false)) continue
                 val info = parseRelease(release)
-                if (info.version.isBlank()) continue
+                // PR test builds use a non-version tag such as ci-pr-builds.
+                if (!VERSION.matches(info.version)) continue
                 if (!includePrereleases && UpdateInfo.isPrerelease(info.version)) continue
                 add(info)
             }
