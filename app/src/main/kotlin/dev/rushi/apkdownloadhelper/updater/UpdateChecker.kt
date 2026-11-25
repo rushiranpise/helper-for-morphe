@@ -171,6 +171,8 @@ internal object UpdateChecker {
                 if (!name.endsWith(".apk", ignoreCase = true) || !url.startsWith("https://")) {
                     continue
                 }
+                // Release builds also attach a debug APK; never offer it as an update.
+                if (name.endsWith("-debug.apk", ignoreCase = true)) continue
                 if (fallback == null) fallback = asset
                 if (name.contains("universal", ignoreCase = true)) {
                     chosen = asset
