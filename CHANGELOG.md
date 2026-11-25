@@ -6,6 +6,37 @@ matches the tag (see `tools/release-notes.sh`), so a new version needs a section
 before it is tagged. Commit subjects are only used as a fallback when a section is
 missing.
 
+## 7.0.0 - 2026-11-25
+
+The community request board, a redesigned Helper screen, and faster source handling.
+
+### New
+
+- **Requests tab**: the community patch request board now opens inside the app with its Apps, Patches and Done tabs, search and sort. Vote for the patches missing from an app, per category, and let the site's own human check handle the captcha when it is due. The board follows the app theme, and a reload button refreshes a stale list.
+- **Redesigned Helper screen**: the request screen is rebuilt around the new navigation, with instant tab switching, button press feedback, and a manual-mode control that leaves the choice to you.
+- **Blur effects toggle**: turn the glass blur off for a flatter look and less GPU work, or keep it for the frosted panels.
+- **Find apps remembers your view**: the filter and sort you last used are restored per browser mode.
+- **Resolver build codes**: when Morphe sends several build codes, the resolver asks for all of them instead of a single one, so the right variant is found.
+
+### Fixed
+
+- Captcha cookies now survive a source's redirect chain, and split packaging no longer loses the session partway through.
+- Find apps publishes a refreshed index atomically, reuses an in-flight request, and no longer discards a valid cached index.
+- Source resolution handles Uptodown store builds, Aurora release labels, and APKMirror fallbacks more reliably.
+
+### Performance
+
+- Split packaging and source resolution are faster.
+- Find apps search and tab switching do less work on the UI thread.
+
+### Contributors
+
+Thanks to the recent pull requests that shaped this release:
+
+- **darkbyteprojects** (#53, #55): Settings and Helper screen redesigns.
+- **Akash-Sriram** (#54, #56, #57): search caching, captcha cookies, split packaging, instant tabs, and search badges.
+- **parchito** (#59): resolver build codes.
+
 ## 6.2.0 - 2026-11-20
 
 A faster Find New Apps and a rebuilt Settings screen.

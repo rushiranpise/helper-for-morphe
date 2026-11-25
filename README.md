@@ -4,7 +4,7 @@
   <img src="docs/logo.png" alt="Morphe Helper" width="180" />
 </p>
 
-Morphe Helper is a standalone Android helper app for finding and returning original APK files requested by [Morphe Manager](https://github.com/MorpheApp). It receives a package/version request through an Android intent, resolves a matching file from a supported APK source, downloads it when a direct download is available, and returns a readable `content://` URI back to the caller.
+Morphe Helper is a standalone Android helper app for finding and returning original APK files requested by [Morphe Manager](https://github.com/MorpheApp). It receives a package/version request through an Android intent, resolves a matching file from a supported APK source, downloads it when a direct download is available, and returns a readable `content://` URI back to the caller. It also browses the community patch index, tracks apps for new versions and patches, and hosts the community patch request board.
 
 This project is independent from the APK source websites listed below. Source availability, package versions, download formats, and region/device access can change at any time.
 
@@ -131,6 +131,12 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
 - The dashboard and warning scroll with the list, and the scrollbar sits in the right margin so the cards stay centred.
 - Includes the community disclaimer: the index is community-maintained, bundles are not individually verified, and neither Morphe nor this app's developer is responsible for third-party patches.
 
+### Patch requests
+
+- The community board from [morphe-patches.software/requests](https://morphe-patches.software/requests) opens inside the app with its Apps, Patches and Done tabs, search and sort.
+- Vote for the patches missing from an app by category, with the current vote count on each choice. The site's own human check appears when it needs one.
+- The board follows the app's light or dark theme, and the reload button refreshes a stale list without restarting the app.
+
 ### Tracked apps
 
 - **Track from the index or by package name.** Tap the bell on any app in Find New Apps, or enter an exact package name on the Tracking tab. Installed and uninstalled apps both work.
@@ -234,6 +240,14 @@ python tools\audit_helper_sources.py --limit 20 --sources apkmirror,uptodown,apk
 ```
 
 The CSV/JSON output reports whether each source matched the requested version, only found latest, found the wrong file format, or failed to resolve the package.
+
+## Contributors
+
+Thanks to the people who sent pull requests for this release:
+
+- [darkbyteprojects](https://github.com/darkbyteprojects): Settings and Helper screen redesigns (#53, #55).
+- [Akash-Sriram](https://github.com/Akash-Sriram): search caching, captcha cookie handling, split packaging, instant tabs and search badges (#54, #56, #57).
+- [parchito](https://github.com/parchito): resolver build-code handling (#59).
 
 ## Credits
 
