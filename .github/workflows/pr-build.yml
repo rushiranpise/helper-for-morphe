@@ -29,6 +29,8 @@ jobs:
     outputs:
       pr_number: ${{ steps.pr.outputs.number }}
       head_sha: ${{ steps.pr.outputs.sha }}
+      debug_apk_url: ${{ steps.debug_apk.outputs['artifact-url'] }}
+      release_apk_url: ${{ steps.release_apk.outputs['artifact-url'] }}
 
     steps:
       - name: Resolve pull request head
@@ -117,17 +119,23 @@ jobs:
           ls -l dist
 
       - name: Upload debug APK
-        uses: actions/upload-artifact@v4
+        id: debug_apk
+        uses: actions/upload-artifact@v7
         with:
-          name: pr-${{ steps.pr.outputs.number }}-debug
           path: dist/pr-${{ steps.pr.outputs.number }}-debug.apk
+          archive: false
+          if-no-files-found: error
+          overwrite: true
           retention-days: 7
 
       - name: Upload release APK
-        uses: actions/upload-artifact@v4
+        id: release_apk
+        uses: actions/upload-artifact@v7
         with:
-          name: pr-${{ steps.pr.outputs.number }}-release
           path: dist/pr-${{ steps.pr.outputs.number }}-release.apk
+          archive: false
+          if-no-files-found: error
+          overwrite: true
           retention-days: 7
 
   comment:
@@ -136,50 +144,34 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      actions: read
       issues: write
       pull-requests: write
 
     steps:
-      - name: Find artifact links
-        id: artifacts
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ needs.build.outputs.pr_number }}
-        shell: bash
-        run: |
-          artifacts="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100")"
-          debug_id="$(jq -r --arg name "pr-${PR_NUMBER}-debug" '.artifacts[] | select(.name == $name) | .id' <<<"$artifacts" | head -n 1)"
-          release_id="$(jq -r --arg name "pr-${PR_NUMBER}-release" '.artifacts[] | select(.name == $name) | .id' <<<"$artifacts" | head -n 1)"
-
-          if [[ -z "$debug_id" || -z "$release_id" ]]; then
-            echo "::error::Could not find the uploaded APK artifacts."
-            exit 1
-          fi
-
-          echo "debug_id=${debug_id}" >> "$GITHUB_OUTPUT"
-          echo "release_id=${release_id}" >> "$GITHUB_OUTPUT"
-
       - name: Comment links on the pull request
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ needs.build.outputs.pr_number }}
           HEAD_SHA: ${{ needs.build.outputs.head_sha }}
-          DEBUG_ID: ${{ steps.artifacts.outputs.debug_id }}
-          RELEASE_ID: ${{ steps.artifacts.outputs.release_id }}
+          DEBUG_APK_URL: ${{ needs.build.outputs.debug_apk_url }}
+          RELEASE_APK_URL: ${{ needs.build.outputs.release_apk_url }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         shell: bash
         run: |
+          if [[ -z "$DEBUG_APK_URL" || -z "$RELEASE_APK_URL" ]]; then
+            echo "::error::Missing APK artifact URLs."
+            exit 1
+          fi
+
           short_sha="${HEAD_SHA:0:7}"
-          run_id="${GITHUB_RUN_ID}"
           body="$(cat <<EOF
           <!-- helper-pr-build -->
           **Test build for \`${short_sha}\` is ready.**
 
-          - [Debug APK](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts/${DEBUG_ID})
-          - [Release APK](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts/${RELEASE_ID})
+          - [Debug APK](${DEBUG_APK_URL})
+          - [Release APK](${RELEASE_APK_URL})
 
-          The release APK is signed with the release key. The debug APK is debug-signed. Each artifact is a zip containing the APK and expires after 7 days.
+          The release APK is signed with the release key. The debug APK is debug-signed. Links expire after 7 days.
 
           Comment \`/build\` again after new commits to refresh these links. [Workflow run](${RUN_URL})
           EOF
