@@ -18,6 +18,7 @@ internal fun HomePagerScreen(
     findAppsContent: @Composable (bottomBarHeight: Dp) -> Unit,
     trackingContent: @Composable (bottomBarHeight: Dp) -> Unit,
     homeContent: @Composable (bottomBarHeight: Dp) -> Unit,
+    requestsContent: @Composable (bottomBarHeight: Dp) -> Unit,
     settingsContent: @Composable (bottomBarHeight: Dp) -> Unit,
     navigationCovered: () -> Boolean,
     overlay: @Composable BoxScope.() -> Unit = {}
@@ -52,6 +53,7 @@ internal fun HomePagerScreen(
             MainPage.FIND_APPS -> findAppsContent(bottomBarHeight)
             MainPage.TRACKING -> trackingContent(bottomBarHeight)
             MainPage.HOME -> homeContent(bottomBarHeight)
+            MainPage.REQUESTS -> requestsContent(bottomBarHeight)
             MainPage.SETTINGS -> settingsContent(bottomBarHeight)
         }
     }

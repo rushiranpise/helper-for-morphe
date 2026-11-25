@@ -63,14 +63,25 @@ internal fun MainPagerScaffold(
 
         // Keep currentPage/navigationCovered reads out of the pager composable itself
         // so swiping between tabs does not recompose all pager pages every frame.
+        // The requests page hosts a WebView: its vertical scrolling fights the
+        // pager's horizontal gesture detector, so that page is switched by the
+        // navigation bar instead.
+        val page = MainPage.entries[pagerState.currentPage]
+        // Haze captures its source into a layer. A WebView is not drawable that
+        // way: every scroll or animation inside it (including the captcha
+        // iframe) would force a full capture and stutter. The requests page
+        // opts out, and the navigation pill falls back to its solid tint.
+        val capturesForGlass = page != MainPage.REQUESTS
         HorizontalPager(
             state = pagerState,
-            userScrollEnabled = swipeEnabled,
+            userScrollEnabled = swipeEnabled && page != MainPage.REQUESTS,
             beyondViewportPageCount = 3,
             key = { index -> MainPage.entries[index] },
             modifier = Modifier
                 .fillMaxSize()
-                .hazeSourceIfEnabled(barHaze),
+                .then(
+                    if (capturesForGlass) Modifier.hazeSourceIfEnabled(barHaze) else Modifier
+                ),
         ) { pageIndex ->
             CompositionLocalProvider(
                 LocalPagerPageSelected provides (pagerState.currentPage == pageIndex)
@@ -101,7 +112,7 @@ internal fun MainPagerScaffold(
         AppNavigationBar(
             pagerState = pagerState,
             covered = !showBottomChrome,
-            hazeState = barHaze,
+            hazeState = if (capturesForGlass) barHaze else null,
             modifier = Modifier.align(Alignment.BottomCenter),
             settingsIcon = settingsIcon,
             settingsDescription = settingsDescription,

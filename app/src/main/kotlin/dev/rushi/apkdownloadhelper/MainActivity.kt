@@ -13,6 +13,7 @@ import android.os.Bundle
 import android.provider.OpenableColumns
 import android.util.Log
 import android.webkit.CookieManager
+import android.webkit.WebView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -128,6 +129,7 @@ import dev.rushi.apkdownloadhelper.ui.model.FastModeProgress
 import dev.rushi.apkdownloadhelper.ui.model.HelperRequest
 import dev.rushi.apkdownloadhelper.ui.screen.helper.HelperScreen
 import dev.rushi.apkdownloadhelper.ui.screen.home.HomePagerScreen
+import dev.rushi.apkdownloadhelper.ui.screen.requests.RequestsScreen
 import dev.rushi.apkdownloadhelper.ui.theme.LocalMonochromeTheme
 import dev.rushi.apkdownloadhelper.ui.screen.settings.LogsTabContent
 import dev.rushi.apkdownloadhelper.ui.theme.AppAnimations
@@ -446,6 +448,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (BuildConfig.DEBUG) {
+            WebView.setWebContentsDebuggingEnabled(true)
+        }
         restoreAndPersistRateLimiter()
         helperSettings = loadHelperSettings()
         request = HelperRequest.from(intent)?.withDeviceDpi(
@@ -665,6 +670,15 @@ class MainActivity : ComponentActivity() {
                                         onProceedAfterScan = ::proceedAfterScan,
                                         onCancelAfterScan = ::cancelAfterScan,
                                         onSkipScan = ::skipScanAndHandoff
+                                    )
+                                },
+                                requestsContent = { bottomBarHeight ->
+                                    RequestsScreen(
+                                        bottomContentPadding = if (bottomBarHeight > 0.dp) {
+                                            bottomBarHeight + 24.dp
+                                        } else {
+                                            160.dp
+                                        }
                                     )
                                 },
                                 settingsContent = { bottomBarHeight ->
