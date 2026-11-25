@@ -1,7 +1,8 @@
 name: PR build
 
 # The repository owner comments /build on a pull request to run this. Nothing
-# runs on a push, and the build job never receives the production signing key.
+# runs on a push. The PR code is built with the release signing secrets, so the
+# owner-only gate is what keeps this run intentional.
 on:
   issue_comment:
     types: [created]
@@ -62,32 +63,43 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Create temporary signing key
+      - name: Decode release keystore
         id: signing
+        env:
+          HELPER_RELEASE_KEYSTORE_BASE64: ${{ secrets.HELPER_RELEASE_KEYSTORE_BASE64 }}
+          HELPER_RELEASE_STORE_PASSWORD: ${{ secrets.HELPER_RELEASE_STORE_PASSWORD }}
+          HELPER_RELEASE_KEY_ALIAS: ${{ secrets.HELPER_RELEASE_KEY_ALIAS }}
+          HELPER_RELEASE_KEY_PASSWORD: ${{ secrets.HELPER_RELEASE_KEY_PASSWORD }}
         shell: bash
         run: |
-          password="$(openssl rand -hex 24)"
-          echo "::add-mask::$password"
-          store="$RUNNER_TEMP/pr-release.jks"
-          keytool -genkeypair \
-            -keystore "$store" \
-            -storepass "$password" \
-            -keypass "$password" \
-            -alias pr-build \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 3650 \
-            -dname "CN=PR build, OU=Helper, O=Morphe, C=US" \
-            -noprompt
-          echo "store=$store" >> "$GITHUB_OUTPUT"
-          echo "password=$password" >> "$GITHUB_OUTPUT"
+          missing=0
+          for name in \
+            HELPER_RELEASE_KEYSTORE_BASE64 \
+            HELPER_RELEASE_STORE_PASSWORD \
+            HELPER_RELEASE_KEY_ALIAS \
+            HELPER_RELEASE_KEY_PASSWORD
+          do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing repository secret: ${name}"
+              missing=1
+            fi
+          done
+
+          if [[ "$missing" -ne 0 ]]; then
+            exit 1
+          fi
+
+          mkdir -p "$RUNNER_TEMP/signing"
+          store_file="$RUNNER_TEMP/signing/helper-release.jks"
+          printf '%s' "$HELPER_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$store_file"
+          echo "store_file=$store_file" >> "$GITHUB_OUTPUT"
 
       - name: Build debug and release APKs
         env:
-          HELPER_RELEASE_STORE_FILE: ${{ steps.signing.outputs.store }}
-          HELPER_RELEASE_STORE_PASSWORD: ${{ steps.signing.outputs.password }}
-          HELPER_RELEASE_KEY_ALIAS: pr-build
-          HELPER_RELEASE_KEY_PASSWORD: ${{ steps.signing.outputs.password }}
+          HELPER_RELEASE_STORE_FILE: ${{ steps.signing.outputs.store_file }}
+          HELPER_RELEASE_STORE_PASSWORD: ${{ secrets.HELPER_RELEASE_STORE_PASSWORD }}
+          HELPER_RELEASE_KEY_ALIAS: ${{ secrets.HELPER_RELEASE_KEY_ALIAS }}
+          HELPER_RELEASE_KEY_PASSWORD: ${{ secrets.HELPER_RELEASE_KEY_PASSWORD }}
         shell: bash
         run: |
           chmod +x ./gradlew
@@ -104,64 +116,70 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk "dist/pr-${PR_NUMBER}-release.apk"
           ls -l dist
 
-      - name: Upload APKs
+      - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: pr-apks
-          path: |
-            dist/pr-*-debug.apk
-            dist/pr-*-release.apk
+          name: pr-${{ steps.pr.outputs.number }}-debug
+          path: dist/pr-${{ steps.pr.outputs.number }}-debug.apk
           retention-days: 7
 
-  publish:
-    name: Publish APKs and comment
+      - name: Upload release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-${{ steps.pr.outputs.number }}-release
+          path: dist/pr-${{ steps.pr.outputs.number }}-release.apk
+          retention-days: 7
+
+  comment:
+    name: Comment APK links
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: write
+      actions: read
       issues: write
       pull-requests: write
 
     steps:
-      - name: Download APKs
-        uses: actions/download-artifact@v4
-        with:
-          name: pr-apks
-          path: dist
-
-      - name: Publish test build
+      - name: Find artifact links
+        id: artifacts
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ needs.build.outputs.pr_number }}
         shell: bash
         run: |
-          if ! gh release view ci-pr-builds >/dev/null 2>&1; then
-            gh release create ci-pr-builds \
-              --prerelease \
-              --title "PR test builds" \
-              --notes "Automated test builds triggered by the repository owner. These APKs are not signed with the production key." \
-              --target "$GITHUB_SHA"
+          artifacts="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100")"
+          debug_id="$(jq -r --arg name "pr-${PR_NUMBER}-debug" '.artifacts[] | select(.name == $name) | .id' <<<"$artifacts" | head -n 1)"
+          release_id="$(jq -r --arg name "pr-${PR_NUMBER}-release" '.artifacts[] | select(.name == $name) | .id' <<<"$artifacts" | head -n 1)"
+
+          if [[ -z "$debug_id" || -z "$release_id" ]]; then
+            echo "::error::Could not find the uploaded APK artifacts."
+            exit 1
           fi
 
-          gh release upload ci-pr-builds dist/*.apk --clobber
+          echo "debug_id=${debug_id}" >> "$GITHUB_OUTPUT"
+          echo "release_id=${release_id}" >> "$GITHUB_OUTPUT"
 
       - name: Comment links on the pull request
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ needs.build.outputs.pr_number }}
           HEAD_SHA: ${{ needs.build.outputs.head_sha }}
+          DEBUG_ID: ${{ steps.artifacts.outputs.debug_id }}
+          RELEASE_ID: ${{ steps.artifacts.outputs.release_id }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         shell: bash
         run: |
           short_sha="${HEAD_SHA:0:7}"
+          run_id="${GITHUB_RUN_ID}"
           body="$(cat <<EOF
           <!-- helper-pr-build -->
           **Test build for \`${short_sha}\` is ready.**
 
-          - [Debug APK](https://github.com/${GITHUB_REPOSITORY}/releases/download/ci-pr-builds/pr-${PR_NUMBER}-debug.apk)
-          - [Release APK](https://github.com/${GITHUB_REPOSITORY}/releases/download/ci-pr-builds/pr-${PR_NUMBER}-release.apk)
+          - [Debug APK](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts/${DEBUG_ID})
+          - [Release APK](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts/${RELEASE_ID})
 
-          The release APK is signed with a temporary CI key, not the production key. Uninstall a production build before installing it.
+          The release APK is signed with the release key. The debug APK is debug-signed. Each artifact is a zip containing the APK and expires after 7 days.
 
           Comment \`/build\` again after new commits to refresh these links. [Workflow run](${RUN_URL})
           EOF
