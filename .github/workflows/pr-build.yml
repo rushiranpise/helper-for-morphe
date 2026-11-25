@@ -22,38 +22,37 @@ jobs:
       startsWith(github.event.comment.body, '/build')
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       pr_number: ${{ steps.pr.outputs.number }}
       head_sha: ${{ steps.pr.outputs.sha }}
 
     steps:
-      - name: Resolve pull request
+      - name: Resolve pull request head
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.issue.number }}
         shell: bash
         run: |
-          pr="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
-          repo="$(jq -r '.head.repo.full_name // empty' <<<"$pr")"
-          sha="$(jq -r '.head.sha' <<<"$pr")"
+          sha="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.head.sha')"
 
-          if [[ -z "$repo" || -z "$sha" ]]; then
+          if [[ -z "$sha" ]]; then
             echo "::error::Could not resolve the pull request head."
             exit 1
           fi
 
           {
             echo "number=${PR_NUMBER}"
-            echo "repo=${repo}"
             echo "sha=${sha}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Checkout pull request
         uses: actions/checkout@v4
         with:
-          repository: ${{ steps.pr.outputs.repo }}
-          ref: ${{ steps.pr.outputs.sha }}
+          ref: refs/pull/${{ steps.pr.outputs.number }}/head
           fetch-depth: 1
           persist-credentials: false
 
