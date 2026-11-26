@@ -68,6 +68,7 @@ internal fun HelperScreen(
     onChooseVersion: (FastModePolicy) -> Unit,
     onOpenMorphe: () -> Unit,
     onOpenTracking: () -> Unit = {},
+    hideTracking: Boolean = false,
     onSolveCaptcha: (DownloadCandidate) -> Unit,
     onFormatToggle: (String) -> Unit,
     onProceedAfterScan: () -> Unit,
@@ -94,7 +95,8 @@ internal fun HelperScreen(
                 settings = settings,
                 onSettingsChange = onSettingsChange,
                 onOpenMorphe = onOpenMorphe,
-                onOpenTracking = onOpenTracking
+                onOpenTracking = onOpenTracking,
+                hideTracking = hideTracking
             )
         } else {
             HelperRequestContent(

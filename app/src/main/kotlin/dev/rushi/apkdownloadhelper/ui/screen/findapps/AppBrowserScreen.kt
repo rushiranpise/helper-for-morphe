@@ -122,6 +122,7 @@ internal fun AppBrowserScreen(
     trackedOnly: Boolean = false,
     hideStats: Boolean = false,
     hideCommunityNotice: Boolean = false,
+    hideRequests: Boolean = false,
     useGradientCards: Boolean = true,
     bottomContentPadding: Dp = 160.dp,
     onBack: (() -> Unit)? = null,
@@ -926,7 +927,7 @@ internal fun AppBrowserScreen(
                             }
                         )
 
-                        if (!trackedOnly && onOpenRequests != null) {
+                        if (!trackedOnly && onOpenRequests != null && !hideRequests) {
                             GlassHeaderButton(
                                 icon = Icons.Outlined.HowToVote,
                                 contentDescription = "Requests",

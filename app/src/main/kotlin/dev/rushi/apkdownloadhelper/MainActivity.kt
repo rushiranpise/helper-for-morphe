@@ -462,8 +462,8 @@ class MainActivity : ComponentActivity() {
         }
         val launchIntent = intent
         if (launchIntent?.getBooleanExtra(EXTRA_OPEN_TRACKING, false) == true) {
-            openTrackingToken++
             launchIntent.removeExtra(EXTRA_OPEN_TRACKING)
+            if (!helperSettings.hideTracking) openTrackingToken++
         }
         TrackingCheckScheduler.sync(applicationContext)
         // A Morphe request takes over the screen as soon as it arrives. Its
@@ -538,7 +538,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
             LaunchedEffect(openTrackingToken) {
-                if (openTrackingToken > 0) {
+                if (openTrackingToken > 0 && !helperSettings.hideTracking) {
                     activeSettingsCategory = null
                     selectedArchiveApp = null
                     showSourcesScreen = false
@@ -546,6 +546,16 @@ class MainActivity : ComponentActivity() {
                     showTrackingScreen = true
                     showUpdates = false
                     updatePrompt = null
+                }
+            }
+
+            // If a feature was turned off while its overlay is open, dismiss it.
+            LaunchedEffect(helperSettings.hideTracking) {
+                if (helperSettings.hideTracking) showTrackingScreen = false
+            }
+            LaunchedEffect(helperSettings.hideFindAppsTab, helperSettings.hideRequestsButton) {
+                if (helperSettings.hideFindAppsTab || helperSettings.hideRequestsButton) {
+                    showRequestsScreen = false
                 }
             }
 
@@ -589,11 +599,13 @@ class MainActivity : ComponentActivity() {
                         ) {
                             HomePagerScreen(
                                 requestResetToken = requestResetToken,
+                                hideFindApps = helperSettings.hideFindAppsTab,
                                 animatedBackground = helperSettings.animatedBackground,
                                 findAppsContent = { bottomBarHeight ->
                                     AppBrowserScreen(
                                         hideStats = helperSettings.hideFindAppsStats,
                                         hideCommunityNotice = helperSettings.hideCommunityNotice,
+                                        hideRequests = helperSettings.hideRequestsButton,
                                         useGradientCards = helperSettings.useGradientCardColors,
                                         bottomContentPadding = if (bottomBarHeight > 0.dp) {
                                             bottomBarHeight + 24.dp
@@ -656,6 +668,7 @@ class MainActivity : ComponentActivity() {
                                         onChooseVersion = ::fastModeChooseVersion,
                                         onOpenMorphe = ::openMorpheManager,
                                         onOpenTracking = { showTrackingScreen = true },
+                                        hideTracking = helperSettings.hideTracking,
                                         onSolveCaptcha = ::openCaptchaBrowser,
                                         onFormatToggle = ::toggleRequestedFileKind,
                                         onProceedAfterScan = ::proceedAfterScan,
@@ -892,9 +905,11 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         if (intent.getBooleanExtra(EXTRA_OPEN_TRACKING, false)) {
             intent.removeExtra(EXTRA_OPEN_TRACKING)
-            openTrackingToken++
-            showUpdates = false
-            updatePrompt = null
+            if (!helperSettings.hideTracking) {
+                openTrackingToken++
+                showUpdates = false
+                updatePrompt = null
+            }
             installedPackageRefreshToken++
             return
         }
@@ -1492,8 +1507,16 @@ class MainActivity : ComponentActivity() {
                 helperSettings.preferredSource != settings.preferredSource
         val densityPreferenceChanged =
             helperSettings.preferDensitySpecificVariants != settings.preferDensitySpecificVariants
+        val trackingVisibilityChanged =
+            helperSettings.hideTracking != settings.hideTracking ||
+                helperSettings.hideFindAppsTab != settings.hideFindAppsTab
         helperSettings = settings
         saveHelperSettings(settings)
+        if (trackingVisibilityChanged) {
+            // Cancel background checks immediately when tracking is hidden;
+            // resume the 6-hour cycle when it is shown again.
+            TrackingCheckScheduler.sync(applicationContext)
+        }
         if (densityPreferenceChanged) {
             request = request?.copy(
                 preferDensitySpecificVariants = settings.preferDensitySpecificVariants

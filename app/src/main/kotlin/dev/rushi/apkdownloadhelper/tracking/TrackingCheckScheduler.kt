@@ -7,6 +7,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import dev.rushi.apkdownloadhelper.storage.loadHelperSettings
 import dev.rushi.apkdownloadhelper.ui.model.TrackingStore
 import java.util.concurrent.TimeUnit
 
@@ -18,6 +19,11 @@ internal object TrackingCheckScheduler {
 
     fun sync(context: Context) {
         val workManager = WorkManager.getInstance(context)
+        val settings = context.loadHelperSettings()
+        if (settings.hideFindAppsTab || settings.hideTracking) {
+            workManager.cancelUniqueWork(UNIQUE_WORK_NAME)
+            return
+        }
         if (TrackingStore.load(context).isEmpty()) {
             workManager.cancelUniqueWork(UNIQUE_WORK_NAME)
             return
@@ -44,6 +50,8 @@ internal object TrackingCheckScheduler {
 
     fun checkNow(context: Context) {
         val workManager = WorkManager.getInstance(context)
+        val settings = context.loadHelperSettings()
+        if (settings.hideFindAppsTab || settings.hideTracking) return
         if (TrackingStore.load(context).isEmpty()) return
 
         val request = androidx.work.OneTimeWorkRequestBuilder<TrackingCheckWorker>()

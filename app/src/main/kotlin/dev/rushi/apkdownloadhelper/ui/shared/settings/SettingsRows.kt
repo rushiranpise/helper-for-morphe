@@ -15,6 +15,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.alpha
 
 @Composable
 internal fun SettingsSection(
@@ -45,6 +46,7 @@ internal fun SettingsSwitchItem(
     title: String,
     checked: Boolean,
     onToggle: () -> Unit,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
     leadingContent: (@Composable () -> Unit)? = null,
@@ -53,9 +55,10 @@ internal fun SettingsSwitchItem(
     val matches = LocalSettingsSearch.current?.matches(listOf(title, subtitle)) ?: true
     AnimatedVisibility(visible = matches) {
         SettingsItem(
-            onClick = onToggle,
+            onClick = { if (enabled) onToggle() },
             title = title,
-            modifier = modifier,
+            // 1. Fades out the entire row (icon, text, and switch) when disabled
+            modifier = modifier.alpha(if (enabled) 1f else 0.35f),
             icon = icon,
             leadingContent = leadingContent,
             subtitle = subtitle,
@@ -63,6 +66,7 @@ internal fun SettingsSwitchItem(
                 Switch(
                     checked = checked,
                     onCheckedChange = null,
+                    enabled = enabled,
                     modifier = Modifier.semantics { stateDescription = if (checked) "Enabled" else "Disabled" },
                     thumbContent = { Icon(if (checked) Icons.Outlined.Check else Icons.Outlined.Close, null, Modifier.size(SwitchDefaults.IconSize)) }
                 )

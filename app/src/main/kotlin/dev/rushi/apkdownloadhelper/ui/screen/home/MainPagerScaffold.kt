@@ -37,6 +37,7 @@ internal val LocalPagerPageSelected = compositionLocalOf { true }
 @Composable
 internal fun MainPagerScaffold(
     pagerState: PagerState,
+    visiblePages: List<MainPage>,
     modifier: Modifier = Modifier,
     animatedBackground: Boolean = true,
     navigationCovered: () -> Boolean = { false },
@@ -65,7 +66,7 @@ internal fun MainPagerScaffold(
             state = pagerState,
             userScrollEnabled = swipeEnabled,
             beyondViewportPageCount = 3,
-            key = { index -> MainPage.entries[index] },
+            key = { index -> visiblePages[index] },
             modifier = Modifier
                 .fillMaxSize()
                 .hazeSourceIfEnabled(barHaze),
@@ -74,7 +75,7 @@ internal fun MainPagerScaffold(
                 LocalPagerPageSelected provides (pagerState.currentPage == pageIndex)
             ) {
                 val bottomInset = if (navigationCovered()) 0.dp else barHeight
-                content(MainPage.entries[pageIndex], bottomInset)
+                content(visiblePages[pageIndex], bottomInset)
             }
         }
 
@@ -98,6 +99,7 @@ internal fun MainPagerScaffold(
 
         AppNavigationBar(
             pagerState = pagerState,
+            visiblePages = visiblePages,
             covered = !showBottomChrome,
             hazeState = barHaze,
             modifier = Modifier.align(Alignment.BottomCenter),

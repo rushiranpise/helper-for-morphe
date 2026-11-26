@@ -136,6 +136,7 @@ internal fun HelperStandaloneContent(
     onSettingsChange: (HelperSettings) -> Unit,
     onOpenMorphe: () -> Unit,
     onOpenTracking: () -> Unit = {},
+    hideTracking: Boolean = false,
     onOpenApp: (ArchiveApp) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -292,6 +293,7 @@ internal fun HelperStandaloneContent(
             settings = settings,
             onSettingsChange = onSettingsChange,
             onOpenTracking = onOpenTracking,
+            hideTracking = hideTracking,
             isScrolled = isScrolled,
             headerHaze = headerHaze,
             onHeaderHeightChanged = { headerHeightDp = it },
@@ -305,6 +307,7 @@ private fun HelperFloatingHeader(
     settings: HelperSettings,
     onSettingsChange: (HelperSettings) -> Unit,
     onOpenTracking: () -> Unit,
+    hideTracking: Boolean,
     isScrolled: Boolean,
     headerHaze: HazeState,
     onHeaderHeightChanged: (Dp) -> Unit,
@@ -376,11 +379,13 @@ private fun HelperFloatingHeader(
                 }
             }
 
-            GlassHeaderButton(
-                icon = Icons.Outlined.Notifications,
-                contentDescription = "Tracking",
-                onClick = onOpenTracking
-            )
+            if (!hideTracking) {
+                GlassHeaderButton(
+                    icon = Icons.Outlined.Notifications,
+                    contentDescription = "Tracking",
+                    onClick = onOpenTracking
+                )
+            }
 
             HelperGlassBoltButton(
                 fastMode = settings.fastMode,
