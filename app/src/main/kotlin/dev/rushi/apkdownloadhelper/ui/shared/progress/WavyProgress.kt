@@ -227,7 +227,9 @@ internal fun WavyLinearProgressBar(
                 val path = Path()
                 for (index in 0..steps) {
                     val x = halfStroke + length * (index / steps.toFloat())
-                    val y = centerY + sin((x / waveLenPx) * 2f * PI.toFloat() - phaseRad) * ampPx
+                    // "+ phaseRad" makes crests travel right-to-left: they appear at the moving
+                    // head and flow back toward the start, instead of leaving the left edge.
+                    val y = centerY + sin((x / waveLenPx) * 2f * PI.toFloat() + phaseRad) * ampPx
                     if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
                 }
                 drawPath(

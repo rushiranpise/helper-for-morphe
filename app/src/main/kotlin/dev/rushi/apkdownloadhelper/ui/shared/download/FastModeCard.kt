@@ -4,18 +4,36 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Shape
+import dev.rushi.apkdownloadhelper.ui.shared.text.fittedTextAutoSize
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -50,6 +68,9 @@ import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
 import dev.rushi.apkdownloadhelper.ui.model.FastModeProgress
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.SemanticTone
+import dev.rushi.apkdownloadhelper.ui.util.formatBytes
+import dev.rushi.apkdownloadhelper.ui.util.formatTransferEta
+import dev.rushi.apkdownloadhelper.ui.util.formatTransferSpeed
 
 @Composable
 internal fun FastModeCard(
@@ -73,8 +94,8 @@ internal fun FastModeCard(
     var resumeOnDismiss by remember { mutableStateOf(false) }
     var showCancelConfirm by remember { mutableStateOf(false) }
     val isDirectFastMode = progress.title == null
-    val isScan = isScanStatus(progress.detail)
-    val scanInProgress = isScan && progress.percent != null && !progress.done
+    val showingTransfer = progress.percent != null && !progress.done &&
+        !progress.awaitingDecision && !progress.awaitingVersionChoice
 
     if (showCancelConfirm) {
         CancelDownloadDialog(
@@ -143,22 +164,11 @@ internal fun FastModeCard(
                 horizontalArrangement = Arrangement.spacedBy(AppDefaults.ItemSpacing),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Text(
-                        progress.title ?: stringResource(R.string.fast_mode),
-                        fontWeight = FontWeight.Bold
-                    )
-                    progress.sourceLabel?.let { source ->
-                        Text(
-                            text = source,
-                            color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.labelMedium
-                        )
-                    }
-                }
+                DownloadHeader(
+                    source = progress.sourceLabel,
+                    modeLabel = progress.title ?: stringResource(R.string.fast_mode),
+                    modifier = Modifier.weight(1f)
+                )
                 if (!progress.done && progress.percent == null && !progress.awaitingDecision) {
                     WavyProgressRing(
                         progress = null,
@@ -168,7 +178,7 @@ internal fun FastModeCard(
                     )
                 }
             }
-            if (!scanInProgress) {
+            if (!showingTransfer) {
                 Text(
                     text = progress.detail,
                     color = when {
@@ -302,113 +312,31 @@ internal fun FastModeCard(
                     icon = Icons.Outlined.Close,
                     modifier = Modifier.fillMaxWidth()
                 )
-            } else if (progress.percent != null && !progress.done) {
-                val percent = progress.percent
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(AppDefaults.ItemSpacing),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (isScan) {
-                        val (phase, detail) = scanPhaseSplit(progress.detail)
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = phase,
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.bodyLarge,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            if (detail.isNotBlank()) {
-                                Text(
-                                    text = detail,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    maxLines = 3,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
+            } else if (showingTransfer) {
+                DownloadTransferBody(
+                    percent = progress.percent ?: 0,
+                    paused = progress.paused,
+                    statusText = progress.detail,
+                    downloadedBytes = progress.downloadedBytes,
+                    totalBytes = progress.totalBytes,
+                    speedBytesPerSec = progress.speedBytesPerSec,
+                    etaMs = progress.etaMs,
+                    connections = progress.connections,
+                    onPause = onPause,
+                    onResume = onResume,
+                    onStop = onCancel,
+                    onSkipWait = onSkipWait,
+                    onSkipScan = onSkipScan,
+                    onSwitchSources = if (isDirectFastMode) {
+                        {
+                            resumeOnDismiss = !progress.paused
+                            if (!progress.paused) onPause()
+                            showSwitch = true
                         }
                     } else {
-                        Text(
-                            text = if (progress.paused) "Paused" else "Downloading",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.weight(1f)
-                        )
+                        null
                     }
-                    DownloadPercentPill(percent = percent, paused = progress.paused)
-                    DownloadCancelButton(onClick = { showCancelConfirm = true })
-                }
-
-                DownloadProgressBar(
-                    percent = percent,
-                    paused = progress.paused
                 )
-
-                if (!isScan) {
-                    DownloadDetailsRow(
-                        downloadedBytes = progress.downloadedBytes,
-                        totalBytes = progress.totalBytes,
-                        speedBytesPerSec = progress.speedBytesPerSec,
-                        etaMs = progress.etaMs,
-                        connections = progress.connections,
-                        paused = progress.paused,
-                        showConnections = percent < 100
-                    )
-                }
-
-                if (!isScanStatus(progress.detail) && progress.percent < 100) {
-                    if (isDirectFastMode) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            DownloadPillButton(
-                                text = if (progress.paused) "Resume" else "Pause",
-                                icon = if (progress.paused) Icons.Outlined.PlayArrow else Icons.Outlined.Pause,
-                                onClick = if (progress.paused) onResume else onPause,
-                                primary = true,
-                                modifier = Modifier.weight(1f)
-                            )
-                            DownloadPillButton(
-                                text = "Switch source",
-                                icon = Icons.Outlined.SwapHoriz,
-                                onClick = {
-                                    resumeOnDismiss = !progress.paused
-                                    if (!progress.paused) onPause()
-                                    showSwitch = true
-                                },
-                                primary = false,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    } else {
-                        DownloadPillButton(
-                            text = if (progress.paused) "Resume" else "Pause",
-                            icon = if (progress.paused) Icons.Outlined.PlayArrow else Icons.Outlined.Pause,
-                            onClick = if (progress.paused) onResume else onPause,
-                            primary = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-                SkipWaitButton(
-                    active = isRateLimitWait(progress.detail),
-                    onSkipWait = onSkipWait
-                )
-                if (isScanStatus(progress.detail)) {
-                    DownloadPillButton(
-                        text = "Skip scan & hand off",
-                        icon = Icons.Outlined.Shield,
-                        primary = true,
-                        onClick = onSkipScan,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
             } else if (!progress.done) {
                 DownloadPillButton(
                     text = "Cancel",
@@ -426,6 +354,47 @@ internal fun FastModeCard(
                     onCancel = onCancel
                 )
             }
+        }
+    }
+}
+
+@Composable
+internal fun DownloadStatCard(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(AppDefaults.CompactCornerRadius)
+) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        modifier = modifier,
+        shape = shape,
+        color = scheme.surfaceVariant.copy(alpha = 0.5f),
+        contentColor = scheme.onSurface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 68.dp)
+                .padding(horizontal = 10.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = scheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                autoSize = fittedTextAutoSize(maxFontSize = 20.sp, minFontSize = 11.sp),
+                fontWeight = FontWeight.Bold,
+                color = scheme.primary,
+                maxLines = 1
+            )
         }
     }
 }

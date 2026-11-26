@@ -677,7 +677,9 @@ class MainActivity : ComponentActivity() {
                                             showTrackingScreen ||
                                             selectedArchiveApp != null ||
                                             (request != null && (
-                                                    uiState is UiState.Ready ||
+                                                    uiState is UiState.Idle ||
+                                                            uiState is UiState.Loading ||
+                                                            uiState is UiState.Ready ||
                                                             uiState is UiState.Downloading ||
                                                             uiState is UiState.FastMode ||
                                                             uiState is UiState.ScanAsk ||
@@ -1824,7 +1826,8 @@ class MainActivity : ComponentActivity() {
                 candidate = pending.candidate,
                 settings = pending.settings,
                 requestIntentExtras = intent.getExtras(),
-                fastMode = fastModeActive
+                fastMode = fastModeActive,
+                callerTaskId = if (callingActivity != null) taskId else -1
             )
         )
         startForegroundService(

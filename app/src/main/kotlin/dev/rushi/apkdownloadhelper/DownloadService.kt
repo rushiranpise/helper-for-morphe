@@ -1,10 +1,14 @@
 package dev.rushi.apkdownloadhelper
 
+import android.app.ActivityManager
 import android.app.Notification
+import android.view.View
+import android.widget.RemoteViews
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -119,7 +123,8 @@ internal object DownloadJobManager {
         val epoch: Long = 0,
         // Only Fast Mode asks the user about a version-code mismatch; manual
         // downloads deliver the file as before the check existed.
-        val fastMode: Boolean = false
+        val fastMode: Boolean = false,
+        val callerTaskId: Int = -1
     )
 
     sealed interface Event {
@@ -304,7 +309,13 @@ internal class DownloadService : Service() {
     // downloadJob.isActive is false and the scan would abort instantly.
     @Volatile private var scanAbortRequested = false
     private var lastPostedPercent = -1
+    // Percent of the most recent progress event, so the notification and the card never disagree.
+    @Volatile private var latestPercent = 0
     private var lastPostedTime = 0L
+    // Bytes behind the progress notification, refreshed on every progress callback.
+    @Volatile private var notifCopied = 0L
+    @Volatile private var notifTotal = 0L
+    private var notifPostedCopied = -1L
     private var lastProgressBytes = 0L
     private var lastProgressTime = 0L
     private var currentSpeedBytesPerSec = 0.0
@@ -498,8 +509,12 @@ internal class DownloadService : Service() {
         lastShaVerified = false
         scanAbortRequested = false
         lastPostedPercent = -1
+        latestPercent = 0
         lastPostedTime = 0L
         lastProgressBytes = 0L
+        notifCopied = 0L
+        notifTotal = 0L
+        notifPostedCopied = -1L
         lastProgressTime = 0L
         currentSpeedBytesPerSec = 0.0
         speedSamples = 0
@@ -871,34 +886,37 @@ internal class DownloadService : Service() {
         )
     }
 
+    @Synchronized
     private fun pauseDownload() {
         val job = DownloadJobManager.activeJob ?: return
-        // A stale Pause action, or one tapped as the transfer ended, must not
-        // flip the service into a paused state while scanning or handoff runs.
         if (!transferInProgress) return
         if (paused) return
         paused = true
+        notifPostedCopied = notifCopied
+        lastPostedPercent = latestPercent
         downloader.pause()
         DownloadJobManager.emit(
             DownloadJobManager.Event.Paused(job.candidate, true, job.epoch)
         )
         notifySafe(
             NOTIFICATION_ID_PROGRESS,
-            buildProgressNotification(job.candidate, lastPostedPercent.coerceAtLeast(0), "Paused")
+            buildProgressNotification(job.candidate, latestPercent)
         )
     }
 
+    @Synchronized
     private fun resumeDownload() {
         val job = DownloadJobManager.activeJob ?: return
         if (!paused) return
         paused = false
+        lastPostedTime = 0L
         downloader.resume()
         DownloadJobManager.emit(
             DownloadJobManager.Event.Paused(job.candidate, false, job.epoch)
         )
         notifySafe(
             NOTIFICATION_ID_PROGRESS,
-            buildProgressNotification(job.candidate, lastPostedPercent.coerceAtLeast(0))
+            buildProgressNotification(job.candidate, latestPercent)
         )
     }
 
@@ -1023,7 +1041,7 @@ internal class DownloadService : Service() {
             NOTIFICATION_ID_PROGRESS,
             buildProgressNotification(
                 candidate,
-                lastPostedPercent.coerceAtLeast(0),
+                latestPercent,
                 "Connection issue  retrying in ${delayMs / 1000}s (attempt $attempt)"
             )
         )
@@ -1063,7 +1081,19 @@ internal class DownloadService : Service() {
                 lastProgressTime = now
             }
         }
-        val percent = ((copied * 100f) / total).roundToInt().coerceIn(0, 100)
+        val percent = ((copied * 100.0) / total).roundToInt().coerceIn(0, 100)
+        latestPercent = percent
+        notifCopied = copied
+        notifTotal = total
+        if (paused && copied != notifPostedCopied) {
+            // A read already in flight can still advance after Pause. Repost the Paused
+            // notification so it shows exactly what the card shows.
+            notifPostedCopied = copied
+            notifySafe(
+                NOTIFICATION_ID_PROGRESS,
+                buildProgressNotification(candidate, ((copied * 100.0) / total).roundToInt().coerceIn(0, 100))
+            )
+        }
         val etaMs = if (currentSpeedBytesPerSec > 0.0) {
             ((total - copied) / currentSpeedBytesPerSec * 1000.0).toLong()
         } else null
@@ -1084,19 +1114,28 @@ internal class DownloadService : Service() {
         // would leave a stale ETA up for many seconds.
         // While paused, leave the Paused notification alone; a read that was
         // already in flight may still deliver one more progress callback.
-        if (!paused && (percent != lastPostedPercent || now - lastPostedTime >= 1000L)) {
+        if (paused) {
+            // A read already in flight can still advance the percent after Pause. Keep the
+            // Paused notification on the same number the card shows.
+            if (percent != lastPostedPercent) {
+                lastPostedPercent = percent
+                notifySafe(NOTIFICATION_ID_PROGRESS, buildProgressNotification(candidate, percent))
+            }
+        } else if (percent != lastPostedPercent || now - lastPostedTime >= 1000L) {
             lastPostedPercent = percent
             lastPostedTime = now
             val speed = formatSpeed(currentSpeedBytesPerSec)
-            val text = buildString {
-                append(percent).append('%')
-                if (speed.isNotEmpty()) append(" · ").append(speed)
-                if (etaMs != null && etaMs > 0L) {
-                    append(" · ").append(formatEta(etaMs)).append(" left")
-                }
-            }
-            notifySafe(NOTIFICATION_ID_PROGRESS, buildProgressNotification(candidate, percent, text))
+            notifySafe(NOTIFICATION_ID_PROGRESS, buildProgressNotification(candidate, percent))
         }
+    }
+
+    private fun formatSize(bytes: Long): String {
+        if (bytes <= 0L) return "0 B"
+        val units = arrayOf("B", "KB", "MB", "GB")
+        var value = bytes.toDouble()
+        var unit = 0
+        while (value >= 1024.0 && unit < units.lastIndex) { value /= 1024.0; unit++ }
+        return if (unit == 0) "$bytes B" else String.format(Locale.US, "%.1f %s", value, units[unit])
     }
 
     private fun formatSpeed(bytesPerSec: Double): String {
@@ -1140,7 +1179,48 @@ internal class DownloadService : Service() {
         percent: Int,
         contentText: String? = null
     ): Notification {
-        val contentIntent = requestContentIntent(DownloadJobManager.activeJob?.requestIntentExtras)
+        // While a transfer runs, show bytes (like a browser) instead of a percentage, so the
+        // text is exact and matches the card's "Downloaded" stat. Scan/handoff keep percent.
+        val showBytes = transferInProgress
+        val sizeLine = if (showBytes) {
+            val sizes = if (notifTotal > 0L) {
+                "${formatSize(notifCopied)} / ${formatSize(notifTotal)}"
+            } else {
+                formatSize(notifCopied)
+            }
+            if (paused) "Paused at $sizes" else sizes
+        } else null
+        val barMax = if (showBytes) 1000 else 100
+        val barValue = if (showBytes) {
+            if (notifTotal > 0L) {
+                ((notifCopied * 1000.0) / notifTotal).roundToInt().coerceIn(0, 1000)
+            } else {
+                0
+            }
+        } else {
+            percent.coerceIn(0, 100)
+        }
+        val detail = if (showBytes && !paused) {
+            val etaMs = if (currentSpeedBytesPerSec > 0.0) {
+                ((notifTotal - notifCopied) / currentSpeedBytesPerSec * 1000.0).toLong()
+            } else null
+            listOfNotNull(
+                formatSpeed(currentSpeedBytesPerSec).takeIf { it.isNotEmpty() },
+                etaMs?.takeIf { it > 0L }?.let { "${formatEta(it)} left" }
+            ).joinToString(" · ")
+        } else ""
+        val activeJob = DownloadJobManager.activeJob
+        val contentIntent = if (transferInProgress && activeJob != null && activeJob.callerTaskId != -1) {
+            PendingIntent.getBroadcast(
+                this,
+                3,
+                Intent(this, ReturnToRequestReceiver::class.java)
+                    .putExtra(ReturnToRequestReceiver.EXTRA_TASK_ID, activeJob.callerTaskId),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        } else {
+            requestContentIntent(activeJob?.requestIntentExtras)
+        }
         val cancelIntent = PendingIntent.getService(
             this,
             0,
@@ -1149,23 +1229,50 @@ internal class DownloadService : Service() {
         )
         val pauseIntent = PendingIntent.getService(
             this,
-            1,
+            if (paused) 2 else 1,
             Intent(this, DownloadService::class.java).setAction(
                 if (paused) ACTION_RESUME_DOWNLOAD else ACTION_PAUSE_DOWNLOAD
             ),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         return NotificationCompat.Builder(this, CHANNEL_PROGRESS)
-            .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle(if (paused) "Paused: ${candidate.name}" else "Downloading ${candidate.name}")
+            // The animated download icon runs only while bytes are moving; paused uses a still one.
+            .setSmallIcon(
+                if (paused) android.R.drawable.stat_sys_download_done
+                else android.R.drawable.stat_sys_download
+            )
+            .setContentTitle(if (paused) candidate.name else "Downloading ${candidate.name}")
             .setContentText(
-                contentText ?: when {
-                    paused -> "Paused"
-                    percent <= 0 -> "Preparing…"
+                sizeLine.takeIf { contentText == null || contentText == "Paused" } ?: contentText ?: when {
+                    paused -> "Paused · $percent%"
                     else -> "$percent%"
                 }
             )
-            .setProgress(100, percent.coerceIn(0, 100), false)
+            .setProgress(
+                if (paused || showBytes) 0 else barMax,
+                if (paused || showBytes) 0 else barValue,
+                false
+            )
+            .setSubText(null)
+            .apply {
+                if (showBytes) {
+                    val line = if (contentText == null || contentText == "Paused") sizeLine else contentText
+                    val title = if (paused) candidate.name else "Downloading ${candidate.name}"
+                    val views = RemoteViews(packageName, R.layout.notification_download).apply {
+                        setTextViewText(R.id.notif_title, title)
+                        setTextViewText(R.id.notif_text, line ?: "")
+                        if (paused) {
+                            setViewVisibility(R.id.notif_progress, View.GONE)
+                        } else {
+                            setViewVisibility(R.id.notif_progress, View.VISIBLE)
+                            setProgressBar(R.id.notif_progress, barMax, barValue, false)
+                        }
+                    }
+                    setStyle(NotificationCompat.DecoratedCustomViewStyle())
+                    setCustomContentView(views)
+                    setCustomBigContentView(views)
+                }
+            }
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(contentIntent)
@@ -1222,6 +1329,29 @@ internal class DownloadService : Service() {
             launch,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+    }
+
+    class ReturnToRequestReceiver : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val taskId = intent.getIntExtra(EXTRA_TASK_ID, -1)
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+            if (taskId != -1 && am != null) {
+                val moved = runCatching {
+                    @Suppress("DEPRECATION")
+                    am.moveTaskToFront(taskId, ActivityManager.MOVE_TASK_WITH_HOME)
+                    true
+                }.getOrDefault(false)
+                if (moved) return
+            }
+            val fallback = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                ?: return
+            context.startActivity(fallback)
+        }
+
+        companion object {
+            const val EXTRA_TASK_ID = "task_id"
+        }
     }
 
     private fun notifySafe(id: Int, notification: Notification) {

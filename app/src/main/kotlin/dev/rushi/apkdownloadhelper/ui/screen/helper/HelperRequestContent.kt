@@ -109,6 +109,7 @@ import dev.rushi.apkdownloadhelper.ui.shared.source.rememberSourcePickerState
 import dev.rushi.apkdownloadhelper.ui.shared.source.sourcePickerItems
 import dev.rushi.apkdownloadhelper.ui.shared.state.ErrorState
 import dev.rushi.apkdownloadhelper.ui.shared.state.LoadingState
+import dev.rushi.apkdownloadhelper.ui.model.FastModeProgress
 import dev.rushi.apkdownloadhelper.ui.theme.AppColors
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.hazeSourceIfEnabled
@@ -251,6 +252,20 @@ internal fun HelperRequestContent(
     }
 
     var confirmFastModeTarget by remember { mutableStateOf<Boolean?>(null) }
+
+    // Set when the user picks a new Fast Mode source; keeps the Fast Mode card on screen
+    // (instead of the generic shimmer list) until the new source's state arrives.
+    var switchingTo by remember(request.packageName) { mutableStateOf<DownloadSource?>(null) }
+    LaunchedEffect(state) {
+        val target = switchingTo ?: return@LaunchedEffect
+        val settled = when (state) {
+            UiState.Idle, UiState.Loading -> false
+            is UiState.FastMode -> state.progress.done || state.progress.sourceLabel == target.label
+            is UiState.Downloading -> state.candidate.source == target
+            else -> true
+        }
+        if (settled) switchingTo = null
+    }
 
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -542,7 +557,35 @@ internal fun HelperRequestContent(
 
             when (state) {
                 UiState.Idle,
-                UiState.Loading -> item(key = "loading") { LoadingState() }
+                UiState.Loading -> {
+                    val target = switchingTo
+                    if (target != null) {
+                        item(key = "fast_mode") {
+                            FastModeCard(
+                                progress = FastModeProgress(
+                                    sourceLabel = target.label,
+                                    detail = "Switching source…"
+                                ),
+                                availableSources = availableSources,
+                                onCancel = onCancelFastMode,
+                                onPause = {},
+                                onResume = {},
+                                onSwitchSource = {},
+                                onSkipWait = {},
+                                onUseMismatch = {},
+                                onSkipMismatch = {},
+                                onSkipScan = {},
+                                onChooseVersion = {},
+                                canRetryFailedSources = canRetryFailedSources,
+                                onRetryAll = onRetryAll,
+                                onRetryFailedSources = onRetryFailedSources,
+                                onCopyFailureDetails = onCopyFailureDetails
+                            )
+                        }
+                    } else {
+                        item(key = "loading") { LoadingState() }
+                    }
+                }
 
                 is UiState.Ready -> {
                     pickerState?.let { picker ->
@@ -567,11 +610,9 @@ internal fun HelperRequestContent(
                     item(key = "downloading") {
                         DownloadingState(
                             state = state,
-                            availableSources = availableSources,
                             onCancel = onCancelDownload,
                             onPause = onPauseDownload,
                             onResume = onResumeDownload,
-                            onSwitchSource = onSwitchDownloadSource,
                             onSkipWait = onSkipScanWait,
                             onSkipScan = onSkipScan
                         )
@@ -631,7 +672,10 @@ internal fun HelperRequestContent(
                             onCancel = onCancelFastMode,
                             onPause = onPauseDownload,
                             onResume = onResumeDownload,
-                            onSwitchSource = onSwitchDownloadSource,
+                            onSwitchSource = { source ->
+                                switchingTo = source
+                                onSwitchDownloadSource(source)
+                            },
                             onSkipWait = onSkipScanWait,
                             onUseMismatch = onUseFastModeMismatch,
                             onSkipMismatch = onSkipFastModeMismatch,
