@@ -517,6 +517,8 @@ class MainActivity : ComponentActivity() {
             var isSettingsSubpageOpen by remember { mutableStateOf(false) }
             var activeSettingsCategory by rememberSaveable { mutableStateOf<SettingsCategory?>(null) }
             var showSourcesScreen by rememberSaveable { mutableStateOf(false) }
+            var showRequestsScreen by rememberSaveable { mutableStateOf(false) }
+            var showTrackingScreen by rememberSaveable { mutableStateOf(false) }
             var selectedArchiveApp by remember { mutableStateOf<ArchiveApp?>(null) }
             var lastSelectedArchiveApp by remember { mutableStateOf<ArchiveApp?>(null) }
             if (selectedArchiveApp != null) {
@@ -532,6 +534,7 @@ class MainActivity : ComponentActivity() {
                 if (requestResetToken > 0) {
                     activeSettingsCategory = null
                     selectedArchiveApp = null
+                    showRequestsScreen = false
                 }
             }
             LaunchedEffect(openTrackingToken) {
@@ -539,6 +542,8 @@ class MainActivity : ComponentActivity() {
                     activeSettingsCategory = null
                     selectedArchiveApp = null
                     showSourcesScreen = false
+                    showRequestsScreen = false
+                    showTrackingScreen = true
                     showUpdates = false
                     updatePrompt = null
                 }
@@ -570,7 +575,7 @@ class MainActivity : ComponentActivity() {
                         )
                     } else {
                         val backgroundModifier =
-                            if (showUpdates || activeSettingsCategory != null || showSourcesScreen || selectedArchiveApp != null) {
+                            if (showUpdates || activeSettingsCategory != null || showSourcesScreen || showRequestsScreen || showTrackingScreen || selectedArchiveApp != null) {
                                 Modifier
                                     .focusProperties { canFocus = false }
                                     .clearAndSetSemantics {}
@@ -584,7 +589,6 @@ class MainActivity : ComponentActivity() {
                         ) {
                             HomePagerScreen(
                                 requestResetToken = requestResetToken,
-                                openTrackingToken = openTrackingToken,
                                 animatedBackground = helperSettings.animatedBackground,
                                 findAppsContent = { bottomBarHeight ->
                                     AppBrowserScreen(
@@ -597,21 +601,7 @@ class MainActivity : ComponentActivity() {
                                             160.dp
                                         },
                                         onBack = null,
-                                        onOpenApp = { selectedArchiveApp = it }
-                                    )
-                                },
-                                trackingContent = { bottomBarHeight ->
-                                    AppBrowserScreen(
-                                        trackedOnly = true,
-                                        hideStats = true,
-                                        hideCommunityNotice = true,
-                                        useGradientCards = helperSettings.useGradientCardColors,
-                                        bottomContentPadding = if (bottomBarHeight > 0.dp) {
-                                            bottomBarHeight + 24.dp
-                                        } else {
-                                            160.dp
-                                        },
-                                        onBack = null,
+                                        onOpenRequests = { showRequestsScreen = true },
                                         onOpenApp = { selectedArchiveApp = it }
                                     )
                                 },
@@ -665,20 +655,12 @@ class MainActivity : ComponentActivity() {
                                         onSkipFastModeMismatch = { fastModeChoose(FastModeChoice.NEXT) },
                                         onChooseVersion = ::fastModeChooseVersion,
                                         onOpenMorphe = ::openMorpheManager,
+                                        onOpenTracking = { showTrackingScreen = true },
                                         onSolveCaptcha = ::openCaptchaBrowser,
                                         onFormatToggle = ::toggleRequestedFileKind,
                                         onProceedAfterScan = ::proceedAfterScan,
                                         onCancelAfterScan = ::cancelAfterScan,
                                         onSkipScan = ::skipScanAndHandoff
-                                    )
-                                },
-                                requestsContent = { bottomBarHeight ->
-                                    RequestsScreen(
-                                        bottomContentPadding = if (bottomBarHeight > 0.dp) {
-                                            bottomBarHeight + 24.dp
-                                        } else {
-                                            160.dp
-                                        }
                                     )
                                 },
                                 settingsContent = { bottomBarHeight ->
@@ -691,6 +673,8 @@ class MainActivity : ComponentActivity() {
                                     showUpdates ||
                                             activeSettingsCategory != null ||
                                             showSourcesScreen ||
+                                            showRequestsScreen ||
+                                            showTrackingScreen ||
                                             selectedArchiveApp != null ||
                                             (request != null && (
                                                     uiState is UiState.Ready ||
@@ -783,6 +767,39 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             }
+                        }
+                    }
+
+                    // --- OVERLAY FOR TRACKING ---
+                    AnimatedVisibility(
+                        visible = showTrackingScreen,
+                        enter = AppAnimations.pushEnter,
+                        exit = AppAnimations.pushExit
+                    ) {
+                        PushedScreen {
+                            AppBrowserScreen(
+                                trackedOnly = true,
+                                hideStats = true,
+                                hideCommunityNotice = true,
+                                useGradientCards = helperSettings.useGradientCardColors,
+                                bottomContentPadding = 96.dp,
+                                onBack = { showTrackingScreen = false },
+                                onOpenApp = { selectedArchiveApp = it }
+                            )
+                        }
+                    }
+
+                    // --- OVERLAY FOR REQUESTS ---
+                    AnimatedVisibility(
+                        visible = showRequestsScreen,
+                        enter = AppAnimations.pushEnter,
+                        exit = AppAnimations.pushExit
+                    ) {
+                        PushedScreen {
+                            RequestsScreen(
+                                bottomContentPadding = 96.dp,
+                                onBack = { showRequestsScreen = false }
+                            )
                         }
                     }
 

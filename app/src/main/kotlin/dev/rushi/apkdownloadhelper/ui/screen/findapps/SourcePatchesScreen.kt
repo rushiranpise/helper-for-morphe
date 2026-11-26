@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.chrisbanes.haze.HazeState
 import dev.rushi.apkdownloadhelper.R
+import dev.rushi.apkdownloadhelper.ui.shared.button.BottomCloseBar
 import dev.rushi.apkdownloadhelper.ui.shared.button.GlassHeaderButton
 import dev.rushi.apkdownloadhelper.ui.shared.card.InfoCard
 import dev.rushi.apkdownloadhelper.ui.shared.input.SearchField
@@ -409,72 +410,13 @@ internal fun SourcePatchesScreen(
             }
         }
 
-        // Telegram-style bottom dim scrim (above scrolling list, behind Close pill & system nav bar)
-        val patchesNavHeight = with(density) {
-            androidx.compose.foundation.layout.WindowInsets.navigationBars.getBottom(this).toDp()
-        }
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(patchesNavHeight + 76.dp)
-                .background(
-                    Brush.verticalGradient(
-                        0.0f to Color.Transparent,
-                        0.45f to colors.background.copy(alpha = 0.55f),
-                        0.80f to colors.background.copy(alpha = 0.85f),
-                        1.0f to colors.background.copy(alpha = 0.96f)
-                    )
-                )
+        // Scrim + Close pill
+        BottomCloseBar(
+            onClose = onBack,
+            hazeState = headerHaze,
+            showBackground = true,
+            onHeightChanged = { footerHeightDp = it },
+            modifier = Modifier.align(Alignment.BottomCenter)
         )
-
-        // Pinned Bottom "Close" Frosted Outlined Pill (matching AppDetailScreen)
-        val closeInteraction = remember { MutableInteractionSource() }
-        val closeShape = rememberMorphePillShape(closeInteraction)
-
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .onSizeChanged { size ->
-                    footerHeightDp = with(density) { size.height.toDp() }
-                }
-                .navigationBarsPadding()
-                .padding(
-                    horizontal = AppDefaults.ContentPadding,
-                    vertical = 12.dp
-                )
-        ) {
-            androidx.compose.material3.OutlinedButton(
-                onClick = {
-                    focusManager.clearFocus(force = true)
-                    keyboardController?.hide()
-                    onBack()
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .pressScale(closeInteraction, pressedScale = 0.96f)
-                    .glassFill(
-                        glass = Color.Transparent,
-                        shape = closeShape,
-                        hazeState = headerHaze
-                    ),
-                interactionSource = closeInteraction,
-                shape = closeShape,
-                colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
-                    containerColor = Color.Transparent,
-                    contentColor = colors.onSurface.copy(alpha = 0.85f)
-                ),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
-            ) {
-                Text(
-                    text = stringResource(R.string.close),
-                    style = MaterialTheme.typography.labelLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
     }
 }

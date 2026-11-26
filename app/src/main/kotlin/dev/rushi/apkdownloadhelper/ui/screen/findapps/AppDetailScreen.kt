@@ -84,6 +84,7 @@ import dev.rushi.apkdownloadhelper.download.playStoreUrl
 import dev.rushi.apkdownloadhelper.ui.shared.appcard.AppSourceCard
 import dev.rushi.apkdownloadhelper.ui.shared.appcard.FindAppIcon
 import dev.rushi.apkdownloadhelper.ui.shared.appcard.findAppCardColors
+import dev.rushi.apkdownloadhelper.ui.shared.button.BottomCloseBar
 import dev.rushi.apkdownloadhelper.ui.shared.chip.StatusBadge
 import dev.rushi.apkdownloadhelper.ui.shared.layout.PushedScreen
 import dev.rushi.apkdownloadhelper.ui.shared.state.EmptyState
@@ -443,7 +444,7 @@ internal fun AppDetailScreen(
             }
         }
 
-        // Telegram-style bottom dim scrim (above scrolling list, behind Close pill & system nav bar)
+        // Telegram-style bottom dim scrim
         val detailNavHeight = with(density) {
             androidx.compose.foundation.layout.WindowInsets.navigationBars.getBottom(this).toDp()
         }
@@ -532,32 +533,12 @@ internal fun AppDetailScreen(
                 }
 
                 if (onBack != null) {
-                    androidx.compose.material3.OutlinedButton(
-                        onClick = onBack,
-                        modifier = Modifier
-                            .weight(1f)
-                            .heightIn(min = 48.dp)
-                            .pressScale(closeInteraction, pressedScale = 0.96f)
-                            .glassFill(
-                                glass = Color.Transparent,
-                                shape = closeShape,
-                                hazeState = detailHeaderHaze
-                            ),
-                        interactionSource = closeInteraction,
-                        shape = closeShape,
-                        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
-                            containerColor = Color.Transparent,
-                            contentColor = scheme.onSurface.copy(alpha = 0.85f)
-                        ),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.close),
-                            style = MaterialTheme.typography.labelLarge,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                    BottomCloseBar(
+                        onClose = onBack,
+                        hazeState = detailHeaderHaze,
+                        showBackground = false,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
         }

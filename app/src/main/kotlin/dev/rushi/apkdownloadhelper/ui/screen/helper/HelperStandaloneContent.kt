@@ -24,6 +24,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.Notifications
+import dev.rushi.apkdownloadhelper.ui.shared.button.GlassHeaderButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -133,6 +135,7 @@ internal fun HelperStandaloneContent(
     settings: HelperSettings,
     onSettingsChange: (HelperSettings) -> Unit,
     onOpenMorphe: () -> Unit,
+    onOpenTracking: () -> Unit = {},
     onOpenApp: (ArchiveApp) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -288,6 +291,7 @@ internal fun HelperStandaloneContent(
         HelperFloatingHeader(
             settings = settings,
             onSettingsChange = onSettingsChange,
+            onOpenTracking = onOpenTracking,
             isScrolled = isScrolled,
             headerHaze = headerHaze,
             onHeaderHeightChanged = { headerHeightDp = it },
@@ -300,6 +304,7 @@ internal fun HelperStandaloneContent(
 private fun HelperFloatingHeader(
     settings: HelperSettings,
     onSettingsChange: (HelperSettings) -> Unit,
+    onOpenTracking: () -> Unit,
     isScrolled: Boolean,
     headerHaze: HazeState,
     onHeaderHeightChanged: (Dp) -> Unit,
@@ -370,6 +375,12 @@ private fun HelperFloatingHeader(
                     )
                 }
             }
+
+            GlassHeaderButton(
+                icon = Icons.Outlined.Notifications,
+                contentDescription = "Tracking",
+                onClick = onOpenTracking
+            )
 
             HelperGlassBoltButton(
                 fastMode = settings.fastMode,

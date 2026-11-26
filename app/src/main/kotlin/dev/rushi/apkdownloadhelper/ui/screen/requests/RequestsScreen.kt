@@ -12,19 +12,26 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,13 +50,37 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import dev.rushi.apkdownloadhelper.R
 import dev.rushi.apkdownloadhelper.ui.screen.home.LocalPagerPageSelected
+import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
+import dev.rushi.apkdownloadhelper.ui.theme.pressScale
+import dev.rushi.apkdownloadhelper.ui.theme.rememberMorphePillShape
 import dev.rushi.apkdownloadhelper.ui.util.openExternal
 import kotlin.math.roundToInt
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
+import dev.chrisbanes.haze.HazeState
+import dev.rushi.apkdownloadhelper.ui.shared.button.BottomCloseBar
+import dev.rushi.apkdownloadhelper.ui.theme.AppColors
+import dev.rushi.apkdownloadhelper.ui.theme.glassFill
+import dev.rushi.apkdownloadhelper.ui.theme.hazeSourceIfEnabled
+import dev.rushi.apkdownloadhelper.ui.theme.pressScale
+import dev.rushi.apkdownloadhelper.ui.theme.rememberMorphePillShape
 
 private const val REQUESTS_HOST = "morphe-patches.software"
 private const val REQUESTS_URL = "https://$REQUESTS_HOST/requests"
@@ -69,7 +100,8 @@ private val LightPageBackground = Color(0xFFFFFFFF)
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 internal fun RequestsScreen(
-    bottomContentPadding: Dp = 160.dp,
+    bottomContentPadding: Dp = 96.dp,
+    onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -182,8 +214,17 @@ internal fun RequestsScreen(
     // The page stays composed while another tab is shown, so only take Back
     // when the board is visible and has somewhere to return to.
     val pageSelected = LocalPagerPageSelected.current
-    BackHandler(enabled = pageSelected && canGoBack) {
-        webView.goBack()
+    val density = LocalDensity.current
+    val scheme = MaterialTheme.colorScheme
+    val pageHaze = remember { HazeState() }
+    var headerHeightDp by remember { mutableStateOf(0.dp) }
+    var footerHeightDp by remember { mutableStateOf(0.dp) }
+    BackHandler(enabled = canGoBack || onBack != null) {
+        if (canGoBack) {
+            webView.goBack()
+        } else {
+            onBack?.invoke()
+        }
     }
 
     Box(
@@ -195,12 +236,24 @@ internal fun RequestsScreen(
             factory = { webView },
             modifier = Modifier
                 .fillMaxSize()
+                .hazeSourceIfEnabled(pageHaze)
                 .clipToBounds()
                 .statusBarsPadding()
         )
 
         if (loading && !failed && !hasLoadedOnce) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+        }
+
+        // Scrim + Close pill (only shown when a back handler is wired up)
+        if (onBack != null) {
+            BottomCloseBar(
+                onClose = onBack,
+                hazeState = pageHaze,
+                showBackground = true,
+                onHeightChanged = { footerHeightDp = it },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
         }
 
         if (hasLoadedOnce && !failed) {

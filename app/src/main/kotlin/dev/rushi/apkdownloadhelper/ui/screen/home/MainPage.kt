@@ -13,8 +13,6 @@ internal enum class MainPage(
     val icon: ImageVector
 ) {
     FIND_APPS("Find apps", Icons.Outlined.Explore),
-    TRACKING("Tracking", Icons.Outlined.Notifications),
     HOME("Helper", Icons.Outlined.Download),
-    REQUESTS("Requests", Icons.Outlined.HowToVote),
     SETTINGS("Settings", Icons.Outlined.Settings)
 }

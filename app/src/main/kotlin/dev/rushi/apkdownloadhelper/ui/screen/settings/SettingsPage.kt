@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeState
 import dev.rushi.apkdownloadhelper.R
+import dev.rushi.apkdownloadhelper.ui.shared.button.BottomCloseBar
 import dev.rushi.apkdownloadhelper.ui.shared.layout.HeaderBar
 import dev.rushi.apkdownloadhelper.ui.shared.layout.PinnedHeaderPage
 import dev.rushi.apkdownloadhelper.ui.shared.scroll.verticalScrollFade
@@ -187,67 +188,13 @@ internal fun SettingsPageDetail(
             }
         }
 
-        // 3. Telegram-style Bottom Dim Gradient Scrim (behind Close pill & system nav bar)
-        val navBarHeight = with(density) {
-            WindowInsets.navigationBars.getBottom(this).toDp()
-        }
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(navBarHeight + 76.dp)
-                .background(
-                    Brush.verticalGradient(
-                        0.0f to Color.Transparent,
-                        0.45f to scheme.background.copy(alpha = 0.55f),
-                        0.80f to scheme.background.copy(alpha = 0.85f),
-                        1.0f to scheme.background.copy(alpha = 0.96f)
-                    )
-                )
+        // 3 Scrim + Close pill
+        BottomCloseBar(
+            onClose = onBack,
+            hazeState = pageHaze,
+            showBackground = true,
+            onHeightChanged = { footerHeightDp = it },
+            modifier = Modifier.align(Alignment.BottomCenter)
         )
-
-        // 4. Pinned Bottom Frosted "Close" Pill matching AppDetailScreen
-        val closeInteraction = remember { MutableInteractionSource() }
-        val closeShape = rememberMorphePillShape(closeInteraction)
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .onSizeChanged { size ->
-                    footerHeightDp = with(density) { size.height.toDp() }
-                }
-                .navigationBarsPadding()
-                .padding(
-                    horizontal = AppDefaults.ContentPadding,
-                    vertical = 12.dp
-                )
-        ) {
-            OutlinedButton(
-                onClick = onBack,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .pressScale(closeInteraction, pressedScale = 0.96f)
-                    .glassFill(
-                        glass = Color.Transparent,
-                        shape = closeShape,
-                        hazeState = pageHaze
-                    ),
-                interactionSource = closeInteraction,
-                shape = closeShape,
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = Color.Transparent,
-                    contentColor = scheme.onSurface.copy(alpha = 0.85f)
-                ),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
-            ) {
-                Text(
-                    text = stringResource(R.string.close),
-                    style = MaterialTheme.typography.labelLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
     }
 }

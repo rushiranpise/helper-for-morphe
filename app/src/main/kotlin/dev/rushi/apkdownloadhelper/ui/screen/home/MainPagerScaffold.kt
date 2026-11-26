@@ -44,7 +44,6 @@ internal fun MainPagerScaffold(
     settingsIcon: ImageVector = MainPage.SETTINGS.icon,
     settingsDescription: String? = null,
     overlay: @Composable BoxScope.() -> Unit = {},
-    requestsOverlay: @Composable (bottomBarHeight: Dp) -> Unit = {},
     content: @Composable (page: MainPage, bottomBarHeight: Dp) -> Unit,
 ) {
     var barHeight by remember { mutableStateOf(0.dp) }
@@ -62,42 +61,20 @@ internal fun MainPagerScaffold(
             AppBackground(modifier = Modifier.matchParentSize())
         }
 
-        // Keep currentPage/navigationCovered reads out of the pager composable itself
-        // so swiping between tabs does not recompose all pager pages every frame.
-        // The requests page hosts a WebView: its vertical scrolling fights the
-        // pager's horizontal gesture detector, so that page is switched by the
-        // navigation bar instead.
-        val page = MainPage.entries[pagerState.currentPage]
-        // Haze captures its source into a layer. A WebView is not drawable that
-        // way: every scroll or animation inside it (including the captcha
-        // iframe) would force a full capture and stutter. The requests page
-        // opts out, and the navigation pill falls back to its solid tint.
-        val capturesForGlass = page != MainPage.REQUESTS
         HorizontalPager(
             state = pagerState,
-            userScrollEnabled = swipeEnabled && page != MainPage.REQUESTS,
+            userScrollEnabled = swipeEnabled,
             beyondViewportPageCount = 3,
             key = { index -> MainPage.entries[index] },
             modifier = Modifier
                 .fillMaxSize()
-                .then(
-                    if (capturesForGlass) Modifier.hazeSourceIfEnabled(barHaze) else Modifier
-                ),
+                .hazeSourceIfEnabled(barHaze),
         ) { pageIndex ->
             CompositionLocalProvider(
                 LocalPagerPageSelected provides (pagerState.currentPage == pageIndex)
             ) {
                 val bottomInset = if (navigationCovered()) 0.dp else barHeight
                 content(MainPage.entries[pageIndex], bottomInset)
-            }
-        }
-
-        // The request board's WebView must stay outside the pager's Haze source.
-        // Drawing a WebView GL functor into the blur layer crashes libhwui on
-        // some devices, so the board is hosted just above the pager instead.
-        if (page == MainPage.REQUESTS) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                requestsOverlay(if (navigationCovered()) 0.dp else barHeight)
             }
         }
 
@@ -122,7 +99,7 @@ internal fun MainPagerScaffold(
         AppNavigationBar(
             pagerState = pagerState,
             covered = !showBottomChrome,
-            hazeState = if (capturesForGlass) barHaze else null,
+            hazeState = barHaze,
             modifier = Modifier.align(Alignment.BottomCenter),
             settingsIcon = settingsIcon,
             settingsDescription = settingsDescription,
