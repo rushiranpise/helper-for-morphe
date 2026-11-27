@@ -1,8 +1,12 @@
 package dev.rushi.apkdownloadhelper.ui.shared.appcard
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,6 +53,7 @@ import dev.rushi.apkdownloadhelper.updater.ArchiveApp
 import dev.rushi.apkdownloadhelper.updater.formatReleaseDate
 import dev.rushi.apkdownloadhelper.updater.newestReleaseDate
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun AppListCard(
     app: ArchiveApp,
@@ -64,8 +69,10 @@ internal fun AppListCard(
     modifier: Modifier = Modifier,
     useGradient: Boolean = true,
     customBottomText: String? = null,
-    onShare: (() -> Unit)? = null,
-    onDelete: (() -> Unit)? = null
+    customSubtitleText: String? = null,
+    selected: Boolean = false,
+    selectionMode: Boolean = false,
+    onLongClick: (() -> Unit)? = null
 ) {
     val monochrome = LocalMonochromeTheme.current
     val effectiveGradient = useGradient && !monochrome
@@ -97,6 +104,13 @@ internal fun AppListCard(
             .fillMaxWidth()
             .heightIn(min = 88.dp)
             .clip(shape)
+            .then(
+                if (selected) {
+                    Modifier.border(2.dp, scheme.primary, shape)
+                } else {
+                    Modifier
+                }
+            )
             .drawWithCache {
                 val topLeft = CornerRadius(shape.topStart.toPx(size, this))
                 val topRight = CornerRadius(shape.topEnd.toPx(size, this))
@@ -134,10 +148,11 @@ internal fun AppListCard(
                     drawContent()
                 }
             }
-            .clickable(
+            .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,
-                onClick = onClick
+                onClick = onClick,
+                onLongClick = onLongClick
             ),
         contentAlignment = Alignment.CenterStart
     ) {
@@ -163,7 +178,7 @@ internal fun AppListCard(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
-                    text = app.packageName,
+                    text = customSubtitleText ?: app.packageName,
                     style = subtitleStyle,
                     color = subtitleColor.copy(alpha = 0.82f),
                     maxLines = 1,
@@ -243,48 +258,28 @@ internal fun AppListCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (onShare != null || onDelete != null) {
-                    onShare?.let { shareAction ->
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (!effectiveGradient) scheme.surfaceVariant.copy(alpha = 0.65f)
-                                    else Color.White.copy(alpha = 0.16f)
-                                )
-                                .clickable(role = Role.Button, onClick = shareAction),
-                            contentAlignment = Alignment.Center
-                        ) {
+                if (selectionMode) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (selected) Color(0xFF22C55E)
+                                else if (!effectiveGradient) scheme.surfaceVariant.copy(alpha = 0.65f)
+                                else Color.White.copy(alpha = 0.22f)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (selected) {
                             Icon(
-                                imageVector = Icons.Outlined.Share,
-                                contentDescription = "Share APK",
-                                tint = if (!effectiveGradient) scheme.onSurface else Color.White,
-                                modifier = Modifier.size(20.dp)
+                                imageVector = Icons.Outlined.Check,
+                                contentDescription = "Selected",
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
-                    onDelete?.let { deleteAction ->
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (!effectiveGradient) scheme.errorContainer.copy(alpha = 0.75f)
-                                    else Color.White.copy(alpha = 0.16f)
-                                )
-                                .clickable(role = Role.Button, onClick = deleteAction),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.DeleteOutline,
-                                contentDescription = "Delete APK",
-                                tint = if (!effectiveGradient) scheme.onErrorContainer else Color.White,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                } else {
+                } else if (customBottomText == null) {
                     onToggleTracking?.let { toggleTracking ->
                         Box(
                             modifier = Modifier

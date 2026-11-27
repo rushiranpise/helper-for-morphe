@@ -346,6 +346,17 @@ internal class DownloadService : Service() {
     // so the final notification always matches reality.
     private val mainHandler = Handler(Looper.getMainLooper())
     private val stateRefreshRunnable = Runnable { refreshProgressNotification() }
+    private val pausedRefreshRunnable = Runnable {
+        if (paused && notifCopied != notifPostedCopied) {
+            notifPostedCopied = notifCopied
+            lastPostedPercent = latestPercent
+            lastNotifyTime = SystemClock.elapsedRealtime()
+            val job = DownloadJobManager.activeJob
+            if (job != null) {
+                notifySafe(NOTIFICATION_ID_PROGRESS, buildProgressNotification(job.candidate, latestPercent))
+            }
+        }
+    }
     private var lastNotifyTime = 0L
 
     private val browserUserAgent: String by lazy {
@@ -944,6 +955,7 @@ internal class DownloadService : Service() {
 
     private fun stopNotificationRefresh() {
         mainHandler.removeCallbacks(stateRefreshRunnable)
+        mainHandler.removeCallbacks(pausedRefreshRunnable)
     }
 
     @Synchronized
@@ -1171,6 +1183,11 @@ internal class DownloadService : Service() {
                 lastPostedPercent = percent
                 lastNotifyTime = now
                 notifySafe(NOTIFICATION_ID_PROGRESS, buildProgressNotification(candidate, percent))
+            } else if (copied != notifPostedCopied) {
+                // Throttled: schedule a trailing refresh when the 500 ms window expires.
+                val delayMs = 500L - sinceLastNotify
+                mainHandler.removeCallbacks(pausedRefreshRunnable)
+                mainHandler.postDelayed(pausedRefreshRunnable, delayMs)
             }
         } else if (
             sinceLastNotify >= 500L &&

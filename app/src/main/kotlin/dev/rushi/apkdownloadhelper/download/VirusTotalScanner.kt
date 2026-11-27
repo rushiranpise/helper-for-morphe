@@ -1152,6 +1152,7 @@ internal object VirusTotalScanner {
      */
     internal class ScanResultTypeAdapter :
         com.google.gson.JsonSerializer<ScanResult>, com.google.gson.JsonDeserializer<ScanResult> {
+
         override fun serialize(
             src: ScanResult,
             typeOfSrc: java.lang.reflect.Type,
@@ -1172,10 +1173,18 @@ internal object VirusTotalScanner {
             context: com.google.gson.JsonDeserializationContext
         ): ScanResult {
             val obj = json.asJsonObject
+
+            // Normalize missing or null sandboxMalwareNames to an empty array
+            // so Gson initializes it as an empty list instead of null,
+            // preserving any existing list so saved reports round-trip correctly.
+            if (!obj.has("sandboxMalwareNames") || obj.get("sandboxMalwareNames")?.isJsonNull == true) {
+                obj.add("sandboxMalwareNames", com.google.gson.JsonArray())
+            }
+
             return when (obj.get("kind")?.asString) {
-                "CLEAN" -> context.deserialize(json, ScanResult.Clean::class.java)
-                "MALICIOUS" -> context.deserialize(json, ScanResult.Malicious::class.java)
-                else -> context.deserialize(json, ScanResult.Error::class.java)
+                "CLEAN" -> context.deserialize(obj, ScanResult.Clean::class.java)
+                "MALICIOUS" -> context.deserialize(obj, ScanResult.Malicious::class.java)
+                else -> context.deserialize(obj, ScanResult.Error::class.java)
             }
         }
     }

@@ -69,6 +69,7 @@ internal fun HelperScreen(
     onOpenMorphe: () -> Unit,
     onOpenTracking: () -> Unit = {},
     hideTracking: Boolean = false,
+    onOpenStoredItem: (StoredApkCardItem) -> Unit = {},
     onSolveCaptcha: (DownloadCandidate) -> Unit,
     onFormatToggle: (String) -> Unit,
     onProceedAfterScan: () -> Unit,
@@ -96,7 +97,8 @@ internal fun HelperScreen(
                 onSettingsChange = onSettingsChange,
                 onOpenMorphe = onOpenMorphe,
                 onOpenTracking = onOpenTracking,
-                hideTracking = hideTracking
+                hideTracking = hideTracking,
+                onOpenStoredItem = onOpenStoredItem
             )
         } else {
             HelperRequestContent(

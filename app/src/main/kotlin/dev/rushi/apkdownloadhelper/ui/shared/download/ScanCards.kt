@@ -353,15 +353,15 @@ internal fun ScanResultCard(
 
         // 3. Connected 2x2 metric tiles (matching DownloadStatGrid)
         if (!isError && totalEngines > 0) {
-            val cleanEngines = (totalEngines - flagged).coerceAtLeast(0)
+            val notFlagged = (totalEngines - flagged).coerceAtLeast(0)
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
                     ReportStatTile(
-                        label = "Clean engines",
-                        value = "$cleanEngines / $totalEngines",
+                        label = "Not flagged",
+                        value = "$notFlagged / $totalEngines",
                         valueColor = if (isMalicious) colors.onSurface else tone.accent,
                         shape = connectedShape(topStart = true, topEnd = false, bottomStart = false, bottomEnd = false),
                         modifier = Modifier.weight(1f)

@@ -45,6 +45,8 @@ import dev.rushi.apkdownloadhelper.ui.shared.settings.SettingsItem
 import dev.rushi.apkdownloadhelper.ui.shared.source.SourceAvatar
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.hazeSourceIfEnabled
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 
 internal data class SettingsChoice(
     val icon: ImageVector?,
@@ -112,7 +114,8 @@ internal fun SettingsChoiceDialog(
                             },
                             title = choice.title,
                             subtitle = choice.description.takeIf { it.isNotBlank() },
-                            trailingContent = { SelectCircle(selected = index == selectedIndex) }
+                            trailingContent = { SelectCircle(selected = index == selectedIndex) },
+                            modifier = Modifier.semantics { selected = index == selectedIndex }
                         )
                     }
                 }

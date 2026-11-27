@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import dev.rushi.apkdownloadhelper.ui.theme.AppAnimations
+import androidx.compose.ui.semantics.clearAndSetSemantics
 
 internal class DialogEntry(
     content: @Composable () -> Unit,
@@ -69,7 +70,19 @@ internal fun DialogLayerHost(content: @Composable () -> Unit) {
     val layer = remember { DialogLayerState() }
     CompositionLocalProvider(LocalDialogLayer provides layer) {
         Box(Modifier.fillMaxSize()) {
-            content()
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .then(
+                        if (layer.entries.isNotEmpty()) {
+                            Modifier.clearAndSetSemantics { }
+                        } else {
+                            Modifier
+                        }
+                    )
+            ) {
+                content()
+            }
             layer.entries.toList().forEach { entry ->
                 key(entry) { DialogEntryHost(entry, layer) }
             }

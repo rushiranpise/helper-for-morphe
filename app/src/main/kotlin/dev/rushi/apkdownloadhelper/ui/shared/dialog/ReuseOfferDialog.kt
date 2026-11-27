@@ -69,7 +69,7 @@ internal fun ReuseOfferDialog(
         },
         text = {
             val scheme = MaterialTheme.colorScheme
-            var selectedIndex by remember { mutableIntStateOf(0) }
+            var selectedIndex by remember(options) { mutableIntStateOf(0) }
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)

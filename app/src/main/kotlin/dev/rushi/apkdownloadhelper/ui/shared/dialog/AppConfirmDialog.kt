@@ -28,6 +28,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import dev.rushi.apkdownloadhelper.ui.shared.button.DialogButton
 import dev.rushi.apkdownloadhelper.ui.shared.text.fittedTextAutoSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 
 /**
  * Icon circle pinned to the top edge, then title, message and two buttons centred on the page.
@@ -97,7 +99,10 @@ internal fun AppConfirmDialog(
                     style = MaterialTheme.typography.bodyLarge,
                     color = scheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState())
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
