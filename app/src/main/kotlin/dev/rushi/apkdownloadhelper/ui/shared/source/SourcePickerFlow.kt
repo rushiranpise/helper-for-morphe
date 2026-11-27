@@ -197,47 +197,6 @@ internal fun LazyListScope.sourcePickerItems(
 }
 
 @Composable
-internal fun SourcePickerDialog(state: SourcePickerState) {
-    if (!state.sourcesExpanded || state.groups.isEmpty()) return
-
-    AppAlertDialog(
-        onDismissRequest = { state.onSourcesExpandedChange(false) },
-        title = {
-            Text(
-                text = "Select download source",
-                fontWeight = FontWeight.Bold
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 420.dp)
-                    .verticalScroll(rememberScrollState())
-            ) {
-                SettingsGroup {
-                    state.groups.forEachIndexed { index, group ->
-                        val isSelected = index == state.currentPage
-                        SettingsItem(
-                            onClick = { state.onSelectPage(index) },
-                            leadingContent = {
-                                SourceAvatar(source = group.source, size = AppDefaults.IconSize)
-                            },
-                            title = group.source.label,
-                            subtitle = null,
-                            trailingContent = {
-                                SourceSelectCircle(selected = isSelected)
-                            }
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {}
-    )
-}
-
-@Composable
 private fun SourceSwitcherCard(
     currentGroup: SourceCandidateGroup,
     sourceCount: Int,
@@ -361,37 +320,6 @@ private fun SourceSwitcherCard(
                     color = scheme.onSurfaceVariant
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun SourceSelectCircle(selected: Boolean) {
-    val scheme = MaterialTheme.colorScheme
-    Box(
-        modifier = Modifier
-            .size(24.dp)
-            .clip(CircleShape)
-            .then(
-                if (selected) {
-                    Modifier.background(Color(0xFF22C55E))
-                } else {
-                    Modifier.border(
-                        width = 2.dp,
-                        color = scheme.onSurfaceVariant.copy(alpha = 0.5f),
-                        shape = CircleShape
-                    )
-                }
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        if (selected) {
-            Icon(
-                imageVector = Icons.Outlined.Check,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(16.dp)
-            )
         }
     }
 }

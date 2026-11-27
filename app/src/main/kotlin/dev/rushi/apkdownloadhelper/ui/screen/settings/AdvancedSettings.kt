@@ -1,18 +1,30 @@
 package dev.rushi.apkdownloadhelper.ui.screen.settings
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.rushi.apkdownloadhelper.R
 import dev.rushi.apkdownloadhelper.storage.*
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.AppDialogDefaults
 import dev.rushi.apkdownloadhelper.ui.shared.dialog.SettingsChoice
 import dev.rushi.apkdownloadhelper.ui.shared.dialog.SettingsChoiceDialog
-import dev.rushi.apkdownloadhelper.ui.shared.selection.RadioDot
-import dev.rushi.apkdownloadhelper.ui.shared.settings.ApiKeyEditor
+import dev.rushi.apkdownloadhelper.ui.shared.settings.VirusTotalApiKeyDialog
 import dev.rushi.apkdownloadhelper.ui.shared.settings.SettingsGroup
 import dev.rushi.apkdownloadhelper.ui.shared.settings.SettingsItem
 import dev.rushi.apkdownloadhelper.ui.shared.settings.SettingsSection
@@ -29,7 +41,10 @@ internal fun AdvancedTabContent(
     onSettingsChange: (HelperSettings) -> Unit
 ) {
     var policyDialog by remember { mutableStateOf(false) }
+    var scanModeDialog by remember { mutableStateOf(false) }
+    var apiKeyDialog by remember { mutableStateOf(false) }
     val policies = NetworkPolicy.entries
+    val scanModes = VirusTotalScanMode.entries
 
     if (policyDialog) {
         SettingsChoiceDialog(
@@ -41,6 +56,40 @@ internal fun AdvancedTabContent(
                 policyDialog = false
             },
             onDismiss = { policyDialog = false }
+        )
+    }
+
+    if (scanModeDialog) {
+        SettingsChoiceDialog(
+            title = "Scan mode",
+            choices = scanModes.map { mode ->
+                SettingsChoice(
+                    icon = when (mode) {
+                        VirusTotalScanMode.NEVER -> Icons.Outlined.Block
+                        VirusTotalScanMode.ASK -> Icons.Outlined.HelpOutline
+                        VirusTotalScanMode.ALWAYS -> Icons.Outlined.CheckCircle
+                    },
+                    title = mode.title,
+                    description = mode.description
+                )
+            },
+            selectedIndex = scanModes.indexOf(settings.virusTotalScanMode),
+            onSelect = { index ->
+                onSettingsChange(settings.copy(virusTotalScanMode = scanModes[index]))
+                scanModeDialog = false
+            },
+            onDismiss = { scanModeDialog = false }
+        )
+    }
+
+    if (apiKeyDialog) {
+        VirusTotalApiKeyDialog(
+            initialApiKey = settings.virusTotalApiKey,
+            onSave = { newKey ->
+                onSettingsChange(settings.copy(virusTotalApiKey = newKey))
+                apiKeyDialog = false
+            },
+            onDismiss = { apiKeyDialog = false }
         )
     }
 
@@ -83,35 +132,83 @@ internal fun AdvancedTabContent(
                     checked = settings.virusTotalEnabled,
                     onToggle = { onSettingsChange(settings.copy(virusTotalEnabled = !settings.virusTotalEnabled)) }
                 )
-                if (settings.virusTotalEnabled) {
-                    VirusTotalScanMode.entries.forEach { mode ->
+
+                AnimatedVisibility(
+                    visible = settings.virusTotalEnabled,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    val hasApiKey = settings.virusTotalApiKey.isNotBlank()
+                    Column {
                         SettingsItem(
-                            icon = when (mode) {
+                            icon = Icons.Outlined.Key,
+                            title = "API key",
+                            subtitle = if (hasApiKey) {
+                                "${settings.virusTotalApiKey.take(4)} • • • • • • • •"
+                            } else {
+                                "Get free API key and enter here."
+                            },
+                            onClick = { apiKeyDialog = true },
+                            trailingContent = {
+                                ApiKeyStatusCircle(configured = hasApiKey)
+                            }
+                        )
+                        SettingsItem(
+                            icon = when (settings.virusTotalScanMode) {
                                 VirusTotalScanMode.NEVER -> Icons.Outlined.Block
                                 VirusTotalScanMode.ASK -> Icons.Outlined.HelpOutline
                                 VirusTotalScanMode.ALWAYS -> Icons.Outlined.CheckCircle
                             },
-                            title = mode.title,
-                            subtitle = mode.description,
-                            onClick = { onSettingsChange(settings.copy(virusTotalScanMode = mode)) },
-                            trailingContent = { RadioDot(selected = settings.virusTotalScanMode == mode) }
+                            title = "Scan mode",
+                            subtitle = settings.virusTotalScanMode.description,
+                            onClick = { scanModeDialog = true },
+                            trailingContent = { SettingsValueText(settings.virusTotalScanMode.title) }
                         )
-                    }
-                    ApiKeyEditor(apiKey = settings.virusTotalApiKey, onApiKeyChange = { onSettingsChange(settings.copy(virusTotalApiKey = it)) })
-                    if (settings.virusTotalScanMode != VirusTotalScanMode.NEVER) {
-                        SettingsSwitchItem(
-                            icon = Icons.Outlined.Verified,
-                            title = "Proceed automatically when clean",
-                            subtitle = "Hand off without showing the result when VirusTotal finds nothing.",
-                            checked = settings.virusTotalAutoProceed,
-                            onToggle = { onSettingsChange(settings.copy(virusTotalAutoProceed = !settings.virusTotalAutoProceed)) }
-                        )
-                    }
-                    if (settings.virusTotalApiKey.isNotBlank()) {
-                        Box(modifier = Modifier.padding(16.dp)) { VirusTotalQuotaCard(apiKey = settings.virusTotalApiKey) }
+                        AnimatedVisibility(
+                            visible = settings.virusTotalScanMode != VirusTotalScanMode.NEVER,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut()
+                        ) {
+                            SettingsSwitchItem(
+                                icon = Icons.Outlined.Verified,
+                                title = "Proceed automatically when clean",
+                                subtitle = "Hand off without showing the result when VirusTotal finds nothing.",
+                                checked = settings.virusTotalAutoProceed,
+                                onToggle = { onSettingsChange(settings.copy(virusTotalAutoProceed = !settings.virusTotalAutoProceed)) }
+                            )
+                        }
+                        AnimatedVisibility(
+                            visible = hasApiKey,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut()
+                        ) {
+                            VirusTotalQuotaCard(apiKey = settings.virusTotalApiKey)
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ApiKeyStatusCircle(configured: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .size(AppDialogDefaults.SelectCircleSize)
+            .clip(CircleShape)
+            .background(
+                if (configured) Color(0xFF22C55E)
+                else scheme.surfaceVariant.copy(alpha = 0.65f)
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = if (configured) Icons.Outlined.Check else Icons.Outlined.Remove,
+            contentDescription = if (configured) "API key configured" else "API key not set",
+            tint = if (configured) Color.White else scheme.onSurfaceVariant.copy(alpha = 0.7f),
+            modifier = Modifier.size(AppDialogDefaults.SelectCheckSize)
+        )
     }
 }

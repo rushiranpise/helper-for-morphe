@@ -52,6 +52,9 @@ internal object VirusTotalScanner {
 
     sealed interface ScanResult {
         val sha256: String?
+        val sha1: String?
+        val md5: String?
+        val meaningfulName: String?
         val fileName: String
         val typeDescription: String?
         val sizeBytes: Long?
@@ -59,6 +62,9 @@ internal object VirusTotalScanner {
         val firstSubmissionDate: Long?
         val lastAnalysisDate: Long?
         val reputation: Int?
+        val votesHarmless: Int
+        val votesMalicious: Int
+        val sandboxMalwareNames: List<String>
         /**
          * True when the verdict came from a report VirusTotal already had on
          * file (no upload); false when the file was freshly uploaded and
@@ -73,6 +79,9 @@ internal object VirusTotalScanner {
 
         data class Clean(
             override val sha256: String?,
+            override val sha1: String? = null,
+            override val md5: String? = null,
+            override val meaningfulName: String? = null,
             override val fileName: String,
             override val typeDescription: String?,
             override val sizeBytes: Long?,
@@ -81,8 +90,9 @@ internal object VirusTotalScanner {
             override val lastAnalysisDate: Long?,
             override val reputation: Int?,
             val totalEngines: Int,
-            val votesHarmless: Int,
-            val votesMalicious: Int,
+            override val votesHarmless: Int = 0,
+            override val votesMalicious: Int = 0,
+            override val sandboxMalwareNames: List<String> = emptyList(),
             override val cached: Boolean = false,
             // Set when a XAPK/APKS/APKM bundle was scanned: how many inner
             // APKs were scanned and the bundle's file name.
@@ -93,6 +103,9 @@ internal object VirusTotalScanner {
 
         data class Malicious(
             override val sha256: String?,
+            override val sha1: String? = null,
+            override val md5: String? = null,
+            override val meaningfulName: String? = null,
             override val fileName: String,
             override val typeDescription: String?,
             override val sizeBytes: Long?,
@@ -105,7 +118,9 @@ internal object VirusTotalScanner {
             val totalEngines: Int,
             val engines: List<EngineDetection>,
             val suggestedThreatLabel: String?,
-            val sandboxMalwareNames: List<String>,
+            override val sandboxMalwareNames: List<String> = emptyList(),
+            override val votesHarmless: Int = 0,
+            override val votesMalicious: Int = 0,
             override val cached: Boolean = false,
             // Set when a XAPK/APKS/APKM bundle was scanned: how many inner
             // APKs were scanned, how many were flagged, and the bundle name.
@@ -118,6 +133,9 @@ internal object VirusTotalScanner {
 
         data class Error(val message: String) : ScanResult {
             override val sha256: String? get() = null
+            override val sha1: String? get() = null
+            override val md5: String? get() = null
+            override val meaningfulName: String? get() = null
             override val fileName: String get() = ""
             override val typeDescription: String? get() = null
             override val sizeBytes: Long? get() = null
@@ -125,6 +143,9 @@ internal object VirusTotalScanner {
             override val firstSubmissionDate: Long? get() = null
             override val lastAnalysisDate: Long? get() = null
             override val reputation: Int? get() = null
+            override val votesHarmless: Int get() = 0
+            override val votesMalicious: Int get() = 0
+            override val sandboxMalwareNames: List<String> get() = emptyList()
             override val cached: Boolean get() = false
             override val scannedFiles: Int? get() = null
             override val bundleName: String? get() = null
@@ -574,6 +595,9 @@ internal object VirusTotalScanner {
         return firstClean.copy(
             fileName = bundleName,
             sha256 = null,
+            sha1 = null,
+            md5 = null,
+            meaningfulName = null,
             typeDescription = null,
             sizeBytes = null,
             timesSubmitted = null,
@@ -583,6 +607,7 @@ internal object VirusTotalScanner {
             totalEngines = totalEngines,
             votesHarmless = 0,
             votesMalicious = 0,
+            sandboxMalwareNames = emptyList(),
             cached = results.all { it.first.cached },
             scannedFiles = total,
             bundleName = bundleName,
@@ -977,6 +1002,9 @@ internal object VirusTotalScanner {
         return if (malicious + suspicious > 0) {
             ScanResult.Malicious(
                 sha256 = attrs.sha256 ?: report.data?.id,
+                sha1 = attrs.sha1,
+                md5 = attrs.md5,
+                meaningfulName = attrs.meaningfulName,
                 fileName = fileName,
                 typeDescription = attrs.typeDescription,
                 sizeBytes = attrs.size,
@@ -987,6 +1015,8 @@ internal object VirusTotalScanner {
                 engines = engineHits,
                 suggestedThreatLabel = suggestedLabel(engineHits, attrs),
                 sandboxMalwareNames = attrs.sandboxMalwareNames(),
+                votesHarmless = attrs.totalVotes?.harmless ?: 0,
+                votesMalicious = attrs.totalVotes?.malicious ?: 0,
                 firstSubmissionDate = attrs.firstSubmissionDate,
                 lastAnalysisDate = attrs.lastAnalysisDate,
                 reputation = attrs.reputation,
@@ -996,6 +1026,9 @@ internal object VirusTotalScanner {
         } else {
             ScanResult.Clean(
                 sha256 = attrs.sha256 ?: report.data?.id,
+                sha1 = attrs.sha1,
+                md5 = attrs.md5,
+                meaningfulName = attrs.meaningfulName,
                 fileName = fileName,
                 typeDescription = attrs.typeDescription,
                 sizeBytes = attrs.size,
@@ -1006,6 +1039,7 @@ internal object VirusTotalScanner {
                 reputation = attrs.reputation,
                 votesHarmless = attrs.totalVotes?.harmless ?: 0,
                 votesMalicious = attrs.totalVotes?.malicious ?: 0,
+                sandboxMalwareNames = attrs.sandboxMalwareNames(),
                 // The report came from VirusTotal's database, not a new upload.
                 cached = true
             )
@@ -1029,6 +1063,8 @@ internal object VirusTotalScanner {
         return if (malicious + suspicious > 0) {
             ScanResult.Malicious(
                 sha256 = fileInfo?.sha256,
+                sha1 = fileInfo?.sha1,
+                md5 = fileInfo?.md5,
                 fileName = fileName,
                 typeDescription = fileInfo?.typeDescription,
                 sizeBytes = fileInfo?.size,
@@ -1048,6 +1084,8 @@ internal object VirusTotalScanner {
         } else {
             ScanResult.Clean(
                 sha256 = fileInfo?.sha256,
+                sha1 = fileInfo?.sha1,
+                md5 = fileInfo?.md5,
                 fileName = fileName,
                 typeDescription = fileInfo?.typeDescription,
                 sizeBytes = fileInfo?.size,
@@ -1200,6 +1238,8 @@ internal object VirusTotalScanner {
 
     private data class FileInfo(
         val sha256: String?,
+        val sha1: String?,
+        val md5: String?,
         val size: Long?,
         @SerializedName("type_description")
         val typeDescription: String?,
@@ -1218,6 +1258,10 @@ internal object VirusTotalScanner {
 
     private data class FileReportAttributes(
         val sha256: String?,
+        val sha1: String?,
+        val md5: String?,
+        @SerializedName("meaningful_name")
+        val meaningfulName: String?,
         @SerializedName("type_description")
         val typeDescription: String?,
         val size: Long?,
@@ -1235,7 +1279,9 @@ internal object VirusTotalScanner {
         @SerializedName("last_analysis_results")
         val lastAnalysisResults: Map<String, EngineResult>?,
         @SerializedName("sandbox_verdicts")
-        val sandboxVerdicts: Map<String, SandboxVerdict>?
+        val sandboxVerdicts: Map<String, SandboxVerdict>?,
+        @SerializedName("signature_info")
+        val signatureInfo: Map<String, Any>?
     )
 
     private data class TotalVotes(

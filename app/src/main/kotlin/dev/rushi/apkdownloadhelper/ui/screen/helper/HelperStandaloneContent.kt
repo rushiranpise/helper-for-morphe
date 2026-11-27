@@ -206,27 +206,23 @@ internal fun HelperStandaloneContent(
             },
             text = { Text("Delete ${target.fileName} from storage?") },
             confirmButton = {
-                val deleteInteraction = remember { MutableInteractionSource() }
-                androidx.compose.material3.TextButton(
+                dev.rushi.apkdownloadhelper.ui.shared.button.DialogButton(
+                    text = "Delete",
                     onClick = {
                         entryToDelete = null
                         deleteStoredEntry(target)
                     },
-                    interactionSource = deleteInteraction,
-                    modifier = Modifier.pressScale(deleteInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
-                }
+                    isDestructive = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
             },
             dismissButton = {
-                val cancelInteraction = remember { MutableInteractionSource() }
-                androidx.compose.material3.TextButton(
+                dev.rushi.apkdownloadhelper.ui.shared.button.DialogButton(
+                    text = "Cancel",
                     onClick = { entryToDelete = null },
-                    interactionSource = cancelInteraction,
-                    modifier = Modifier.pressScale(cancelInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
-                ) {
-                    Text("Cancel")
-                }
+                    filled = false,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         )
     }

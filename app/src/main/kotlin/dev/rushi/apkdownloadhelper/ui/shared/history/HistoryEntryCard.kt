@@ -184,9 +184,10 @@ internal fun HistoryEntryCard(
             title = stringResource(R.string.scan_result),
             onDismiss = { showScanResult = false },
             actions = {
-                HelperButton(
+                dev.rushi.apkdownloadhelper.ui.shared.button.DialogButton(
                     text = "Close",
                     onClick = { showScanResult = false },
+                    buttonColor = dev.rushi.apkdownloadhelper.ui.shared.dialog.AppDialogDefaults.confirmButtonContainer(),
                     modifier = Modifier.fillMaxWidth()
                 )
             }

@@ -1,5 +1,9 @@
 package dev.rushi.apkdownloadhelper.ui.shared.download
 
+import androidx.activity.compose.BackHandler
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.CancelDownloadDialog
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.SettingsChoiceDialog
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.toSettingsChoice
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,30 +13,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Download
-import androidx.compose.material.icons.outlined.Layers
-import androidx.compose.material.icons.outlined.Pause
-import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Shield
-import androidx.compose.material.icons.outlined.Speed
-import androidx.compose.material.icons.outlined.Storage
-import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material.icons.outlined.Warning
-import androidx.compose.material3.Icon
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shape
 import dev.rushi.apkdownloadhelper.ui.shared.text.fittedTextAutoSize
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -55,8 +42,6 @@ import dev.rushi.apkdownloadhelper.HelperButton
 import dev.rushi.apkdownloadhelper.HelperOutlinedButton
 import dev.rushi.apkdownloadhelper.R
 import dev.rushi.apkdownloadhelper.storage.FastModePolicy
-import dev.rushi.apkdownloadhelper.ui.shared.button.IconActionButton
-import dev.rushi.apkdownloadhelper.ui.shared.button.SkipWaitButton
 import dev.rushi.apkdownloadhelper.ui.shared.card.SurfaceCard
 import dev.rushi.apkdownloadhelper.ui.shared.chip.StatusBadge
 import dev.rushi.apkdownloadhelper.ui.shared.dialog.AppAlertDialog
@@ -68,9 +53,8 @@ import dev.rushi.apkdownloadhelper.ui.model.DownloadSource
 import dev.rushi.apkdownloadhelper.ui.model.FastModeProgress
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.SemanticTone
-import dev.rushi.apkdownloadhelper.ui.util.formatBytes
-import dev.rushi.apkdownloadhelper.ui.util.formatTransferEta
-import dev.rushi.apkdownloadhelper.ui.util.formatTransferSpeed
+import dev.rushi.apkdownloadhelper.ui.shared.button.DialogButton
+import dev.rushi.apkdownloadhelper.ui.shared.button.IconActionButton
 
 @Composable
 internal fun FastModeCard(
@@ -95,16 +79,33 @@ internal fun FastModeCard(
     var showCancelConfirm by remember { mutableStateOf(false) }
     val isDirectFastMode = progress.title == null
     val showingTransfer = progress.percent != null && !progress.done &&
-        !progress.awaitingDecision && !progress.awaitingVersionChoice
+            !progress.awaitingDecision && !progress.awaitingVersionChoice
+
+    // Same branch that shows the "Cancel" pill while Fast Mode is checking
+    // sources. Back now does exactly what tapping Cancel does: open the
+    // "Stop…?" confirmation first, and only leave after the user confirms.
+    // (The transfer state has its own BackHandler in DownloadTransferBody.)
+    BackHandler(
+        enabled = !progress.done &&
+                !showingTransfer &&
+                !progress.awaitingDecision &&
+                !progress.awaitingVersionChoice &&
+                !showCancelConfirm
+    ) {
+        showCancelConfirm = true
+    }
 
     if (showCancelConfirm) {
         CancelDownloadDialog(
-            title = if (progress.percent != null) "Stop download?" else "Stop ${progress.title ?: "Fast Mode"}?",
+            title = if (progress.percent != null) "Stop download?" else "Cancel ${progress.title ?: "Fast Mode"}?",
             message = if (progress.percent != null) {
                 "The current download progress will be discarded."
             } else {
                 "The active source search will be stopped."
             },
+            // Searching sources is cancelled, not "stopped"; a real download keeps "Stop".
+            confirmLabel = if (progress.percent != null) "Stop" else "Cancel",
+            confirmDestructive = progress.percent != null,
             onKeepDownloading = { showCancelConfirm = false },
             onConfirmStop = {
                 showCancelConfirm = false
@@ -114,41 +115,32 @@ internal fun FastModeCard(
     }
 
     if (showSwitch) {
-        AppAlertDialog(
-            onDismissRequest = {
-                showSwitch = false
-                if (resumeOnDismiss) onResume()
-                resumeOnDismiss = false
-            },
-            title = { Text("Switch source") },
-            text = {
-                Column {
-                    availableSources
-                        .filter { it.label != progress.sourceLabel }
-                        .forEach { source ->
-                            TextButton(
-                                onClick = {
-                                    showSwitch = false
-                                    resumeOnDismiss = false
-                                    onSwitchSource(source)
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(source.label)
-                            }
-                        }
+        val closeSwitch = {
+            showSwitch = false
+            if (resumeOnDismiss) onResume()
+            resumeOnDismiss = false
+        }
+        // Morphe Link is always offered, first in the list like the Default source picker
+        val switchSources = remember(availableSources) {
+            if (DownloadSource.MORPHE_LINK in availableSources) availableSources
+            else listOf(DownloadSource.MORPHE_LINK) + availableSources
+        }
+        SettingsChoiceDialog(
+            title = "Switch source",
+            choices = switchSources.map { it.toSettingsChoice() },
+            // The source that is running right now comes pre-selected
+            selectedIndex = switchSources.indexOfFirst { it.label == progress.sourceLabel },
+            onSelect = { index ->
+                val source = switchSources[index]
+                if (source.label == progress.sourceLabel) {
+                    closeSwitch()
+                } else {
+                    showSwitch = false
+                    resumeOnDismiss = false
+                    onSwitchSource(source)
                 }
             },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showSwitch = false
-                        if (resumeOnDismiss) onResume()
-                        resumeOnDismiss = false
-                    }
-                ) { Text("Cancel") }
-            }
+            onDismiss = closeSwitch
         )
     }
 

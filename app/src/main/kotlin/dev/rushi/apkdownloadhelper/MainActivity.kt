@@ -139,6 +139,7 @@ import dev.rushi.apkdownloadhelper.ui.shared.layout.PushedScreen
 import dev.rushi.apkdownloadhelper.ui.theme.AppTypography
 import dev.rushi.apkdownloadhelper.ui.model.ResolveOutcome
 import dev.rushi.apkdownloadhelper.ui.model.ResolveState
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.DialogLayerHost
 import dev.rushi.apkdownloadhelper.ui.shared.dialog.ReuseOfferDialog
 import dev.rushi.apkdownloadhelper.ui.shared.dialog.ReuseOption
 import dev.rushi.apkdownloadhelper.ui.screen.settings.SettingsCategory
@@ -570,6 +571,7 @@ class MainActivity : ComponentActivity() {
                 accentColorHex = helperSettings.customAccentColor,
                 blurEnabled = helperSettings.blurEffects
             ) {
+              DialogLayerHost {
                 Box(modifier = Modifier.fillMaxSize()) {
                     val captcha = captchaBrowser
                     if (captcha != null) {
@@ -890,6 +892,7 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 }
+              }
             }
         }
     }

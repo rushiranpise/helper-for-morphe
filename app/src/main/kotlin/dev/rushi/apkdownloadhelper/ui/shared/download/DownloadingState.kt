@@ -43,6 +43,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.CancelDownloadDialog
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -545,106 +546,5 @@ internal fun DownloadPillButton(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-    }
-}
-
-@Composable
-internal fun CancelDownloadDialog(
-    title: String = "Stop download?",
-    message: String = "The current download progress will be discarded.",
-    onKeepDownloading: () -> Unit,
-    onConfirmStop: () -> Unit
-) {
-    val scheme = MaterialTheme.colorScheme
-    Dialog(
-        onDismissRequest = onKeepDownloading,
-        properties = AppDialogProperties
-    ) {
-        DialogSurface(modifier = Modifier.fillMaxWidth(0.90f)) {
-            Column(
-                modifier = Modifier.padding(DialogContentPadding),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(scheme.errorContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Close,
-                            contentDescription = null,
-                            tint = scheme.onErrorContainer,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = scheme.onSurface
-                    )
-                }
-
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = scheme.onSurfaceVariant
-                )
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val primaryColor = MaterialTheme.colorScheme.primary
-                    val keepInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                    Button(
-                        onClick = onKeepDownloading,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .pressScale(keepInteraction),
-                        interactionSource = keepInteraction,
-                        shape = rememberMorphePillShape(keepInteraction),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = primaryColor.copy(alpha = 0.28f),
-                            contentColor = MaterialTheme.colorScheme.onSurface
-                        )
-                    ) {
-                        Text(
-                            text = "Keep downloading",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    val stopInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                    Button(
-                        onClick = onConfirmStop,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .pressScale(stopInteraction),
-                        interactionSource = stopInteraction,
-                        shape = rememberMorphePillShape(stopInteraction),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = scheme.errorContainer.copy(alpha = 0.85f),
-                            contentColor = scheme.onErrorContainer
-                        )
-                    ) {
-                        Text(
-                            text = "Stop",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-        }
     }
 }

@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.AppDialogDefaults
 import dev.rushi.apkdownloadhelper.ui.shared.shape.rememberPressShape
 import dev.rushi.apkdownloadhelper.ui.shared.text.fittedTextAutoSize
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
@@ -40,7 +41,9 @@ internal fun DialogButton(
     icon: ImageVector? = null,
     isDestructive: Boolean = false,
     filled: Boolean = true,
-    textSuffix: String? = null
+    textSuffix: String? = null,
+    buttonColor: Color = AppDialogDefaults.defaultButtonContainer(),
+    buttonContentColor: Color = MaterialTheme.colorScheme.onSurface
 ) {
     val textColor = MaterialTheme.colorScheme.onSurface
     val isDark = !textColor.isDarkColor()
@@ -48,22 +51,15 @@ internal fun DialogButton(
     val destructiveDark = Color(0xFFFF6B6B)
     val destructiveLight = Color(0xFFD32F2F)
 
-    val containerColor = when {
-        isDestructive && filled -> Color.Red.copy(alpha = if (isDark) 0.25f else 0.2f)
-        isDestructive -> Color.Transparent
-        filled -> primaryColor.copy(alpha = if (isDark) 0.3f else 0.25f)
-        else -> Color.Transparent
-    }
+    // Same fill as the Pause / Resume pills. Destructive only recolours the text.
+    val containerColor =
+        if (filled) buttonColor else Color.Transparent
     val contentColor = when {
         isDestructive -> if (isDark) destructiveDark else destructiveLight
-        filled -> textColor
+        filled -> buttonContentColor
         else -> textColor.copy(alpha = 0.85f)
     }
-    val borderColor = when {
-        isDestructive -> Color.Red.copy(alpha = if (isDark) 0.4f else 0.35f)
-        filled -> primaryColor.copy(alpha = if (isDark) 0.5f else 0.4f)
-        else -> primaryColor.copy(alpha = if (isDark) 0.3f else 0.25f)
-    }
+    val borderColor = primaryColor.copy(alpha = if (isDark) 0.3f else 0.25f)
 
     val interactionSource = remember { MutableInteractionSource() }
     val buttonModifier = modifier
@@ -115,7 +111,7 @@ internal fun DialogButton(
                 disabledContainerColor = containerColor.copy(alpha = 0.5f),
                 disabledContentColor = contentColor.copy(alpha = 0.5f)
             ),
-            border = border,
+            border = null,
             contentPadding = contentPadding,
             content = content
         )

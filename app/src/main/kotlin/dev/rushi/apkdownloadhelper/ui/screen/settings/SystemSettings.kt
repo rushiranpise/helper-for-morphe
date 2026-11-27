@@ -179,8 +179,8 @@ internal fun SystemTabContent(
                 }
             },
             confirmButton = {
-                val deleteInteraction = remember { MutableInteractionSource() }
-                TextButton(
+                dev.rushi.apkdownloadhelper.ui.shared.button.DialogButton(
+                    text = "Delete",
                     onClick = {
                         showClearStorageDialog = false
                         scope.launch {
@@ -193,21 +193,17 @@ internal fun SystemTabContent(
                             ).show()
                         }
                     },
-                    interactionSource = deleteInteraction,
-                    modifier = Modifier.pressScale(deleteInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
-                }
+                    isDestructive = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
             },
             dismissButton = {
-                val cancelInteraction = remember { MutableInteractionSource() }
-                TextButton(
+                dev.rushi.apkdownloadhelper.ui.shared.button.DialogButton(
+                    text = "Cancel",
                     onClick = { showClearStorageDialog = false },
-                    interactionSource = cancelInteraction,
-                    modifier = Modifier.pressScale(cancelInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
-                ) {
-                    Text("Cancel")
-                }
+                    filled = false,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         )
     }

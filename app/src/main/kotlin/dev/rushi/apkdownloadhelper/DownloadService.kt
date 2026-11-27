@@ -18,6 +18,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.os.IBinder
 import android.os.SystemClock
 import android.provider.MediaStore
@@ -327,13 +329,32 @@ internal class DownloadService : Service() {
     @Volatile private var transferInProgress = false
     @Volatile private var currentConnections = 1
 
+    private enum class NotifPhase {
+        DOWNLOADING,
+        SCAN_ASK,
+        SCANNING,
+        SCAN_COMPLETE,
+        POST_DOWNLOAD
+    }
+    @Volatile private var notifPhase = NotifPhase.DOWNLOADING
+
+    // Android silently DROPS notification updates posted too quickly (per-app
+    // enqueue rate limit). A Pause/Resume update landing right after a progress
+    // update was being shed, leaving the shade on "Downloading…" with the
+    // animated status-bar icon even though the transfer was paused. State
+    // changes are therefore re-posted shortly afterwards from the current state,
+    // so the final notification always matches reality.
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val stateRefreshRunnable = Runnable { refreshProgressNotification() }
+    private var lastNotifyTime = 0L
+
     private val browserUserAgent: String by lazy {
         runCatching {
             android.webkit.WebSettings.getDefaultUserAgent(this)
         }.getOrNull() ?: (
-            "Mozilla/5.0 (Linux; Android ${Build.VERSION.RELEASE}; ${Build.MODEL}) AppleWebKit/537.36 " +
-                "(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
-        )
+                "Mozilla/5.0 (Linux; Android ${Build.VERSION.RELEASE}; ${Build.MODEL}) AppleWebKit/537.36 " +
+                        "(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+                )
     }
 
     private val client = OkHttpClient.Builder()
@@ -498,6 +519,7 @@ internal class DownloadService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        mainHandler.removeCallbacksAndMessages(null)
         serviceScope.cancel()
     }
 
@@ -520,7 +542,10 @@ internal class DownloadService : Service() {
         speedSamples = 0
         paused = false
         transferInProgress = true
+        notifPhase = NotifPhase.DOWNLOADING
         currentConnections = 1
+        lastNotifyTime = 0L
+        stopNotificationRefresh()
         val notification = buildProgressNotification(candidate, 0)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
@@ -553,6 +578,7 @@ internal class DownloadService : Service() {
                         }
                         VirusTotalScanMode.ASK -> {
                             // Emit event, store file, wait for user decision.
+                            notifPhase = NotifPhase.SCAN_ASK
                             DownloadJobManager.setPendingScan(DownloadJobManager.PendingScan.Ask(file))
                             DownloadJobManager.emit(
                                 DownloadJobManager.Event.ScanAsk(job.candidate)
@@ -562,7 +588,7 @@ internal class DownloadService : Service() {
                                 buildProgressNotification(
                                     job.candidate,
                                     100,
-                                    "Scan with VirusTotal?"
+                                    "Check ${job.candidate.name} before returning it to Morphe"
                                 )
                             )
                             // Don't call handleSuccess yet — wait for SCAN_PROCEED or SCAN_CANCEL.
@@ -630,6 +656,7 @@ internal class DownloadService : Service() {
         }
         transferInProgress = false
         paused = false
+        stopNotificationRefresh()
         emitPostDownloadStatus(
             candidate,
             if (lastShaVerified) "SHA-256 verified \u2713 \u00b7 validating file…" else "Validating downloaded file…"
@@ -664,6 +691,7 @@ internal class DownloadService : Service() {
     private fun handleSuccess(job: DownloadJobManager.DownloadJob, file: File) {
         paused = false
         transferInProgress = false
+        stopNotificationRefresh()
         val request = job.request
         val candidate = job.candidate
         val settings = job.settings
@@ -711,6 +739,7 @@ internal class DownloadService : Service() {
     private suspend fun scanAndHandoff(job: DownloadJobManager.DownloadJob, file: File) {
         paused = false
         transferInProgress = false
+        notifPhase = NotifPhase.SCANNING
         val candidate = job.candidate
         val settings = job.settings
         val apiKey = settings.virusTotalApiKey
@@ -746,49 +775,49 @@ internal class DownloadService : Service() {
                     DownloadJobManager.emit(
                         DownloadJobManager.Event.Scanning(candidate, status, shaVerified = lastShaVerified)
                     )
-            },
-            onPercent = { pct ->
-                run {
-                    val now = System.nanoTime()
-                    val elapsedSinceLast = now - lastEtaNanos
-                    val elapsedTotal = now - scanStartNanos
-                    var eta: Long? = null
-                    if (pct > 0 && pct < 100) {
-                        // Progress per nanosecond since the last tick → remaining.
-                        val progressed = pct - lastEtaPercent
-                        if (progressed > 0) {
-                            val ratePctPerMs = progressed.toDouble() / (elapsedSinceLast / 1_000_000.0)
-                            // Recompute from the total elapsed for a smoother estimate.
-                            val overallRate = pct.toDouble() / (elapsedTotal / 1_000_000.0)
-                            val effectiveRate = maxOf(ratePctPerMs, overallRate)
-                            if (effectiveRate > 0) {
-                                eta = ((100 - pct) / effectiveRate).toLong()
+                },
+                onPercent = { pct ->
+                    run {
+                        val now = System.nanoTime()
+                        val elapsedSinceLast = now - lastEtaNanos
+                        val elapsedTotal = now - scanStartNanos
+                        var eta: Long? = null
+                        if (pct > 0 && pct < 100) {
+                            // Progress per nanosecond since the last tick → remaining.
+                            val progressed = pct - lastEtaPercent
+                            if (progressed > 0) {
+                                val ratePctPerMs = progressed.toDouble() / (elapsedSinceLast / 1_000_000.0)
+                                // Recompute from the total elapsed for a smoother estimate.
+                                val overallRate = pct.toDouble() / (elapsedTotal / 1_000_000.0)
+                                val effectiveRate = maxOf(ratePctPerMs, overallRate)
+                                if (effectiveRate > 0) {
+                                    eta = ((100 - pct) / effectiveRate).toLong()
+                                }
                             }
+                            lastEtaPercent = pct
+                            lastEtaNanos = now
                         }
-                        lastEtaPercent = pct
-                        lastEtaNanos = now
+                        // Drive a real 0-100% bar through the scan phases (extraction,
+                        // per-APK hashing, report checks, upload, analysis poll) instead
+                        // of sitting on a static 100% from the download.
+                        DownloadJobManager.emit(
+                            DownloadJobManager.Event.Scanning(candidate, scanStatus, percent = pct, etaMs = eta)
+                        )
+                        notifySafe(
+                            NOTIFICATION_ID_PROGRESS,
+                            buildProgressNotification(candidate, pct, scanStatus)
+                        )
                     }
-                    // Drive a real 0-100% bar through the scan phases (extraction,
-                    // per-APK hashing, report checks, upload, analysis poll) instead
-                    // of sitting on a static 100% from the download.
-                    DownloadJobManager.emit(
-                        DownloadJobManager.Event.Scanning(candidate, scanStatus, percent = pct, etaMs = eta)
-                    )
-                    notifySafe(
-                        NOTIFICATION_ID_PROGRESS,
-                        buildProgressNotification(candidate, pct, scanStatus)
-                    )
-                }
-            },
-            // Abort promptly when the user cancels OR skips the scan: the
-            // scanner checks this between per-APK lookups and during rate-limit
-            // pauses, so a cancel lands within a second instead of after a 12s
-            // sleep. ACTION_CANCEL flips scanAbortRequested; ACTION_SCAN_SKIP
-            // flips skipScanRequested. Never derive this from downloadJob.
-            // isActive — in ASK mode the scan runs in a fresh serviceScope
-            // .launch after the download job completed, so downloadJob.isActive
-            // is false and the scan would abort on its very first check.
-            checkCancelled = { scanAbortRequested || skipScanRequested }
+                },
+                // Abort promptly when the user cancels OR skips the scan: the
+                // scanner checks this between per-APK lookups and during rate-limit
+                // pauses, so a cancel lands within a second instead of after a 12s
+                // sleep. ACTION_CANCEL flips scanAbortRequested; ACTION_SCAN_SKIP
+                // flips skipScanRequested. Never derive this from downloadJob.
+                // isActive — in ASK mode the scan runs in a fresh serviceScope
+                // .launch after the download job completed, so downloadJob.isActive
+                // is false and the scan would abort on its very first check.
+                checkCancelled = { scanAbortRequested || skipScanRequested }
             )
         } catch (error: CancellationException) {
             if (skipScanRequested) {
@@ -848,10 +877,12 @@ internal class DownloadService : Service() {
                 result = scanResult
             )
         }
+        notifPhase = NotifPhase.SCAN_COMPLETE
+        val verdictSummary = lastScanVerdict?.label ?: "Scan complete"
         DownloadJobManager.setPendingScan(DownloadJobManager.PendingScan.Decided(file))
         notifySafe(
             NOTIFICATION_ID_PROGRESS,
-            buildProgressNotification(candidate, 100, "Scan complete — open the app to continue")
+            buildProgressNotification(candidate, 100, verdictSummary)
         )
     }
 
@@ -860,6 +891,7 @@ internal class DownloadService : Service() {
         Log.w(TAG, "Download failed for ${job.candidate.packageName}", error)
         paused = false
         transferInProgress = false
+        stopNotificationRefresh()
         DownloadJobManager.emit(DownloadJobManager.Event.Failed(job.candidate, message, job.epoch))
         notifyFailure(job, message)
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -869,6 +901,7 @@ internal class DownloadService : Service() {
     private fun handleCancelled(job: DownloadJobManager.DownloadJob) {
         paused = false
         transferInProgress = false
+        stopNotificationRefresh()
         DownloadJobManager.emit(DownloadJobManager.Event.Cancelled(job.candidate, job.epoch))
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -879,11 +912,38 @@ internal class DownloadService : Service() {
         ScanVerdict(label = "Scan skipped — handed off unverified", scannedFiles = 0)
 
     private fun emitPostDownloadStatus(candidate: DownloadCandidate, status: String) {
+        notifPhase = NotifPhase.POST_DOWNLOAD
         DownloadJobManager.emit(DownloadJobManager.Event.PostDownloadStatus(candidate, status))
         notifySafe(
             NOTIFICATION_ID_PROGRESS,
             buildProgressNotification(candidate, 100, status)
         )
+    }
+
+    /** Rebuilds the progress notification from the CURRENT state and posts it. */
+    @Synchronized
+    private fun refreshProgressNotification() {
+        val job = DownloadJobManager.activeJob ?: return
+        // Never resurrect the notification after the transfer ended or the
+        // service stopped foreground.
+        if (!transferInProgress) return
+        lastNotifyTime = SystemClock.elapsedRealtime()
+        notifySafe(
+            NOTIFICATION_ID_PROGRESS,
+            buildProgressNotification(job.candidate, latestPercent)
+        )
+    }
+
+    /** Post a pause/resume change now, then re-post so a rate-limit drop cannot stick. */
+    private fun postStateNotification() {
+        refreshProgressNotification()
+        mainHandler.removeCallbacks(stateRefreshRunnable)
+        mainHandler.postDelayed(stateRefreshRunnable, 350L)
+        mainHandler.postDelayed(stateRefreshRunnable, 1200L)
+    }
+
+    private fun stopNotificationRefresh() {
+        mainHandler.removeCallbacks(stateRefreshRunnable)
     }
 
     @Synchronized
@@ -898,10 +958,7 @@ internal class DownloadService : Service() {
         DownloadJobManager.emit(
             DownloadJobManager.Event.Paused(job.candidate, true, job.epoch)
         )
-        notifySafe(
-            NOTIFICATION_ID_PROGRESS,
-            buildProgressNotification(job.candidate, latestPercent)
-        )
+        postStateNotification()
     }
 
     @Synchronized
@@ -914,10 +971,7 @@ internal class DownloadService : Service() {
         DownloadJobManager.emit(
             DownloadJobManager.Event.Paused(job.candidate, false, job.epoch)
         )
-        notifySafe(
-            NOTIFICATION_ID_PROGRESS,
-            buildProgressNotification(job.candidate, latestPercent)
-        )
+        postStateNotification()
     }
 
     private fun cancelDownload() {
@@ -925,6 +979,7 @@ internal class DownloadService : Service() {
         val job = DownloadJobManager.activeJob
         paused = false
         transferInProgress = false
+        stopNotificationRefresh()
         downloader.cancelCurrent()
         downloadJob?.cancel()
         scanAbortRequested = true
@@ -995,7 +1050,7 @@ internal class DownloadService : Service() {
         Log.e(TAG, "SHA-256 check FAILED for ${outputFile.name}: expected $expected, got $actual")
         throw IllegalStateException(
             "Downloaded file failed its SHA-256 check (expected $expected, got $actual). " +
-                "The file may have been modified in transit. Try the source's Manual mode."
+                    "The file may have been modified in transit. Try the source's Manual mode."
         )
     }
 
@@ -1085,15 +1140,6 @@ internal class DownloadService : Service() {
         latestPercent = percent
         notifCopied = copied
         notifTotal = total
-        if (paused && copied != notifPostedCopied) {
-            // A read already in flight can still advance after Pause. Repost the Paused
-            // notification so it shows exactly what the card shows.
-            notifPostedCopied = copied
-            notifySafe(
-                NOTIFICATION_ID_PROGRESS,
-                buildProgressNotification(candidate, ((copied * 100.0) / total).roundToInt().coerceIn(0, 100))
-            )
-        }
         val etaMs = if (currentSpeedBytesPerSec > 0.0) {
             ((total - copied) / currentSpeedBytesPerSec * 1000.0).toLong()
         } else null
@@ -1114,17 +1160,25 @@ internal class DownloadService : Service() {
         // would leave a stale ETA up for many seconds.
         // While paused, leave the Paused notification alone; a read that was
         // already in flight may still deliver one more progress callback.
+        // Throttled to ~2 posts/sec so the system never sheds a later (more
+        // important) Pause/Resume update.
+        val sinceLastNotify = now - lastNotifyTime
         if (paused) {
-            // A read already in flight can still advance the percent after Pause. Keep the
-            // Paused notification on the same number the card shows.
-            if (percent != lastPostedPercent) {
+            // A read already in flight can still advance after Pause. Keep the Paused
+            // notification on the same bytes the card shows, but don't spam it.
+            if (copied != notifPostedCopied && sinceLastNotify >= 500L) {
+                notifPostedCopied = copied
                 lastPostedPercent = percent
+                lastNotifyTime = now
                 notifySafe(NOTIFICATION_ID_PROGRESS, buildProgressNotification(candidate, percent))
             }
-        } else if (percent != lastPostedPercent || now - lastPostedTime >= 1000L) {
+        } else if (
+            sinceLastNotify >= 500L &&
+            (percent != lastPostedPercent || now - lastPostedTime >= 1000L)
+        ) {
             lastPostedPercent = percent
             lastPostedTime = now
-            val speed = formatSpeed(currentSpeedBytesPerSec)
+            lastNotifyTime = now
             notifySafe(NOTIFICATION_ID_PROGRESS, buildProgressNotification(candidate, percent))
         }
     }
@@ -1179,9 +1233,14 @@ internal class DownloadService : Service() {
         percent: Int,
         contentText: String? = null
     ): Notification {
+        val phase = notifPhase
         // While a transfer runs, show bytes (like a browser) instead of a percentage, so the
-        // text is exact and matches the card's "Downloaded" stat. Scan/handoff keep percent.
-        val showBytes = transferInProgress
+        // text is exact and matches the card's "Downloaded" stat.
+        val showBytes = transferInProgress && phase == NotifPhase.DOWNLOADING
+        // Only show a progress bar during active byte transfer or active VirusTotal scanning;
+        // once the download completes (Ask / Scan complete / Post-download), hide the progress bar.
+        val showProgressBar = !paused && (showBytes || phase == NotifPhase.SCANNING)
+
         val sizeLine = if (showBytes) {
             val sizes = if (notifTotal > 0L) {
                 "${formatSize(notifCopied)} / ${formatSize(notifTotal)}"
@@ -1200,15 +1259,6 @@ internal class DownloadService : Service() {
         } else {
             percent.coerceIn(0, 100)
         }
-        val detail = if (showBytes && !paused) {
-            val etaMs = if (currentSpeedBytesPerSec > 0.0) {
-                ((notifTotal - notifCopied) / currentSpeedBytesPerSec * 1000.0).toLong()
-            } else null
-            listOfNotNull(
-                formatSpeed(currentSpeedBytesPerSec).takeIf { it.isNotEmpty() },
-                etaMs?.takeIf { it > 0L }?.let { "${formatEta(it)} left" }
-            ).joinToString(" · ")
-        } else ""
         val activeJob = DownloadJobManager.activeJob
         val contentIntent = if (transferInProgress && activeJob != null && activeJob.callerTaskId != -1) {
             PendingIntent.getBroadcast(
@@ -1235,32 +1285,60 @@ internal class DownloadService : Service() {
             ),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val scanProceedIntent = PendingIntent.getService(
+            this,
+            4,
+            Intent(this, DownloadService::class.java).setAction(ACTION_SCAN_PROCEED),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val scanCancelIntent = PendingIntent.getService(
+            this,
+            5,
+            Intent(this, DownloadService::class.java).setAction(ACTION_SCAN_CANCEL),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val scanSkipIntent = PendingIntent.getService(
+            this,
+            6,
+            Intent(this, DownloadService::class.java).setAction(ACTION_SCAN_SKIP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val title = when (phase) {
+            NotifPhase.DOWNLOADING -> if (paused) candidate.name else "Downloading ${candidate.name}"
+            NotifPhase.SCAN_ASK -> "Scan ${candidate.name} with VirusTotal?"
+            NotifPhase.SCANNING -> "Scanning ${candidate.name}"
+            NotifPhase.SCAN_COMPLETE -> "Scan complete: ${candidate.name}"
+            NotifPhase.POST_DOWNLOAD -> "Download complete: ${candidate.name}"
+        }
+        val resolvedText = sizeLine.takeIf { contentText == null || contentText == "Paused" }
+            ?: contentText
+            ?: when {
+                paused -> "Paused · $percent%"
+                showProgressBar -> "$percent%"
+                else -> candidate.versionDisplay
+            }
+        val isOngoing = phase == NotifPhase.DOWNLOADING || phase == NotifPhase.SCANNING
+
         return NotificationCompat.Builder(this, CHANNEL_PROGRESS)
-            // The animated download icon runs only while bytes are moving; paused uses a still one.
+            // The animated download icon runs only while bytes are moving; completed/paused uses a still icon.
             .setSmallIcon(
-                if (paused) android.R.drawable.stat_sys_download_done
+                if (paused || phase != NotifPhase.DOWNLOADING) android.R.drawable.stat_sys_download_done
                 else android.R.drawable.stat_sys_download
             )
-            .setContentTitle(if (paused) candidate.name else "Downloading ${candidate.name}")
-            .setContentText(
-                sizeLine.takeIf { contentText == null || contentText == "Paused" } ?: contentText ?: when {
-                    paused -> "Paused · $percent%"
-                    else -> "$percent%"
-                }
-            )
+            .setContentTitle(title)
+            .setContentText(resolvedText)
             .setProgress(
-                if (paused || showBytes) 0 else barMax,
-                if (paused || showBytes) 0 else barValue,
+                if (showProgressBar && !showBytes) barMax else 0,
+                if (showProgressBar && !showBytes) barValue else 0,
                 false
             )
             .setSubText(null)
             .apply {
                 if (showBytes) {
-                    val line = if (contentText == null || contentText == "Paused") sizeLine else contentText
-                    val title = if (paused) candidate.name else "Downloading ${candidate.name}"
                     val views = RemoteViews(packageName, R.layout.notification_download).apply {
                         setTextViewText(R.id.notif_title, title)
-                        setTextViewText(R.id.notif_text, line ?: "")
+                        setTextViewText(R.id.notif_text, resolvedText)
                         if (paused) {
                             setViewVisibility(R.id.notif_progress, View.GONE)
                         } else {
@@ -1273,14 +1351,33 @@ internal class DownloadService : Service() {
                     setCustomBigContentView(views)
                 }
             }
-            .setOngoing(true)
+            .setOngoing(isOngoing)
             .setOnlyAlertOnce(true)
             .setContentIntent(contentIntent)
             .apply {
-                if (transferInProgress) {
-                    addAction(0, if (paused) "Resume" else "Pause", pauseIntent)
+                when (phase) {
+                    NotifPhase.DOWNLOADING -> {
+                        addAction(0, if (paused) "Resume" else "Pause", pauseIntent)
+                        addAction(0, "Cancel", cancelIntent)
+                    }
+                    NotifPhase.SCAN_ASK -> {
+                        // Skip left, Scan right — matching the in-app ScanActionBar
+                        addAction(0, "Skip", scanCancelIntent)
+                        addAction(0, "Scan", scanProceedIntent)
+                    }
+                    NotifPhase.SCANNING -> {
+                        addAction(0, "Skip scan", scanSkipIntent)
+                        addAction(0, "Cancel", cancelIntent)
+                    }
+                    NotifPhase.SCAN_COMPLETE -> {
+                        // Cancel left, Proceed right — matching the in-app ScanActionBar
+                        addAction(0, "Cancel", scanCancelIntent)
+                        addAction(0, "Proceed", scanProceedIntent)
+                    }
+                    NotifPhase.POST_DOWNLOAD -> {
+                        addAction(0, "Cancel", cancelIntent)
+                    }
                 }
-                addAction(0, "Cancel", cancelIntent)
             }
             .build()
     }
@@ -1291,7 +1388,7 @@ internal class DownloadService : Service() {
             .setContentTitle("Download complete: ${job.candidate.name}")
             .setContentText(
                 "${job.candidate.versionDisplay} from ${job.candidate.source.label} · " +
-                    "tap to return it to ${result.callerPackage}"
+                        "tap to return it to ${result.callerPackage}"
             )
             .setContentIntent(requestContentIntent(job.requestIntentExtras))
             .setAutoCancel(true)
@@ -1374,7 +1471,7 @@ internal fun Context.scheduleTemporaryDelete(file: File) {
     prefs.edit().putStringSet(
         "pending_temp_deletes",
         prefs.getStringSet("pending_temp_deletes", emptySet()).orEmpty() +
-            "${file.absolutePath}|${System.currentTimeMillis()}"
+                "${file.absolutePath}|${System.currentTimeMillis()}"
     ).apply()
     Thread {
         Thread.sleep(TEMP_CLEANUP_DELAY_MS)
@@ -1452,7 +1549,7 @@ internal fun validateDownloadedArtifact(
     checkVersionCode: Boolean = false
 ) {
     val shouldValidateMetadata = candidate.fileKind.lowercase(Locale.US) in setOf("apk", "apks", "apkm", "xapk") ||
-        file.extension.lowercase(Locale.US) in setOf("apk", "apks", "apkm", "xapk")
+            file.extension.lowercase(Locale.US) in setOf("apk", "apks", "apkm", "xapk")
     val metadata = context.readDownloadedApkMetadata(
         file = file,
         expectedPackage = request.packageName,
@@ -1494,7 +1591,7 @@ internal fun validateDownloadedArtifact(
             ) {
                 add(
                     "Version: requested ${requestedNames.joinToString()}, " +
-                        "found ${metadata.versionName ?: "unknown"}"
+                            "found ${metadata.versionName ?: "unknown"}"
                 )
             }
         }
@@ -1515,7 +1612,7 @@ internal fun validateDownloadedArtifact(
             file.delete()
             error(
                 "Downloaded build requires Android SDK $requiredSdk, but this device is SDK " +
-                    "${Build.VERSION.SDK_INT}. Try another source for a compatible build."
+                        "${Build.VERSION.SDK_INT}. Try another source for a compatible build."
             )
         }
     }
@@ -1526,7 +1623,7 @@ internal fun validateDownloadedArtifact(
     // deliver normally.
     if (checkVersionCode && candidate.option == CandidateOption.REQUESTED) {
         val requestedCodes = request.requestedVersionCodes +
-            request.compatibleVersionCodes.filter { it > 0L }
+                request.compatibleVersionCodes.filter { it > 0L }
         if (
             requestedCodes.isNotEmpty() &&
             metadata.versionCode !in requestedCodes
@@ -1552,11 +1649,8 @@ internal fun validateDownloadedArtifact(
             file.delete()
             throw IllegalStateException(
                 "Downloaded \"latest\" version $foundName is not newer than " +
-                    "requested $requestedName. Deleted the file."
+                        "requested $requestedName. Deleted the file."
             )
         }
     }
 }
-
-
-

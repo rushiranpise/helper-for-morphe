@@ -48,7 +48,9 @@ internal fun SwitchCandidateDialog(
         Text(
             text = prompt.detail,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodyMedium
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
         )
         Column(
             modifier = Modifier
