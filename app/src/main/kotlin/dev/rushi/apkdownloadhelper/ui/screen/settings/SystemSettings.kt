@@ -20,6 +20,24 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import dev.rushi.apkdownloadhelper.R
 import dev.rushi.apkdownloadhelper.storage.*
+import dev.rushi.apkdownloadhelper.storage.clearAllDownloads
+import dev.rushi.apkdownloadhelper.storage.clearLocation
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.AppConfirmDialog
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.SmallDialogButton
+import dev.rushi.apkdownloadhelper.storage.locationSizes
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.Alignment
 import dev.rushi.apkdownloadhelper.ui.shared.dialog.AppAlertDialog
 import dev.rushi.apkdownloadhelper.ui.shared.dialog.SettingsChoice
 import dev.rushi.apkdownloadhelper.ui.shared.dialog.SettingsChoiceDialog
@@ -28,13 +46,11 @@ import dev.rushi.apkdownloadhelper.ui.shared.settings.SettingsItem
 import dev.rushi.apkdownloadhelper.ui.shared.settings.SettingsSection
 import dev.rushi.apkdownloadhelper.ui.shared.settings.SettingsSwitchItem
 import dev.rushi.apkdownloadhelper.ui.shared.settings.SettingsValueText
-import dev.rushi.apkdownloadhelper.ui.theme.SettingsValueStyle
 import dev.rushi.apkdownloadhelper.ui.util.formatBytes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import dev.rushi.apkdownloadhelper.ui.theme.pressScale
+import androidx.compose.ui.graphics.Color
 
 // ==========================================
 // 2. DOWNLOADS TAB
@@ -54,14 +70,16 @@ internal fun SystemTabContent(
     var storageRefreshToken by remember { mutableIntStateOf(0) }
     var storageSummary by remember { mutableStateOf("Calculating storage…") }
     var showClearStorageDialog by remember { mutableStateOf(false) }
+    var showAfterHandoffConfirmDialog by remember { mutableStateOf(false) }
+    var storageSizes by remember { mutableStateOf(Triple(0L, 0L, 0L)) }
     val latestSettings by rememberUpdatedState(settings)
 
     LaunchedEffect(storageRefreshToken) {
+        storageSizes = withContext(Dispatchers.IO) { context.locationSizes() }
         storageSummary = withContext(Dispatchers.IO) {
-            "Cache ${context.temporaryDownloadsSize().formatBytes()} · " +
-                "External ${context.externalDownloadsSize().formatBytes()} · " +
-                "Downloads ${context.downloadsCopySize().formatBytes()} · " +
-                "Custom ${context.customDownloadsSize().formatBytes()}"
+            "Internal ${context.temporaryDownloadsSize().formatBytes()} \u00b7 " +
+            "External ${context.downloadsCopySize().formatBytes()} \u00b7 " +
+            "Custom ${context.customDownloadsSize().formatBytes()}"
         }
     }
 
@@ -98,7 +116,7 @@ internal fun SystemTabContent(
                 val loc = locations[index]
                 if (loc == DownloadLocation.CUSTOM) {
                     folderPicker.launch(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply { addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) })
-                } else if (loc == DownloadLocation.DOWNLOADS && Build.VERSION.SDK_INT <= Build.VERSION_CODES.P && ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                } else if (loc == DownloadLocation.EXTERNAL && Build.VERSION.SDK_INT <= Build.VERSION_CODES.P && ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
                     pendingLocation = loc
                     storagePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
                 } else {
@@ -127,10 +145,72 @@ internal fun SystemTabContent(
             },
             selectedIndex = DownloadRetention.entries.indexOf(settings.downloadRetention),
             onSelect = { index ->
-                onSettingsChange(settings.copy(downloadRetention = DownloadRetention.entries[index]))
+                val chosen = DownloadRetention.entries[index]
                 retentionDialog = false
+                val totalExistingBytes = storageSizes.first + storageSizes.second + storageSizes.third
+                if (
+                    chosen == DownloadRetention.AFTER_HANDOFF &&
+                    settings.downloadRetention != DownloadRetention.AFTER_HANDOFF &&
+                    totalExistingBytes > 0L
+                ) {
+                    showAfterHandoffConfirmDialog = true
+                } else {
+                    onSettingsChange(settings.copy(downloadRetention = chosen))
+                }
             },
             onDismiss = { retentionDialog = false }
+        )
+    }
+
+    if (showAfterHandoffConfirmDialog) {
+        val totalExistingBytes = storageSizes.first + storageSizes.second + storageSizes.third
+        AppAlertDialog(
+            onDismissRequest = { showAfterHandoffConfirmDialog = false },
+            title = { Text("Delete existing downloads?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "You currently have ${totalExistingBytes.formatBytes()} of previously downloaded files. " +
+                            "Would you like to clear them all now or keep them and only auto-delete future downloads after hand-off?"
+                    )
+                    Text(
+                        text = storageSummary,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                dev.rushi.apkdownloadhelper.ui.shared.button.DialogButton(
+                    text = "Clear all",
+                    onClick = {
+                        showAfterHandoffConfirmDialog = false
+                        onSettingsChange(latestSettings.copy(downloadRetention = DownloadRetention.AFTER_HANDOFF))
+                        scope.launch {
+                            val freed = withContext(Dispatchers.IO) { context.clearAllDownloads() }
+                            storageRefreshToken++
+                            Toast.makeText(
+                                context,
+                                if (freed > 0L) "Cleared ${freed.formatBytes()}" else "Nothing to clear",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    },
+                    isDestructive = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            dismissButton = {
+                dev.rushi.apkdownloadhelper.ui.shared.button.DialogButton(
+                    text = "Continue without clearing",
+                    onClick = {
+                        showAfterHandoffConfirmDialog = false
+                        onSettingsChange(latestSettings.copy(downloadRetention = DownloadRetention.AFTER_HANDOFF))
+                    },
+                    filled = false,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         )
     }
 
@@ -160,6 +240,131 @@ internal fun SystemTabContent(
         )
     }
 
+    var showStorageManager by remember { mutableStateOf(false) }
+    var pendingClear by remember { mutableStateOf<DownloadLocation?>(null) }
+
+    if (showStorageManager) {
+        val total = storageSizes.first + storageSizes.second + storageSizes.third
+        val isDark = isSystemInDarkTheme()
+
+        val internalColor = if (isDark) Color(0xFF3B82F6) else Color(0xFF2563EB) // Blue
+        val externalColor = if (isDark) Color(0xFFA855F7) else Color(0xFF7E22CE) // Purple
+        val customColor   = if (isDark) Color(0xFF10B981) else Color(0xFF059669) // Emerald
+
+        val rows = listOf(
+            Triple(DownloadLocation.INTERNAL, storageSizes.first, internalColor),
+            Triple(DownloadLocation.EXTERNAL, storageSizes.second, externalColor),
+            Triple(DownloadLocation.CUSTOM, storageSizes.third, customColor)
+        )
+        AppConfirmDialog(
+            title = "Storage used",
+            message = "",
+            dismissText = "Close",
+            confirmText = "Clear all",
+            onDismiss = { showStorageManager = false },
+            onConfirm = {
+                showStorageManager = false
+                showClearStorageDialog = true
+            },
+            icon = Icons.Outlined.CleaningServices,
+            destructiveConfirm = true,
+            content = {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text(
+                        total.formatBytes(),
+                        style = MaterialTheme.typography.headlineMedium,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    // Adjust these values manually to control inner/outer corner rounding and gap
+                    val innerCornerRadius = 2.dp
+                    val outerCornerRadius = 12.dp
+                    val segmentGap = 2.dp
+
+                    val activeSegments = rows.filter { it.second > 0L }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(10.dp)
+                            .clip(RoundedCornerShape(outerCornerRadius))
+                            .background(
+                                if (activeSegments.isEmpty()) MaterialTheme.colorScheme.surfaceVariant
+                                else Color.Transparent
+                            ),
+                        horizontalArrangement = Arrangement.spacedBy(segmentGap)
+                    ) {
+                        activeSegments.forEachIndexed { index, (_, size, color) ->
+                            val isFirst = index == 0
+                            val isLast = index == activeSegments.lastIndex
+
+                            val shape = RoundedCornerShape(
+                                topStart = if (isFirst) outerCornerRadius else innerCornerRadius,
+                                bottomStart = if (isFirst) outerCornerRadius else innerCornerRadius,
+                                topEnd = if (isLast) outerCornerRadius else innerCornerRadius,
+                                bottomEnd = if (isLast) outerCornerRadius else innerCornerRadius
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(size.toFloat())
+                                    .fillMaxHeight()
+                                    .clip(shape)
+                                    .background(color)
+                            )
+                        }
+                    }
+                    rows.forEach { (location, size, color) ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(Modifier.size(10.dp).clip(CircleShape).background(color))
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(location.title, style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    size.formatBytes(),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            SmallDialogButton(
+                                text = "Clear",
+                                enabled = size > 0L,
+                                onClick = { pendingClear = location }
+                            )
+                        }
+                    }
+                }
+           }
+        )
+    }
+
+    pendingClear?.let { location ->
+        AppConfirmDialog(
+            title = "Clear ${location.title}?",
+            message = "This permanently deletes every download saved here. This cannot be undone.",
+            dismissText = "Cancel",
+            confirmText = "Clear",
+            onDismiss = { pendingClear = null },
+            onConfirm = {
+                pendingClear = null
+                scope.launch {
+                    val freed = withContext(Dispatchers.IO) { context.clearLocation(location) }
+                    storageRefreshToken++
+                    Toast.makeText(
+                        context,
+                        if (freed > 0L) "Cleared ${freed.formatBytes()}" else "Nothing to clear",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            },
+            icon = Icons.Outlined.CleaningServices,
+            destructiveConfirm = true
+        )
+    }
+
     if (showClearStorageDialog) {
         AppAlertDialog(
             onDismissRequest = { showClearStorageDialog = false },
@@ -167,8 +372,8 @@ internal fun SystemTabContent(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "This permanently deletes cached hand-off files, app external copies, " +
-                                "saved APKs in Downloads/Morphe Helper, and copies saved to your custom folder. " +
+                        "This permanently deletes internal app files, " +
+                                "saved APKs in Downloads/helper-for-morphe, and copies saved to your custom folder. " +
                                 "This cannot be undone."
                     )
                     Text(
@@ -180,7 +385,7 @@ internal fun SystemTabContent(
             },
             confirmButton = {
                 dev.rushi.apkdownloadhelper.ui.shared.button.DialogButton(
-                    text = "Delete",
+                    text = "Clear",
                     onClick = {
                         showClearStorageDialog = false
                         scope.launch {
@@ -215,25 +420,27 @@ internal fun SystemTabContent(
         SettingsSection(title = "Storage", icon = Icons.Outlined.SdStorage) {
             SettingsGroup {
                 SettingsItem(
-                    icon = settings.downloadLocation.icon(),
-                    title = "Save downloads",
-                    subtitle = settings.downloadLocation.description,
-                    onClick = { locationDialog = true },
-                    trailingContent = { SettingsValueText(downloadLocationLabel(context, settings)) }
-                )
-                SettingsItem(
                     icon = Icons.Outlined.Schedule,
                     title = "Keep downloads",
                     subtitle = settings.downloadRetention.description,
                     onClick = { retentionDialog = true },
                     trailingContent = { SettingsValueText(settings.downloadRetention.title) }
                 )
+                if (settings.downloadRetention != DownloadRetention.AFTER_HANDOFF) {
+                    SettingsItem(
+                        icon = settings.downloadLocation.icon(),
+                        title = "Save downloads in",
+                        subtitle = settings.downloadLocation.description,
+                        onClick = { locationDialog = true },
+                        trailingContent = { SettingsValueText(downloadLocationLabel(context, settings)) }
+                    )
+                }
                 SettingsItem(
                     icon = Icons.Outlined.CleaningServices,
                     title = "Storage used",
-                    subtitle = storageSummary,
-                    onClick = { showClearStorageDialog = true },
-                    trailingContent = { SettingsValueText("Clear", color = SettingsValueStyle.destructiveColor()) }
+                    subtitle = "Total " + (storageSizes.first + storageSizes.second + storageSizes.third).formatBytes(),
+                    onClick = { showStorageManager = true },
+                    trailingContent = { SettingsValueText("Manage") }
                 )
                 SettingsItem(
                     icon = Icons.Outlined.Bolt,

@@ -7,12 +7,15 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import dev.rushi.apkdownloadhelper.ui.shared.button.DialogButton
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -21,7 +24,9 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.HelpOutline
+import android.net.Uri
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.SdStorage
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -33,18 +38,39 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.rushi.apkdownloadhelper.R
 import dev.rushi.apkdownloadhelper.storage.DownloadHistoryEntry
+import dev.rushi.apkdownloadhelper.storage.DownloadLocation
+import dev.rushi.apkdownloadhelper.storage.customFolderRelativePath
+import dev.rushi.apkdownloadhelper.storage.loadHelperSettings
+import dev.rushi.apkdownloadhelper.storage.storageLocation
 import dev.rushi.apkdownloadhelper.ui.shared.appcard.AppAvatar
 import dev.rushi.apkdownloadhelper.ui.shared.chip.StatusBadge
 import dev.rushi.apkdownloadhelper.ui.shared.chip.StatusBadgeRow
 import dev.rushi.apkdownloadhelper.ui.shared.icon.ThemedIcon
 import dev.rushi.apkdownloadhelper.ui.theme.SemanticTone
 import dev.rushi.apkdownloadhelper.ui.util.formatBytes
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import dev.rushi.apkdownloadhelper.ui.shared.scroll.verticalScrollFade
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 
 /** A previously downloaded file offered for reuse, with its size on disk. */
 internal data class ReuseOption(
@@ -59,6 +85,25 @@ internal fun ReuseOfferDialog(
     onDownloadNew: () -> Unit,
     useItButtonColor: Color = AppDialogDefaults.confirmButtonContainer()
 ) {
+    val context = LocalContext.current
+    val scheme = MaterialTheme.colorScheme
+    val density = LocalDensity.current
+    val customTreeUri = remember { context.loadHelperSettings().downloadCustomTreeUri }
+    val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
+    val systemBarsVertical = with(density) {
+        (WindowInsets.systemBars.getTop(this) + WindowInsets.systemBars.getBottom(this)).toDp()
+    }
+    val maxCardsHeight = (screenHeightDp - systemBarsVertical - 210.dp).coerceAtLeast(320.dp)
+    val cardsScrollState = rememberScrollState()
+    var selectedIndex by remember(options) { mutableIntStateOf(0) }
+    var showCards by remember(options) { mutableStateOf(false) }
+
+    LaunchedEffect(options) {
+        // Wait for MorpheDialogEnter (220ms) to finish before expanding the cards
+        delay(230L)
+        showCards = true
+    }
+
     AppAlertDialog(
         onDismissRequest = onDownloadNew,
         title = {
@@ -68,8 +113,6 @@ internal fun ReuseOfferDialog(
             )
         },
         text = {
-            val scheme = MaterialTheme.colorScheme
-            var selectedIndex by remember(options) { mutableIntStateOf(0) }
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -80,14 +123,29 @@ internal fun ReuseOfferDialog(
                     color = scheme.onSurfaceVariant
                 )
 
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 320.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                AnimatedVisibility(
+                    visible = showCards,
+                    enter = expandVertically(
+                        animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+                        expandFrom = Alignment.CenterVertically
+                    ) + fadeIn(
+                        animationSpec = tween(durationMillis = 220, delayMillis = 50, easing = FastOutSlowInEasing)
+                    )
                 ) {
-                    options.forEachIndexed { index, option ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = maxCardsHeight)
+                            .verticalScrollFade(cardsScrollState, length = 24.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(cardsScrollState)
+                                .padding(vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            options.forEachIndexed { index, option ->
                         val entry = option.entry
                         Column(
                             modifier = Modifier
@@ -163,30 +221,68 @@ internal fun ReuseOfferDialog(
                                     }
                                 }
 
-                                // File name strip
-                                Row(
+                                val locationLabel = remember(entry.uri, entry.storage, entry.isCached) {
+                                    val loc = entry.storageLocation()
+                                    when {
+                                        entry.isCached -> "Cached (temporary)"
+                                        loc == DownloadLocation.INTERNAL -> "Internal app storage"
+                                        loc == DownloadLocation.EXTERNAL -> "Downloads/helper-for-morphe"
+                                        else -> customFolderRelativePath(
+                                            context,
+                                            Uri.parse(entry.uri),
+                                            customTreeUri
+                                        ) ?: "Custom folder"
+                                    }
+                                }
+
+                                // Storage location + file name strip
+                                Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(12.dp))
                                         .background(scheme.surfaceVariant.copy(alpha = 0.35f))
                                         .padding(horizontal = 10.dp, vertical = 7.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.FolderOpen,
-                                        contentDescription = null,
-                                        tint = scheme.onSurfaceVariant,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Text(
-                                        text = entry.fileName,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = scheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f)
-                                    )
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.SdStorage,
+                                            contentDescription = null,
+                                            tint = scheme.primary,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Text(
+                                            text = locationLabel,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = scheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.FolderOpen,
+                                            contentDescription = null,
+                                            tint = scheme.onSurfaceVariant,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Text(
+                                            text = entry.fileName,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = scheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
                                 }
 
                                 // Scan verdict (if any)
@@ -222,6 +318,8 @@ internal fun ReuseOfferDialog(
                                         )
                                     }
                                 }
+                            }
+                            }
                         }
                     }
                 }

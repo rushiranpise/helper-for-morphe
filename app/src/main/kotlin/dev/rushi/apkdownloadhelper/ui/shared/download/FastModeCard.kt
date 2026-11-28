@@ -88,7 +88,6 @@ internal fun FastModeCard(
     BackHandler(
         enabled = !progress.done &&
                 !showingTransfer &&
-                !progress.awaitingDecision &&
                 !progress.awaitingVersionChoice &&
                 !showCancelConfirm
     ) {
@@ -287,15 +286,18 @@ internal fun FastModeCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(AppDefaults.ItemSpacing)
                 ) {
-                    HelperButton(
-                        text = if (captchaDecision) "Solve captcha" else "Use this version",
-                        onClick = onUseMismatch,
-                        modifier = Modifier.weight(1f)
-                    )
                     HelperOutlinedButton(
                         text = "Skip to next source",
                         onClick = onSkipMismatch,
                         modifier = Modifier.weight(1f)
+                    )
+                    DialogButton(
+                        text = if (captchaDecision) "Solve captcha" else "Use this version",
+                        onClick = onUseMismatch,
+                        modifier = Modifier.weight(1f),
+                        filled = true,
+                        buttonColor = MaterialTheme.colorScheme.primary,
+                        buttonContentColor = MaterialTheme.colorScheme.onPrimary
                     )
                 }
                 HelperOutlinedButton(

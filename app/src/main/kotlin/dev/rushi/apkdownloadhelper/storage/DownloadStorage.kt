@@ -19,7 +19,8 @@ import java.io.File
 /** Where a completed download was handed off and whether a saved copy exists. */
 internal data class DownloadHandoff(
     val uri: Uri,
-    val savedCopy: Boolean
+    val savedCopy: Boolean,
+    val location: DownloadLocation = DownloadLocation.INTERNAL
 )
 
 /**
@@ -34,12 +35,9 @@ internal fun Context.prepareDownloadHandoff(
         null
     } else {
         when (settings.downloadLocation) {
-            DownloadLocation.TEMPORARY -> null
-            DownloadLocation.EXTERNAL -> storageResult { copyToExternalDownloads(file) }
-                .onFailure { logStorageFailure("external storage", it) }
-                .getOrNull()
-            DownloadLocation.DOWNLOADS -> storageResult { copyToDownloads(file) }
-                .onFailure { logStorageFailure("Downloads", it) }
+            DownloadLocation.INTERNAL -> null
+            DownloadLocation.EXTERNAL -> storageResult { copyToDownloads(file) }
+                .onFailure { logStorageFailure("Downloads/$DOWNLOADS_FOLDER_NAME", it) }
                 .getOrNull()
             DownloadLocation.CUSTOM -> storageResult {
                 copyToCustomFolder(file, settings.downloadCustomTreeUri)
@@ -50,7 +48,7 @@ internal fun Context.prepareDownloadHandoff(
     }
 
     return if (savedUri != null) {
-        DownloadHandoff(savedUri, savedCopy = true)
+        DownloadHandoff(savedUri, savedCopy = true, location = settings.downloadLocation)
     } else {
         cacheHandoff(file)
     }
@@ -72,8 +70,11 @@ internal fun Context.scheduleHandoffCleanup(
     handoff: DownloadHandoff,
     settings: HelperSettings
 ) {
-    if (handoff.savedCopy || settings.downloadRetention == DownloadRetention.AFTER_HANDOFF) {
-        scheduleTemporaryDelete(file)
+    when {
+        // The saved copy is now the only copy, so drop the temporary one immediately.
+        handoff.savedCopy -> runCatching { file.delete() }
+        // After hand-off: no saved copy, keep the temp file for 10 minutes only.
+        settings.downloadRetention == DownloadRetention.AFTER_HANDOFF -> scheduleTemporaryDelete(file)
     }
 }
 
@@ -162,6 +163,37 @@ internal fun customFolderName(context: Context, treeUri: String): String? =
             }.getOrNull()
         }
         ?.takeIf { it.isNotBlank() }
+
+/** Relative display path for a custom SAF folder (e.g. "Download/Myapp" or "Myapp"). */
+internal fun customFolderRelativePath(context: Context, uri: Uri, fallbackTreeUri: String = ""): String? {
+    val docId = runCatching {
+        when {
+            android.provider.DocumentsContract.isDocumentUri(context, uri) ->
+                android.provider.DocumentsContract.getDocumentId(uri).substringBeforeLast('/', "")
+            android.provider.DocumentsContract.isTreeUri(uri) ->
+                android.provider.DocumentsContract.getTreeDocumentId(uri)
+            else -> null
+        }
+    }.getOrNull()?.takeIf { it.isNotBlank() }
+        ?: fallbackTreeUri.takeIf { it.isNotBlank() }?.let { raw ->
+            runCatching {
+                android.provider.DocumentsContract.getTreeDocumentId(Uri.parse(raw))
+            }.getOrNull()
+        }
+
+    if (!docId.isNullOrBlank()) {
+        val colonIdx = docId.indexOf(':')
+        if (colonIdx >= 0) {
+            val volume = docId.substring(0, colonIdx)
+            val relPath = docId.substring(colonIdx + 1).trim('/')
+            if (volume.equals("primary", ignoreCase = true)) {
+                return relPath.ifBlank { "Internal storage" }
+            }
+            if (relPath.isNotBlank()) return "$volume/$relPath"
+        }
+    }
+    return customFolderName(context, fallbackTreeUri)
+}
 
 internal fun Context.copyToCustomFolder(file: File, treeUri: String): Uri {
     if (treeUri.isBlank()) error("No custom download folder is selected")
@@ -287,7 +319,7 @@ internal fun Context.cleanupDownloadsCopies(cutoff: Long): Long {
         } else {
             val dir = File(
                 Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                "Morphe Helper"
+                DOWNLOADS_FOLDER_NAME
             )
             val files = dir.listFiles()
                 ?.filter { it.isFile && (cutoff <= 0L || it.lastModified() < cutoff) }
@@ -320,6 +352,24 @@ private fun Context.cleanupExternalDownloads(cutoff: Long): Long {
         .orEmpty()
     val freed = files.sumOf { it.length() }
     files.forEach { file -> runCatching { file.delete() } }
+    return freed
+}
+
+/** Sizes in bytes: internal, external (Downloads/helper-for-morphe), custom. */
+internal fun Context.locationSizes(): Triple<Long, Long, Long> =
+    Triple(
+        temporaryDownloadsSize() + externalDownloadsSize(),
+        downloadsCopySize(),
+        customDownloadsSize()
+    )
+
+internal fun Context.clearLocation(location: DownloadLocation): Long {
+    val freed = when (location) {
+        DownloadLocation.INTERNAL -> clearTemporaryDownloads() + clearExternalDownloads()
+        DownloadLocation.EXTERNAL -> clearDownloadsCopies()
+        DownloadLocation.CUSTOM -> clearCustomDownloads()
+    }
+    DownloadHistoryStore.notifyChanged()
     return freed
 }
 
@@ -364,13 +414,7 @@ internal fun Context.cleanupDownloads(settings: HelperSettings): Long {
     }
 
     val retention = settings.downloadRetention
-    if (retention == DownloadRetention.KEEP) return freed
-
-    if (retention == DownloadRetention.AFTER_HANDOFF) {
-        freed += cleanupCacheFiles(deleteCutoff)
-        freed += cleanupExternalDownloads(deleteCutoff)
-        freed += cleanupDownloadsCopies(0L)
-        freed += cleanupCustomDownloads(0L)
+    if (retention == DownloadRetention.KEEP || retention == DownloadRetention.AFTER_HANDOFF) {
         return freed
     }
 

@@ -88,7 +88,7 @@ internal fun AppNavigationBar(
                     .glassFill(
                         glass = AppColors.glassContainerColor(),
                         shape = CircleShape,
-                        hazeState = if (covered) null else hazeState
+                        hazeState = hazeState
                     ),
                 shape = CircleShape,
                 color = Color.Transparent,

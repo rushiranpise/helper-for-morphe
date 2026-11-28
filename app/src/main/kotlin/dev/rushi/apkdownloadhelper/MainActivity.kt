@@ -34,7 +34,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -541,7 +542,6 @@ class MainActivity : ComponentActivity() {
             if (selectedStoredApk != null) {
                 lastSelectedStoredApk = selectedStoredApk
             }
-            val pagerStateHolder = rememberSaveableStateHolder()
 
             // --- FIX: Holds the category on screen during the exit animation ---
             var lastActiveCategory by remember { mutableStateOf<SettingsCategory?>(null) }
@@ -605,14 +605,20 @@ class MainActivity : ComponentActivity() {
                             onChallengeTimeout = ::onBrowserChallengeTimeout
                         )
                     } else {
-                        val overlayVisible =
-                            showUpdates || activeSettingsCategory != null || showSourcesScreen ||
-                                showRequestsScreen || showTrackingScreen ||
-                                selectedArchiveApp != null || selectedStoredApk != null
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            if (!overlayVisible) {
-                                pagerStateHolder.SaveableStateProvider("home-pager") {
-                                    HomePagerScreen(
+                        val backgroundModifier =
+                            if (showUpdates || activeSettingsCategory != null || showSourcesScreen || showRequestsScreen || showTrackingScreen || selectedArchiveApp != null || selectedStoredApk != null) {
+                                Modifier
+                                    .focusProperties { canFocus = false }
+                                    .clearAndSetSemantics {}
+                            } else {
+                                Modifier
+                            }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .then(backgroundModifier)
+                        ) {
+                            HomePagerScreen(
                                 requestResetToken = requestResetToken,
                                 hideFindApps = helperSettings.hideFindAppsTab,
                                 animatedBackground = helperSettings.animatedBackground,
@@ -699,28 +705,19 @@ class MainActivity : ComponentActivity() {
                                     )
                                 },
                                 navigationCovered = {
-                                    showUpdates ||
-                                            activeSettingsCategory != null ||
-                                            showSourcesScreen ||
-                                            showRequestsScreen ||
-                                            showTrackingScreen ||
-                                            selectedArchiveApp != null ||
-                                            selectedStoredApk != null ||
-                                            (request != null && (
-                                                    uiState is UiState.Idle ||
-                                                            uiState is UiState.Loading ||
-                                                            uiState is UiState.Ready ||
-                                                            uiState is UiState.Downloading ||
-                                                            uiState is UiState.FastMode ||
-                                                            uiState is UiState.ScanAsk ||
-                                                            uiState is UiState.ScanResult
-                                                    ))
+                                    request != null && (
+                                        uiState is UiState.Idle ||
+                                            uiState is UiState.Loading ||
+                                            uiState is UiState.Ready ||
+                                            uiState is UiState.Downloading ||
+                                            uiState is UiState.FastMode ||
+                                            uiState is UiState.ScanAsk ||
+                                            uiState is UiState.ScanResult
+                                    )
                                 }
                             )
                         }
                     }
-                }
-            }
 
                     val offer = reuseOffer
                     if (offer != null) {
@@ -882,33 +879,129 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onOpenFolder = { target ->
                                         val authority = target.uri.authority.orEmpty()
-                                        val folderUri: Uri? =
-                                            if (authority.startsWith("com.android.externalstorage")) {
-                                                helperSettings.downloadCustomTreeUri
+                                        val isCustom = authority.startsWith("com.android.externalstorage")
+
+                                        // Resolve the folder Document ID (works even if the user later switched custom folders)
+                                        val customFolderDocId: String? = if (isCustom) {
+                                            runCatching {
+                                                if (DocumentsContract.isDocumentUri(this@MainActivity, target.uri)) {
+                                                    DocumentsContract.getDocumentId(target.uri).substringBeforeLast('/')
+                                                } else if (DocumentsContract.isTreeUri(target.uri)) {
+                                                    DocumentsContract.getTreeDocumentId(target.uri)
+                                                } else null
+                                            }.getOrNull()?.takeIf { it.isNotBlank() }
+                                                ?: helperSettings.downloadCustomTreeUri
                                                     .takeIf { it.isNotBlank() }
                                                     ?.let { raw ->
-                                                        val tree = Uri.parse(raw)
-                                                        DocumentsContract.buildDocumentUriUsingTree(
-                                                            tree,
-                                                            DocumentsContract.getTreeDocumentId(tree)
-                                                        )
+                                                        runCatching {
+                                                            DocumentsContract.getTreeDocumentId(Uri.parse(raw))
+                                                        }.getOrNull()
                                                     }
-                                            } else {
-                                                DocumentsContract.buildDocumentUri(
-                                                    "com.android.externalstorage.documents",
-                                                    "primary:${downloadsCopyRelativePath()}"
-                                                )
+                                        } else null
+
+                                        val folderUri: Uri? = if (isCustom) {
+                                            when {
+                                                DocumentsContract.isTreeUri(target.uri) && customFolderDocId != null ->
+                                                    DocumentsContract.buildDocumentUriUsingTree(target.uri, customFolderDocId)
+                                                helperSettings.downloadCustomTreeUri.isNotBlank() -> {
+                                                    val tree = Uri.parse(helperSettings.downloadCustomTreeUri)
+                                                    DocumentsContract.buildDocumentUriUsingTree(
+                                                        tree,
+                                                        customFolderDocId ?: DocumentsContract.getTreeDocumentId(tree)
+                                                    )
+                                                }
+                                                customFolderDocId != null ->
+                                                    DocumentsContract.buildDocumentUri(
+                                                        "com.android.externalstorage.documents",
+                                                        customFolderDocId
+                                                    )
+                                                else -> null
                                             }
-                                        val opened = folderUri != null && runCatching {
-                                            startActivity(
-                                                Intent(Intent.ACTION_VIEW)
-                                                    .setDataAndType(folderUri, DocumentsContract.Document.MIME_TYPE_DIR)
-                                                    .addFlags(
+                                        } else {
+                                            DocumentsContract.buildDocumentUri(
+                                                "com.android.externalstorage.documents",
+                                                "primary:${downloadsCopyRelativePath()}"
+                                            )
+                                        }
+
+                                        // Resolve real filesystem path when on primary storage (e.g. "primary:Download/Myapp" -> "/storage/emulated/0/Download/Myapp")
+                                        val realFolderPath: String? = if (isCustom) {
+                                            customFolderDocId
+                                                ?.takeIf { it.startsWith("primary:", ignoreCase = true) }
+                                                ?.substringAfter(':')
+                                                ?.trim('/')
+                                                ?.let { rel ->
+                                                    val base = android.os.Environment.getExternalStorageDirectory().absolutePath
+                                                    if (rel.isEmpty()) base else "$base/$rel"
+                                                }
+                                        } else {
+                                            "${android.os.Environment.getExternalStorageDirectory().absolutePath}/${downloadsCopyRelativePath()}"
+                                        }
+
+                                        val fileManagerPackages = listOf(
+                                            "com.sec.android.app.myfiles",
+                                            "com.google.android.apps.nbu.files",
+                                            "com.mi.android.globalFileexplorer",
+                                            "com.oneplus.filemanager",
+                                            "com.coloros.filemanager",
+                                            "com.oplus.filemanager",
+                                            "com.vivo.easyshare",
+                                            "com.android.fileexplorer"
+                                        )
+
+                                        var opened = false
+
+                                        // 1. Samsung My Files direct folder path intent (works for both Downloads and primary custom folders)
+                                        if (realFolderPath != null) {
+                                            val samsungIntent = Intent("samsung.myfiles.intent.action.LAUNCH_MY_FILES").apply {
+                                                putExtra("samsung.myfiles.intent.extra.START_PATH", realFolderPath)
+                                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            }
+                                            opened = runCatching { startActivity(samsungIntent) }.isSuccess
+                                        }
+
+                                        // 2. Open exact folder URI directly in Google Files / OEM file managers
+                                        if (!opened && folderUri != null) {
+                                            for (pkg in fileManagerPackages) {
+                                                val dirIntent = Intent(Intent.ACTION_VIEW).apply {
+                                                    setDataAndType(folderUri, DocumentsContract.Document.MIME_TYPE_DIR)
+                                                    setPackage(pkg)
+                                                    addFlags(
                                                         Intent.FLAG_GRANT_READ_URI_PERMISSION or
                                                             Intent.FLAG_ACTIVITY_NEW_TASK
                                                     )
-                                            )
-                                        }.isSuccess
+                                                }
+                                                if (runCatching { startActivity(dirIntent) }.isSuccess) {
+                                                    opened = true
+                                                    break
+                                                }
+                                            }
+                                        }
+
+                                        // 3. System directory viewer (opens the exact folder in DocumentsUI / Files rather than dropping to home screen)
+                                        if (!opened && folderUri != null) {
+                                            opened = runCatching {
+                                                startActivity(
+                                                    Intent(Intent.ACTION_VIEW)
+                                                        .setDataAndType(folderUri, DocumentsContract.Document.MIME_TYPE_DIR)
+                                                        .addFlags(
+                                                            Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                                                Intent.FLAG_ACTIVITY_NEW_TASK
+                                                        )
+                                                )
+                                            }.isSuccess
+                                        }
+
+                                        // 4. Final fallback: launch file manager app or system Downloads
+                                        if (!opened) {
+                                            val launchFileManager = fileManagerPackages
+                                                .asSequence()
+                                                .mapNotNull { packageManager.getLaunchIntentForPackage(it) }
+                                                .firstOrNull()
+                                            opened = launchFileManager != null && runCatching {
+                                                startActivity(launchFileManager.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                            }.isSuccess
+                                        }
                                         if (!opened) {
                                             runCatching {
                                                 startActivity(Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS))
@@ -932,7 +1025,7 @@ class MainActivity : ComponentActivity() {
                                             withContext(Dispatchers.Main) {
                                                 Toast.makeText(
                                                     this@MainActivity,
-                                                    if (result.isSuccess) "Exported to Downloads/Morphe Helper"
+                                                    if (result.isSuccess) "Exported to Downloads/helper-for-morphe"
                                                     else "Export failed: ${result.exceptionOrNull()?.message}",
                                                     Toast.LENGTH_SHORT
                                                 ).show()
@@ -1992,7 +2085,8 @@ class MainActivity : ComponentActivity() {
                 candidate = pending.candidate,
                 settings = pending.settings,
                 requestIntentExtras = intent.getExtras(),
-                fastMode = fastModeActive
+                fastMode = fastModeActive,
+                callerTaskId = if (callingActivity != null) taskId else -1
             )
         )
         startForegroundService(
@@ -3246,9 +3340,9 @@ class MainActivity : ComponentActivity() {
                 history.packageName == request.packageName &&
                     request.matchesRequestedVersion(history.versionName, null)
             }
-            // The same file may be recorded twice (cache copy + Downloads
-            // copy); show each distinct file once, newest record first.
-            .distinctBy { it.fileName }
+            // Keep distinct URIs across storage locations (Internal, Downloads, Custom)
+            // so the user can choose which location's copy to hand off.
+            .distinctBy { it.uri }
             .filter { entry -> historyFileExists(entry) }
             .map { entry -> ReuseOption(entry, historyFileSize(entry)) }
         if (existing.isNotEmpty()) reuseOffer = existing
@@ -3300,6 +3394,10 @@ class MainActivity : ComponentActivity() {
         )
         DownloadJobManager.persistPendingResult(pending, applicationContext)
         deliverResult(pending)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
     }
 
     private fun deliverResult(pending: PendingDownloadResult): Boolean {
@@ -3380,7 +3478,14 @@ class MainActivity : ComponentActivity() {
                 )
                 prepared = cacheHandoff(file)
             }
-            recordHandOff(request, candidate, file, prepared.uri)
+            recordHandOff(
+                request,
+                candidate,
+                file,
+                prepared.uri,
+                storage = prepared.location,
+                isCached = !prepared.savedCopy && settings.downloadRetention == dev.rushi.apkdownloadhelper.storage.DownloadRetention.AFTER_HANDOFF
+            )
             prepared
         }
         val pending = PendingDownloadResult(
