@@ -36,19 +36,44 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import dev.rushi.apkdownloadhelper.HelperButton
-import dev.rushi.apkdownloadhelper.HelperOutlinedButton
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import dev.rushi.apkdownloadhelper.ui.shared.button.DialogButton
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.AppDialogDefaults
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.surfaceColorAtElevation
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import dev.chrisbanes.haze.HazeState
 import dev.rushi.apkdownloadhelper.R
 import dev.rushi.apkdownloadhelper.download.VirusTotalScanner
-import dev.rushi.apkdownloadhelper.ui.shared.card.SectionCard
 import dev.rushi.apkdownloadhelper.ui.shared.card.SurfaceCard
 import dev.rushi.apkdownloadhelper.ui.shared.chip.StatusBadge
 import dev.rushi.apkdownloadhelper.ui.shared.icon.ThemedIcon
-import dev.rushi.apkdownloadhelper.ui.shared.layout.AppDivider
+import dev.rushi.apkdownloadhelper.ui.shared.shape.rememberPressShape
 import dev.rushi.apkdownloadhelper.ui.shared.text.SectionTitle
+import dev.rushi.apkdownloadhelper.ui.shared.text.fittedTextAutoSize
 import dev.rushi.apkdownloadhelper.ui.model.DownloadCandidate
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.SemanticTone
+import dev.rushi.apkdownloadhelper.ui.theme.glassFill
+import dev.rushi.apkdownloadhelper.ui.theme.pressScale
 import dev.rushi.apkdownloadhelper.ui.util.formatBytes
 import dev.rushi.apkdownloadhelper.ui.util.formatScanDate
 import dev.rushi.apkdownloadhelper.ui.util.openVirusTotalPage
@@ -59,7 +84,10 @@ internal fun ScanAskCard(
     onScan: () -> Unit,
     onSkip: () -> Unit
 ) {
-    SectionCard {
+    SurfaceCard(
+        cornerRadius = AppDefaults.SectionCornerRadius,
+        color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
+    ) {
         Column(
             modifier = Modifier.padding(AppDefaults.ContentPadding),
             verticalArrangement = Arrangement.spacedBy(AppDefaults.ItemSpacing)
@@ -70,21 +98,114 @@ internal fun ScanAskCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                HelperButton(
-                    text = "Scan",
-                    onClick = onScan,
-                    modifier = Modifier.weight(1f)
-                )
-                HelperOutlinedButton(
-                    text = "Skip",
-                    onClick = onSkip,
-                    modifier = Modifier.weight(1f)
-                )
-            }
+            // Scan / Skip are pinned at the bottom of the screen (ScanActionBar).
+        }
+    }
+}
+
+/**
+ * Bottom-pinned two-button bar with frosted glass blur (respecting the user's blur setting):
+ * [leftText] outlined glass on the left, [rightText] Morphe-tinted glass on the right.
+ */
+@Composable
+internal fun ScanActionBar(
+    leftText: String,
+    onLeft: () -> Unit,
+    rightText: String,
+    onRight: () -> Unit,
+    modifier: Modifier = Modifier,
+    hazeState: HazeState? = null,
+    rightDestructive: Boolean = false,
+    onHeightChanged: (Dp) -> Unit = {}
+) {
+    val density = LocalDensity.current
+    val colors = MaterialTheme.colorScheme
+    val fallbackHaze = remember { HazeState() }
+    val effectiveHaze = hazeState ?: fallbackHaze
+
+    val isDark = (0.299 * colors.onSurface.red + 0.587 * colors.onSurface.green + 0.114 * colors.onSurface.blue) >= 0.5
+    val leftInteraction = remember { MutableInteractionSource() }
+    val leftShape = rememberPressShape(leftInteraction, AppDefaults.PillShape)
+    val leftBorderColor = colors.primary.copy(alpha = if (isDark) 0.30f else 0.25f)
+
+    val rightInteraction = remember { MutableInteractionSource() }
+    val rightShape = rememberPressShape(rightInteraction, AppDefaults.PillShape)
+    val rightFill = if (rightDestructive) {
+        AppDialogDefaults.defaultButtonContainer()
+    } else {
+        AppDialogDefaults.confirmButtonContainer()
+    }
+    val rightContentColor = if (rightDestructive) {
+        if (isDark) Color(0xFFFF6B6B) else Color(0xFFD32F2F)
+    } else {
+        colors.onSurface
+    }
+    val labelStyle = MaterialTheme.typography.labelLarge
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .onSizeChanged { onHeightChanged(with(density) { it.height.toDp() }) }
+            .navigationBarsPadding()
+            .padding(horizontal = AppDefaults.ContentPadding, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(AppDialogDefaults.ButtonSpacing)
+    ) {
+        OutlinedButton(
+            onClick = onLeft,
+            modifier = Modifier
+                .weight(1f)
+                .heightIn(min = AppDefaults.DialogButtonHeight)
+                .pressScale(leftInteraction, pressedScale = 0.96f)
+                .glassFill(
+                    glass = Color.Transparent,
+                    shape = leftShape,
+                    hazeState = effectiveHaze
+                ),
+            interactionSource = leftInteraction,
+            shape = leftShape,
+            border = BorderStroke(1.dp, leftBorderColor),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = Color.Transparent,
+                contentColor = colors.onSurface.copy(alpha = 0.85f)
+            ),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+        ) {
+            Text(
+                text = leftText,
+                style = labelStyle,
+                autoSize = fittedTextAutoSize(labelStyle.fontSize),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        Button(
+            onClick = onRight,
+            modifier = Modifier
+                .weight(1f)
+                .heightIn(min = AppDefaults.DialogButtonHeight)
+                .pressScale(rightInteraction, pressedScale = 0.96f)
+                .glassFill(
+                    glass = rightFill,
+                    shape = rightShape,
+                    hazeState = effectiveHaze
+                ),
+            interactionSource = rightInteraction,
+            shape = rightShape,
+            border = null,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.Transparent,
+                contentColor = rightContentColor
+            ),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+        ) {
+            Text(
+                text = rightText,
+                style = labelStyle,
+                autoSize = fittedTextAutoSize(labelStyle.fontSize),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -127,38 +248,91 @@ internal fun ScanResultCard(
         isError -> SemanticTone.Warning
         else -> SemanticTone.Success
     }
+    val flagged = when (scanResult) {
+        is VirusTotalScanner.ScanResult.Malicious -> scanResult.detections
+        else -> 0
+    }
+    val totalEngines = when (scanResult) {
+        is VirusTotalScanner.ScanResult.Malicious -> scanResult.totalEngines
+        is VirusTotalScanner.ScanResult.Clean -> scanResult.totalEngines
+        else -> 0
+    }
 
-    SurfaceCard(
-        cornerRadius = AppDefaults.SectionCornerRadius,
-        borderWidth = 1.dp,
-        borderColor = tone.accent.copy(alpha = 0.45f),
-        color = tone.container.copy(alpha = 0.35f)
+    // Borderless card on the app's clean elevated surface
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(colors.surfaceColorAtElevation(2.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(AppDefaults.ContentPadding),
-            verticalArrangement = Arrangement.spacedBy(AppDefaults.ItemSpacing)
+        // 1. Hero verdict header + right-aligned detection pill
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(tone.container),
+                contentAlignment = Alignment.Center
             ) {
                 ThemedIcon(
                     icon = when {
                         isMalicious || isError -> Icons.Outlined.Warning
                         else -> Icons.Outlined.CheckCircle
                     },
-                    size = 20.dp,
+                    size = 24.dp,
                     tint = tone.accent
                 )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
                 Text(
                     text = when {
-                        isMalicious -> "VirusTotal — Threats detected"
-                        isError -> "VirusTotal — Scan error"
-                        else -> "VirusTotal — Clean"
+                        isMalicious -> "Threats detected"
+                        isError -> "Scan error"
+                        else -> "No threats found"
                     },
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.onSurface
                 )
+                Text(
+                    text = "VirusTotal security report",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.onSurfaceVariant
+                )
+            }
+            if (!isError && totalEngines > 0) {
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(tone.container)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "$flagged / $totalEngines",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = tone.content
+                    )
+                }
+            }
+        }
+
+        // 2. Status badges row (Cached/Fresh + SHA-256 verified)
+        if (!isError || shaVerified) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 if (!isError) {
                     StatusBadge(
                         text = if (scanResult.cached) "Cached report" else "Fresh scan",
@@ -166,87 +340,159 @@ internal fun ScanResultCard(
                     )
                 }
                 if (shaVerified) {
-                    // As above: Modifier.semantics takes a plain lambda, so the resource is read
-                    // before it rather than inside it.
                     val verifiedLabel = stringResource(R.string.sha_256_verified)
                     StatusBadge(
-                        text = null,
+                        text = "SHA-256 verified",
                         icon = Icons.Outlined.Verified,
                         tone = SemanticTone.Primary,
                         modifier = Modifier.semantics { contentDescription = verifiedLabel }
                     )
                 }
             }
-            Text(
-                text = detail,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+        }
+
+        // 3. Connected 2x2 metric tiles (matching DownloadStatGrid)
+        if (!isError && totalEngines > 0) {
+            val notFlagged = (totalEngines - flagged).coerceAtLeast(0)
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    ReportStatTile(
+                        label = "Not flagged",
+                        value = "$notFlagged / $totalEngines",
+                        valueColor = if (isMalicious) colors.onSurface else tone.accent,
+                        shape = connectedShape(topStart = true, topEnd = false, bottomStart = false, bottomEnd = false),
+                        modifier = Modifier.weight(1f)
+                    )
+                    ReportStatTile(
+                        label = "Flagged",
+                        value = flagged.toString(),
+                        valueColor = if (flagged > 0) colors.error else colors.onSurface,
+                        shape = connectedShape(topStart = false, topEnd = true, bottomStart = false, bottomEnd = false),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    ReportStatTile(
+                        label = "File size",
+                        value = scanResult.sizeBytes?.formatBytes() ?: "—",
+                        valueColor = colors.onSurface,
+                        shape = connectedShape(topStart = false, topEnd = false, bottomStart = true, bottomEnd = false),
+                        modifier = Modifier.weight(1f)
+                    )
+                    ReportStatTile(
+                        label = if (scanResult.scannedFiles != null) "Bundle APKs" else "Reputation",
+                        value = scanResult.scannedFiles?.toString()
+                            ?: scanResult.reputation?.toString()
+                            ?: "—",
+                        valueColor = colors.onSurface,
+                        shape = connectedShape(topStart = false, topEnd = false, bottomStart = false, bottomEnd = true),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+
+        // 4. Verdict summary banner
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(tone.container.copy(alpha = 0.55f))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ThemedIcon(
+                icon = if (isMalicious || isError) Icons.Outlined.Warning else Icons.Outlined.Shield,
+                size = 16.dp,
+                tint = tone.accent
             )
-            if (scanResult is VirusTotalScanner.ScanResult.Malicious) {
+            Text(
+                text = when {
+                    isMalicious -> detail + "\n" + stringResource(R.string.this_file_was_flagged_by_antivirus) +
+                        "Only proceed if you trust the source."
+                    isError -> stringResource(R.string.the_scan_did_not_complete_network) +
+                        "You can still proceed, or cancel to keep the file out of Morphe."
+                    else -> detail
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = tone.content,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        // 5. Malicious engine detections (if any)
+        if (scanResult is VirusTotalScanner.ScanResult.Malicious) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(colors.errorContainer.copy(alpha = 0.35f))
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 scanResult.suggestedThreatLabel?.let { label ->
                     Text(
                         text = "Detected as: $label",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.error
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.error
                     )
                 }
                 if (scanResult.engines.isNotEmpty()) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        scanResult.engines.take(8).forEach { hit ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text(
-                                    text = hit.engine,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Medium,
-                                    modifier = Modifier.weight(0.38f)
-                                )
-                                Text(
-                                    text = hit.result,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.weight(0.62f)
-                                )
-                            }
-                        }
-                        if (scanResult.engines.size > 8) {
+                    scanResult.engines.take(8).forEach { hit ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             Text(
-                                text = "+${scanResult.engines.size - 8} more engines",
+                                text = hit.engine,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                fontWeight = FontWeight.SemiBold,
+                                color = colors.onSurface,
+                                modifier = Modifier.weight(0.38f)
+                            )
+                            Text(
+                                text = hit.result,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.error,
+                                modifier = Modifier.weight(0.62f)
                             )
                         }
                     }
+                    if (scanResult.engines.size > 8) {
+                        Text(
+                            text = "+${scanResult.engines.size - 8} more engines",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.onSurfaceVariant
+                        )
+                    }
                 }
             }
-            if (isMalicious) {
-                Text(
-                    text = stringResource(R.string.this_file_was_flagged_by_antivirus) +
-                        "Only proceed if you trust the source.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
-                )
-            } else if (isError) {
-                Text(
-                    text = stringResource(R.string.the_scan_did_not_complete_network) +
-                        "You can still proceed, or cancel to keep the file out of Morphe.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-            if (scanResult.apkResults.isNotEmpty()) {
-                AppDivider(modifier = Modifier.padding(vertical = 4.dp), fullWidth = true)
+        }
+
+        // 6. Bundle inner APK breakdown (if bundle)
+        if (scanResult.apkResults.isNotEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(colors.surfaceVariant.copy(alpha = 0.32f))
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text(
                     text = stringResource(R.string.apk_details),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.onSurface
                 )
                 scanResult.apkResults.forEach { apk ->
                     val apkVerdictColor = when {
@@ -277,8 +523,6 @@ internal fun ScanResultCard(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
                         )
-                        // Distinguish a cached report (VirusTotal already had it) from a
-                        // fresh upload so users can tell why an APK's scan was instant.
                         if (!apk.failed) {
                             StatusBadge(
                                 text = if (apk.cached) "cached" else "fresh",
@@ -288,6 +532,7 @@ internal fun ScanResultCard(
                         Text(
                             text = if (apk.failed) "failed" else "${apk.detections}/${apk.totalEngines}",
                             style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
                             color = apkVerdictColor
                         )
                         if (apk.sha256 != null) {
@@ -330,139 +575,191 @@ internal fun ScanResultCard(
                     }
                 }
             }
-            ScanMetaRows(scanResult)
-            if (!readOnly) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    HelperButton(
-                        text = "Proceed",
-                        onClick = onProceed,
-                        modifier = Modifier.weight(1f)
-                    )
-                    HelperOutlinedButton(
-                        text = "Cancel",
-                        onClick = onCancel,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
         }
+
+        // 7. File & VirusTotal API metadata section
+        ScanMetaRows(scanResult)
+    }
+}
+
+@Composable
+private fun ReportStatTile(
+    label: String,
+    value: String,
+    valueColor: Color,
+    shape: Shape,
+    modifier: Modifier = Modifier
+) {
+    val colors = MaterialTheme.colorScheme
+    Column(
+        modifier = modifier
+            .clip(shape)
+            .background(colors.surfaceVariant.copy(alpha = 0.35f))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = valueColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
 @Composable
 internal fun ScanMetaRows(scanResult: VirusTotalScanner.ScanResult) {
     if (scanResult is VirusTotalScanner.ScanResult.Error) return
+    val colors = MaterialTheme.colorScheme
     val context = LocalContext.current
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-    var hashCopied by remember { mutableStateOf(false) }
+    var copiedKey by remember { mutableStateOf<String?>(null) }
     val sha256 = scanResult.sha256
+
     val rows = buildList {
-        scanResult.typeDescription?.let { add("Type" to it) }
-        scanResult.sizeBytes?.let { add("Size" to it.formatBytes()) }
+        scanResult.meaningfulName?.takeIf { it.isNotBlank() }?.let { add("Known name" to it) }
+        scanResult.typeDescription?.let { add("File type" to it) }
         scanResult.timesSubmitted?.let { add("Times submitted" to it.toString()) }
         scanResult.firstSubmissionDate?.let { add("First seen" to formatScanDate(it)) }
         scanResult.lastAnalysisDate?.let { add("Last analyzed" to formatScanDate(it)) }
         if (scanResult is VirusTotalScanner.ScanResult.Malicious) {
+            if (scanResult.suspicious > 0) {
+                add("Suspicious flags" to scanResult.suspicious.toString())
+            }
             if (scanResult.scannedFiles != null && scanResult.fileName.isNotBlank()) {
                 add("Flagged APK" to scanResult.fileName)
             }
         }
-        scanResult.scannedFiles?.let { add("APKs scanned" to it.toString()) }
+        if (scanResult.sandboxMalwareNames.isNotEmpty()) {
+            add("Sandbox verdicts" to scanResult.sandboxMalwareNames.joinToString(", "))
+        }
         scanResult.bundleName?.let { add("Bundle" to it) }
-        if (scanResult is VirusTotalScanner.ScanResult.Clean) {
-            if (scanResult.votesHarmless > 0 || scanResult.votesMalicious > 0) {
-                add("Community votes" to "${scanResult.votesHarmless} harmless / ${scanResult.votesMalicious} malicious")
-            }
-            scanResult.reputation?.let { add("Reputation" to it.toString()) }
+        if (scanResult.votesHarmless > 0 || scanResult.votesMalicious > 0) {
+            add("Community votes" to "${scanResult.votesHarmless} harmless · ${scanResult.votesMalicious} malicious")
         }
     }
-    if (rows.isEmpty() && sha256 == null) return
+
+    val hashes = buildList {
+        sha256?.let { add("SHA-256" to it) }
+        scanResult.sha1?.let { add("SHA-1" to it) }
+        scanResult.md5?.let { add("MD5" to it) }
+    }
+
+    if (rows.isEmpty() && hashes.isEmpty()) return
+
     Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(colors.surfaceVariant.copy(alpha = 0.28f))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        sha256?.let { hash ->
-            // Tap to copy the full hash.
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(AppDefaults.CompactCornerRadius))
-                    .clickable {
-                        clipboard?.setPrimaryClip(ClipData.newPlainText("SHA-256", hash))
-                        hashCopied = true
-                        Toast.makeText(context, "SHA-256 copied", Toast.LENGTH_SHORT).show()
-                    }
-                    .padding(vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = stringResource(R.string.sha_256),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(0.38f)
-                )
-                Text(
-                    text = hash.take(16) + "…",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.weight(0.5f)
-                )
-                ThemedIcon(
-                    icon = if (hashCopied) Icons.Outlined.CheckCircle else Icons.Outlined.ContentCopy,
-                    contentDescription = stringResource(R.string.copy_sha_256),
-                    size = 16.dp,
-                    tint = if (hashCopied) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                )
-            }
-            // Jump to the full report on virustotal.com.
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(AppDefaults.CompactCornerRadius))
-                    .clickable { openVirusTotalPage(context, hash) }
-                    .padding(vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = stringResource(R.string.open_in_virustotal),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.weight(0.38f)
-                )
-                Spacer(modifier = Modifier.weight(0.5f))
-                ThemedIcon(
-                    icon = Icons.Outlined.OpenInNew,
-                    contentDescription = stringResource(R.string.open_in_virustotal),
-                    size = 16.dp
-                )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "File & report details",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = colors.onSurface
+            )
+            if (sha256 != null) {
+                Row(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(colors.primaryContainer.copy(alpha = 0.65f))
+                        .clickable { openVirusTotalPage(context, sha256) }
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.open_in_virustotal),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.onPrimaryContainer
+                    )
+                    ThemedIcon(
+                        icon = Icons.Outlined.OpenInNew,
+                        contentDescription = stringResource(R.string.open_in_virustotal),
+                        size = 13.dp,
+                        tint = colors.onPrimaryContainer
+                    )
+                }
             }
         }
+
         rows.forEach { (label, value) ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.Top
             ) {
                 Text(
                     text = label,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(0.38f)
+                    color = colors.onSurfaceVariant,
+                    modifier = Modifier.weight(0.36f)
                 )
                 Text(
                     text = value,
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium,
-                    modifier = Modifier.weight(0.62f)
+                    color = colors.onSurface,
+                    modifier = Modifier.weight(0.64f)
+                )
+            }
+        }
+
+        hashes.forEach { (label, fullHash) ->
+            val isCopied = copiedKey == label
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(colors.surfaceVariant.copy(alpha = 0.35f))
+                    .clickable {
+                        clipboard?.setPrimaryClip(ClipData.newPlainText(label, fullHash))
+                        copiedKey = label
+                        Toast.makeText(context, "$label copied", Toast.LENGTH_SHORT).show()
+                    }
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.onSurfaceVariant,
+                    modifier = Modifier.width(56.dp)
+                )
+                Text(
+                    text = if (fullHash.length > 24) fullHash.take(20) + "…" else fullHash,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = colors.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                ThemedIcon(
+                    icon = if (isCopied) Icons.Outlined.CheckCircle else Icons.Outlined.ContentCopy,
+                    contentDescription = "Copy $label",
+                    size = 15.dp,
+                    tint = if (isCopied) colors.primary else colors.onSurfaceVariant
                 )
             }
         }

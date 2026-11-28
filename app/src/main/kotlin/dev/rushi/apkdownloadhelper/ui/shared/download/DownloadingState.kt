@@ -1,5 +1,6 @@
 package dev.rushi.apkdownloadhelper.ui.shared.download
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -19,10 +20,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -38,6 +43,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.CancelDownloadDialog
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -51,6 +57,7 @@ import dev.rushi.apkdownloadhelper.ui.model.UiState
 import dev.rushi.apkdownloadhelper.ui.shared.button.SkipWaitButton
 import dev.rushi.apkdownloadhelper.ui.shared.dialog.AppAlertDialog
 import dev.rushi.apkdownloadhelper.ui.shared.progress.WavyLinearProgressBar
+import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.pressScale
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Spacer
@@ -70,36 +77,40 @@ import dev.rushi.apkdownloadhelper.ui.theme.rememberMorphePillShape
 import dev.rushi.apkdownloadhelper.ui.util.formatBytes
 import dev.rushi.apkdownloadhelper.ui.util.formatTransferEta
 import dev.rushi.apkdownloadhelper.ui.util.formatTransferSpeed
+import androidx.compose.foundation.shape.CornerBasedShape
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.Dp
+import dev.rushi.apkdownloadhelper.ui.shared.shape.rememberPressShape
+
+// Same look as the "Accepted formats" pills: small gap, round outer corners, tight inner ones.
+private val ConnectGap = 3.dp
+private val ConnectOuter = 20.dp
+private val ConnectInner = 6.dp
+private val ConnectButtonOuter = 23.dp // half of the 46.dp pill buttons, so outer ends stay fully round
+
+internal fun connectedShape(
+    topStart: Boolean,
+    topEnd: Boolean,
+    bottomStart: Boolean,
+    bottomEnd: Boolean,
+    outer: Dp = ConnectOuter
+): CornerBasedShape = RoundedCornerShape(
+    topStart = if (topStart) outer else ConnectInner,
+    topEnd = if (topEnd) outer else ConnectInner,
+    bottomStart = if (bottomStart) outer else ConnectInner,
+    bottomEnd = if (bottomEnd) outer else ConnectInner
+)
 
 @Composable
 internal fun DownloadingState(
     state: UiState.Downloading,
-    availableSources: List<DownloadSource>,
     onCancel: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
-    onSwitchSource: (DownloadSource) -> Unit,
     onSkipWait: () -> Unit,
     onSkipScan: () -> Unit
 ) {
-    var showCancelConfirm by remember { mutableStateOf(false) }
-
-    if (showCancelConfirm) {
-        CancelDownloadDialog(
-            onKeepDownloading = { showCancelConfirm = false },
-            onConfirmStop = {
-                showCancelConfirm = false
-                onCancel()
-            }
-        )
-    }
-
     val scheme = MaterialTheme.colorScheme
-    val statusText = state.statusMessage
-        ?: if (state.paused) "Paused" else "Downloading from ${state.candidate.source.label}"
-    val isScan = isScanStatus(statusText)
-    val (phase, detail) = if (isScan) scanPhaseSplit(statusText) else (statusText to "")
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -108,19 +119,111 @@ internal fun DownloadingState(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Header: status + stats on left, percentage pill + circular cancel on right
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        DownloadHeader(source = state.candidate.source.label, modeLabel = null)
+        DownloadTransferBody(
+            percent = state.percent,
+            paused = state.paused,
+            statusText = state.statusMessage.orEmpty(),
+            downloadedBytes = state.downloadedBytes,
+            totalBytes = state.totalBytes,
+            speedBytesPerSec = state.speedBytesPerSec,
+            etaMs = state.etaMs,
+            connections = state.connections,
+            onPause = onPause,
+            onResume = onResume,
+            onStop = onCancel,
+            onSkipWait = onSkipWait,
+            onSkipScan = onSkipScan
+        )
+    }
+}
+
+/** Shared card header: big source name, small mode label (e.g. "Fast Mode") below it. */
+@Composable
+internal fun DownloadHeader(
+    source: String?,
+    modeLabel: String?,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        source?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = scheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        modeLabel?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.labelMedium,
+                color = scheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+/**
+ * Everything under the header for an active transfer, shared by the normal download card and
+ * the Fast Mode card. Pass [onSwitchSources] only for Fast Mode to get the extra button.
+ */
+@Composable
+internal fun DownloadTransferBody(
+    percent: Int,
+    paused: Boolean,
+    statusText: String,
+    downloadedBytes: Long,
+    totalBytes: Long,
+    speedBytesPerSec: Double,
+    etaMs: Long?,
+    connections: Int,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onStop: () -> Unit,
+    onSkipWait: () -> Unit,
+    onSkipScan: () -> Unit,
+    modifier: Modifier = Modifier,
+    onSwitchSources: (() -> Unit)? = null
+) {
+    val scheme = MaterialTheme.colorScheme
+    val isScan = isScanStatus(statusText)
+    var showStopConfirm by remember { mutableStateOf(false) }
+
+    // Back behaves exactly like tapping Stop: ask first, then stop or keep downloading.
+    BackHandler(enabled = !isScan && percent < 100) { showStopConfirm = true }
+
+    if (showStopConfirm) {
+        CancelDownloadDialog(
+            onKeepDownloading = { showStopConfirm = false },
+            onConfirmStop = {
+                showStopConfirm = false
+                onStop()
+            }
+        )
+    }
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(AppDefaults.ItemSpacing)
+    ) {
+        if (isScan) {
+            val (phase, detail) = scanPhaseSplit(statusText)
             Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
                     text = phase,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Bold,
                     color = scheme.onSurface,
                     maxLines = 2,
@@ -131,55 +234,83 @@ internal fun DownloadingState(
                         text = detail,
                         color = scheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
-                        maxLines = 2,
+                        maxLines = 3,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                if (!isScan) {
-                    val candidateMeta = buildList {
-                        state.candidate.versionName?.takeIf { it.isNotBlank() }?.let(::add)
-                        state.candidate.fileKind
-                            .takeIf { !it.equals("web", ignoreCase = true) }
-                            ?.uppercase()
-                            ?.let(::add)
-                    }.joinToString(" · ")
-                    if (candidateMeta.isNotBlank()) {
-                        Text(
-                            text = candidateMeta,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1
-                        )
-                    }
-                }
             }
-            DownloadPercentPill(percent = state.percent, paused = state.paused)
-            DownloadCancelButton(onClick = { showCancelConfirm = true })
-        }
-
-        DownloadProgressBar(
-            percent = state.percent,
-            paused = state.paused
-        )
-
-        if (!isScan) {
-            DownloadDetailsRow(
-                downloadedBytes = state.downloadedBytes,
-                totalBytes = state.totalBytes,
-                speedBytesPerSec = state.speedBytesPerSec,
-                etaMs = state.etaMs,
-                connections = state.connections,
-                paused = state.paused,
-                showConnections = state.percent < 100
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                DownloadPercentPill(percent = percent, paused = paused)
+            }
+        } else {
+            DownloadStatGrid(
+                downloadedBytes = downloadedBytes,
+                totalBytes = totalBytes,
+                speedBytesPerSec = speedBytesPerSec,
+                etaMs = etaMs,
+                connections = connections,
+                showConnections = percent < 100
             )
+            DownloadStatusRow(percent = percent, paused = paused)
         }
 
-        if (!isScan && state.percent < 100) {
+        DownloadProgressBar(percent = percent, paused = paused)
+
+        if (!isScan && percent < 100) {
+            val pauseResumeText = if (paused) "Resume" else "Pause"
+            val pauseResumeIcon = if (paused) Icons.Outlined.PlayArrow else Icons.Outlined.Pause
+            val pauseResumeClick = if (paused) onResume else onPause
+            if (onSwitchSources != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(ConnectGap)
+                ) {
+                    DownloadPillButton(
+                        text = pauseResumeText,
+                        icon = pauseResumeIcon,
+                        onClick = pauseResumeClick,
+                        primary = true,
+                        shape = connectedShape(
+                            topStart = true,
+                            topEnd = false,
+                            bottomStart = true,
+                            bottomEnd = false,
+                            outer = ConnectButtonOuter
+                        ),
+                        modifier = Modifier.weight(1f)
+                    )
+                    DownloadPillButton(
+                        text = "Switch Sources",
+                        icon = Icons.Outlined.SwapHoriz,
+                        onClick = onSwitchSources,
+                        primary = false,
+                        shape = connectedShape(
+                            topStart = false,
+                            topEnd = true,
+                            bottomStart = false,
+                            bottomEnd = true,
+                            outer = ConnectButtonOuter
+                        ),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            } else {
+                DownloadPillButton(
+                    text = pauseResumeText,
+                    icon = pauseResumeIcon,
+                    onClick = pauseResumeClick,
+                    primary = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
             DownloadPillButton(
-                text = if (state.paused) "Resume" else "Pause",
-                icon = if (state.paused) Icons.Outlined.PlayArrow else Icons.Outlined.Pause,
-                onClick = if (state.paused) onResume else onPause,
-                primary = true,
+                text = "Stop",
+                icon = Icons.Outlined.Close,
+                onClick = { showStopConfirm = true },
+                primary = false,
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -203,6 +334,119 @@ internal fun DownloadingState(
                 style = MaterialTheme.typography.bodySmall
             )
         }
+    }
+}
+
+@Composable
+internal fun DownloadStatGrid(
+    downloadedBytes: Long,
+    totalBytes: Long,
+    speedBytesPerSec: Double,
+    etaMs: Long?,
+    connections: Int,
+    showConnections: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val sizeText = when {
+        totalBytes > 0L -> "${downloadedBytes.formatBytes()} / ${totalBytes.formatBytes()}"
+        downloadedBytes > 0L -> downloadedBytes.formatBytes()
+        else -> "—"
+    }
+    val speedText = formatTransferSpeed(speedBytesPerSec)
+        .takeIf { it.isNotEmpty() } ?: "—"
+    val etaText = etaMs
+        ?.takeIf { it > 0L }
+        ?.let { formatTransferEta(it) }
+        ?: "—"
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(ConnectGap)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(ConnectGap)
+        ) {
+            DownloadStatCard(
+                label = "Downloaded",
+                value = sizeText,
+                shape = connectedShape(topStart = true, topEnd = false, bottomStart = false, bottomEnd = false),
+                modifier = Modifier.weight(1f)
+            )
+            DownloadStatCard(
+                label = "Speed",
+                value = speedText,
+                shape = connectedShape(topStart = false, topEnd = true, bottomStart = false, bottomEnd = false),
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(ConnectGap)
+        ) {
+            // When Connections is hidden, Time left fills the row and rounds both bottom corners.
+            DownloadStatCard(
+                label = "Time left",
+                value = etaText,
+                shape = connectedShape(
+                    topStart = false,
+                    topEnd = false,
+                    bottomStart = true,
+                    bottomEnd = !showConnections
+                ),
+                modifier = Modifier.weight(1f)
+            )
+            if (showConnections) {
+                DownloadStatCard(
+                    label = "Connections",
+                    value = connections.toString(),
+                    shape = connectedShape(topStart = false, topEnd = false, bottomStart = false, bottomEnd = true),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun DownloadStatusRow(
+    percent: Int,
+    paused: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(
+                    if (paused) scheme.surfaceVariant.copy(alpha = 0.7f)
+                    else scheme.primaryContainer.copy(alpha = 0.7f)
+                )
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = if (paused) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
+                contentDescription = null,
+                modifier = Modifier.size(14.dp),
+                tint = if (paused) scheme.onSurfaceVariant else scheme.onPrimaryContainer
+            )
+            Text(
+                text = if (paused) "Paused" else "Downloading",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (paused) scheme.onSurfaceVariant else scheme.onPrimaryContainer,
+                maxLines = 1
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        DownloadPercentPill(percent = percent, paused = paused)
     }
 }
 
@@ -263,46 +507,25 @@ internal fun DownloadPercentPill(
 }
 
 @Composable
-internal fun DownloadCancelButton(onClick: () -> Unit) {
-    val primaryColor = MaterialTheme.colorScheme.primary
-    val interaction = remember { MutableInteractionSource() }
-    Surface(
-        onClick = onClick,
-        modifier = Modifier
-            .size(36.dp)
-            .pressScale(interaction),
-        interactionSource = interaction,
-        shape = rememberMorphePillShape(interaction),
-        color = primaryColor.copy(alpha = 0.28f),
-        contentColor = MaterialTheme.colorScheme.onSurface
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = Icons.Outlined.Close,
-                contentDescription = "Cancel download",
-                modifier = Modifier.size(18.dp)
-            )
-        }
-    }
-}
-
-@Composable
 internal fun DownloadPillButton(
     text: String,
     icon: ImageVector,
     primary: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    shape: Shape? = null
 ) {
     val primaryColor = MaterialTheme.colorScheme.primary
     val interaction = remember { MutableInteractionSource() }
+    val morphShape = rememberMorphePillShape(interaction)
+    val pressedShape = rememberPressShape(interaction, shape ?: morphShape)
     Button(
         onClick = onClick,
         modifier = modifier
             .height(46.dp)
             .pressScale(interaction),
         interactionSource = interaction,
-        shape = rememberMorphePillShape(interaction),
+        shape = if (shape != null) pressedShape else morphShape,
         border = null,
         colors = ButtonDefaults.buttonColors(
             containerColor = primaryColor.copy(alpha = 0.28f),
@@ -323,216 +546,5 @@ internal fun DownloadPillButton(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-    }
-}
-
-@Composable
-internal fun TransferStats(
-    connections: Int,
-    speedBytesPerSec: Double,
-    etaMs: Long?,
-    paused: Boolean,
-    includeConnections: Boolean,
-    modifier: Modifier = Modifier
-) {
-    val lines = transferStatLines(
-        connections = connections,
-        speedBytesPerSec = speedBytesPerSec,
-        etaMs = etaMs,
-        paused = paused,
-        includeConnections = includeConnections
-    )
-    val summary = if (lines.isEmpty()) {
-        if (paused) "Paused" else "Downloading"
-    } else {
-        lines.joinToString(" · ")
-    }
-    Text(
-        text = summary,
-        modifier = modifier,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        style = MaterialTheme.typography.bodySmall,
-        maxLines = 2,
-        overflow = TextOverflow.Ellipsis
-    )
-}
-
-private fun transferStatLines(
-    connections: Int,
-    speedBytesPerSec: Double,
-    etaMs: Long?,
-    paused: Boolean,
-    includeConnections: Boolean
-): List<String> = buildList {
-    if (includeConnections) {
-        add(
-            "$connections " +
-                if (connections == 1) "connection" else "connections"
-        )
-    }
-    if (!paused) {
-        formatTransferSpeed(speedBytesPerSec)
-            .takeIf { it.isNotEmpty() }
-            ?.let(::add)
-        if (etaMs != null && etaMs > 0L) {
-            add("${formatTransferEta(etaMs)} left")
-        }
-    }
-}
-
-@Composable
-internal fun DownloadDetailsRow(
-    downloadedBytes: Long,
-    totalBytes: Long,
-    speedBytesPerSec: Double,
-    etaMs: Long?,
-    connections: Int,
-    paused: Boolean,
-    showConnections: Boolean,
-    modifier: Modifier = Modifier
-) {
-    val scheme = MaterialTheme.colorScheme
-    val sizeText = when {
-        totalBytes > 0L -> "${downloadedBytes.formatBytes()} / ${totalBytes.formatBytes()}"
-        downloadedBytes > 0L -> downloadedBytes.formatBytes()
-        else -> null
-    }
-    val rightParts = buildList {
-        if (paused) {
-            add("Paused")
-        } else {
-            formatTransferSpeed(speedBytesPerSec).takeIf { it.isNotEmpty() }?.let(::add)
-            if (etaMs != null && etaMs > 0L) add("${formatTransferEta(etaMs)} left")
-        }
-        if (showConnections) {
-            add("$connections ${if (connections == 1) "conn" else "conns"}")
-        }
-    }
-
-    if (sizeText == null && rightParts.isEmpty()) return
-
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (sizeText != null) {
-            Text(
-                text = sizeText,
-                style = MaterialTheme.typography.labelMedium,
-                color = scheme.onSurface,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1
-            )
-        }
-        if (rightParts.isNotEmpty()) {
-            Text(
-                text = rightParts.joinToString(" · "),
-                style = MaterialTheme.typography.labelMedium,
-                color = scheme.onSurfaceVariant,
-                maxLines = 1
-            )
-        }
-    }
-}
-
-@Composable
-internal fun CancelDownloadDialog(
-    title: String = "Stop download?",
-    message: String = "The current download progress will be discarded.",
-    onKeepDownloading: () -> Unit,
-    onConfirmStop: () -> Unit
-) {
-    val scheme = MaterialTheme.colorScheme
-    Dialog(
-        onDismissRequest = onKeepDownloading,
-        properties = AppDialogProperties
-    ) {
-        DialogSurface(modifier = Modifier.fillMaxWidth(0.90f)) {
-            Column(
-                modifier = Modifier.padding(DialogContentPadding),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(scheme.errorContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Close,
-                            contentDescription = null,
-                            tint = scheme.onErrorContainer,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = scheme.onSurface
-                    )
-                }
-
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = scheme.onSurfaceVariant
-                )
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val primaryColor = MaterialTheme.colorScheme.primary
-                    val keepInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                    Button(
-                        onClick = onKeepDownloading,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .pressScale(keepInteraction),
-                        interactionSource = keepInteraction,
-                        shape = rememberMorphePillShape(keepInteraction),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = primaryColor.copy(alpha = 0.28f),
-                            contentColor = MaterialTheme.colorScheme.onSurface
-                        )
-                    ) {
-                        Text(
-                            text = "Keep downloading",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    val stopInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                    Button(
-                        onClick = onConfirmStop,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .pressScale(stopInteraction),
-                        interactionSource = stopInteraction,
-                        shape = rememberMorphePillShape(stopInteraction),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = scheme.errorContainer.copy(alpha = 0.85f),
-                            contentColor = scheme.onErrorContainer
-                        )
-                    ) {
-                        Text(
-                            text = "Stop",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-        }
     }
 }

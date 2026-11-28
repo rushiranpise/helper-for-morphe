@@ -324,11 +324,14 @@ private fun Context.cleanupExternalDownloads(cutoff: Long): Long {
 }
 
 /** Deletes every managed copy in cache, external storage, Downloads and the custom folder. */
-internal fun Context.clearAllDownloads(): Long =
-    clearTemporaryDownloads() +
+internal fun Context.clearAllDownloads(): Long {
+    val freed = clearTemporaryDownloads() +
         clearExternalDownloads() +
         clearDownloadsCopies() +
         clearCustomDownloads()
+    DownloadHistoryStore.notifyChanged()
+    return freed
+}
 
 /**
  * Applies the configured retention to cache, external, public and custom

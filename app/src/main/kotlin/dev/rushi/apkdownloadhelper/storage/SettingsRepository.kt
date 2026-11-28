@@ -148,7 +148,13 @@ internal data class HelperSettings(
     val updateMode: UpdateMode = UpdateMode.NOTIFY,
     val updatePopup: Boolean = true,
     /** Empty keeps Shizuku's default package; set for forks with another name. */
-    val shizukuPackage: String = ""
+    val shizukuPackage: String = "",
+    /** Hides the Find apps tab and stops its index loads. */
+    val hideFindAppsTab: Boolean = false,
+    /** Hides the Tracking bell and pauses background checks and notifications. */
+    val hideTracking: Boolean = false,
+    /** Hides the community requests button in Find apps. */
+    val hideRequestsButton: Boolean = false
 )
 
 internal enum class VirusTotalScanMode(
@@ -441,7 +447,10 @@ internal fun Context.loadHelperSettings(): HelperSettings {
             UpdateMode.NOTIFY
         ),
         updatePopup = prefs.getBoolean("update_popup", true),
-        shizukuPackage = prefs.getString("shizuku_package", "") ?: ""
+        shizukuPackage = prefs.getString("shizuku_package", "") ?: "",
+        hideFindAppsTab = prefs.getBoolean("hide_find_apps_tab", false),
+        hideTracking = prefs.getBoolean("hide_tracking", false),
+        hideRequestsButton = prefs.getBoolean("hide_requests_button", false)
     )
 
     // Version 2 turned Fast Mode on and narrowed the enabled sources to the ones the
@@ -521,6 +530,9 @@ internal fun Context.saveHelperSettings(settings: HelperSettings) {
         .putBoolean("hide_community_notice", settings.hideCommunityNotice)
         .putBoolean("use_gradient_card_colors", settings.useGradientCardColors)
         .putString("shizuku_package", settings.shizukuPackage)
+        .putBoolean("hide_find_apps_tab", settings.hideFindAppsTab)
+        .putBoolean("hide_tracking", settings.hideTracking)
+        .putBoolean("hide_requests_button", settings.hideRequestsButton)
         .apply()
 }
 

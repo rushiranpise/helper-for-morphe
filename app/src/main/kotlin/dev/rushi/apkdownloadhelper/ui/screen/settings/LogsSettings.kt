@@ -41,8 +41,12 @@ internal fun LogsTabContent(
     onShareHistoryEntry: (DownloadHistoryEntry) -> Unit,
     onClearHistory: () -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val historyRevision = DownloadHistoryStore.revision
     var subTab by rememberSaveable { mutableStateOf(LogsSubTab.HISTORY) }
-    var displayedHistory by remember(historyEntries) { mutableStateOf(historyEntries) }
+    val displayedHistory = remember(historyEntries, historyRevision) {
+        DownloadHistoryStore.entries(context)
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -62,7 +66,6 @@ internal fun LogsTabContent(
                     entries = displayedHistory,
                     onClear = {
                         onClearHistory()
-                        displayedHistory = emptyList()
                     },
                     onOpen = onOpenHistoryEntry,
                     onShare = onShareHistoryEntry

@@ -1,20 +1,19 @@
 package dev.rushi.apkdownloadhelper.ui.shared.dialog
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.clickable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
+import dev.rushi.apkdownloadhelper.ui.shared.button.DialogButton
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -24,8 +23,6 @@ import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Warning
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -35,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,7 +44,6 @@ import dev.rushi.apkdownloadhelper.ui.shared.chip.StatusBadge
 import dev.rushi.apkdownloadhelper.ui.shared.chip.StatusBadgeRow
 import dev.rushi.apkdownloadhelper.ui.shared.icon.ThemedIcon
 import dev.rushi.apkdownloadhelper.ui.theme.SemanticTone
-import dev.rushi.apkdownloadhelper.ui.theme.pressScale
 import dev.rushi.apkdownloadhelper.ui.util.formatBytes
 
 /** A previously downloaded file offered for reuse, with its size on disk. */
@@ -59,7 +56,8 @@ internal data class ReuseOption(
 internal fun ReuseOfferDialog(
     options: List<ReuseOption>,
     onUseExisting: (ReuseOption) -> Unit,
-    onDownloadNew: () -> Unit
+    onDownloadNew: () -> Unit,
+    useItButtonColor: Color = AppDialogDefaults.confirmButtonContainer()
 ) {
     AppAlertDialog(
         onDismissRequest = onDownloadNew,
@@ -71,14 +69,14 @@ internal fun ReuseOfferDialog(
         },
         text = {
             val scheme = MaterialTheme.colorScheme
-            val downloadNewInteraction = remember { MutableInteractionSource() }
+            var selectedIndex by remember(options) { mutableIntStateOf(0) }
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
                     text = stringResource(R.string.a_previous_download_for_this_exact),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyLarge,
                     color = scheme.onSurfaceVariant
                 )
 
@@ -89,20 +87,17 @@ internal fun ReuseOfferDialog(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    options.forEach { option ->
+                    options.forEachIndexed { index, option ->
                         val entry = option.entry
-                        val cardInteraction = remember { MutableInteractionSource() }
-                        options.forEach { option ->
-                            val entry = option.entry
-                            val useItInteraction = remember { MutableInteractionSource() }
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(20.dp))
-                                    .background(scheme.surfaceColorAtElevation(4.dp))
-                                    .padding(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(scheme.surfaceColorAtElevation(4.dp))
+                                .clickable(enabled = options.size > 1) { selectedIndex = index }
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
                                 // App icon + name + package
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -132,6 +127,9 @@ internal fun ReuseOfferDialog(
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
+                                    }
+                                    if (options.size > 1) {
+                                        SelectCircle(selected = index == selectedIndex)
                                     }
                                 }
 
@@ -224,65 +222,27 @@ internal fun ReuseOfferDialog(
                                         )
                                     }
                                 }
-                                Button(
-                                    onClick = { onUseExisting(option) },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(44.dp)
-                                        .pressScale(useItInteraction),
-                                    interactionSource = useItInteraction,
-                                    shape = CircleShape,
-                                    border = null,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = scheme.primaryContainer,
-                                        contentColor = scheme.onPrimaryContainer
-                                    ),
-                                    contentPadding = PaddingValues(horizontal = 16.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.CheckCircle,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        text = "Use it",
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1
-                                    )
-                                }
-                            }
                         }
                     }
                 }
 
-                Button(
-                    onClick = onDownloadNew,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .pressScale(downloadNewInteraction),
-                    interactionSource = downloadNewInteraction,
-                    shape = CircleShape,
-                    border = null,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = scheme.surfaceVariant.copy(alpha = 0.55f),
-                        contentColor = scheme.onSurface
-                    ),
-                    contentPadding = PaddingValues(horizontal = 16.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(AppDialogDefaults.ButtonSpacing)
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Download,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
+                    DialogButton(
                         text = "Download new",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1
+                        onClick = onDownloadNew,
+                        filled = false,
+                        icon = Icons.Outlined.Download,
+                        modifier = Modifier.weight(1f)
+                    )
+                    DialogButton(
+                        text = "Use it",
+                        onClick = { options.getOrNull(selectedIndex)?.let(onUseExisting) },
+                        icon = Icons.Outlined.CheckCircle,
+                        buttonColor = useItButtonColor,
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }

@@ -51,6 +51,7 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun AppNavigationBar(
     pagerState: PagerState,
+    visiblePages: List<MainPage>,
     covered: Boolean,
     modifier: Modifier = Modifier,
     hazeState: HazeState? = null,
@@ -105,7 +106,7 @@ internal fun AppNavigationBar(
                         modifier = Modifier.fillMaxSize(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        MainPage.entries.forEachIndexed { index, page ->
+                        visiblePages.forEachIndexed { index, page ->
                             val isSettings = page == MainPage.SETTINGS
                             val icon = if (isSettings) settingsIcon else page.icon
                             val label = page.label
@@ -121,7 +122,9 @@ internal fun AppNavigationBar(
                                 contentDescription = a11y,
                                 selected = pagerState.currentPage == index,
                                 onClick = {
-                                    scope.launch { pagerState.turnTo(page) }
+                                    // Use the index within visiblePages so hiding Find Apps
+                                    // doesn't shift the target page out of bounds.
+                                    scope.launch { pagerState.animateScrollToPage(index) }
                                 },
                                 modifier = Modifier
                                     .weight(1f)

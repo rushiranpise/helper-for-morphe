@@ -93,9 +93,11 @@ import dev.rushi.apkdownloadhelper.ui.shared.button.AnimatedFab
 import dev.rushi.apkdownloadhelper.ui.shared.button.GlassHeaderButton
 import dev.rushi.apkdownloadhelper.ui.shared.chip.StatusBadge
 import dev.rushi.apkdownloadhelper.ui.shared.dialog.AppAlertDialog
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.FastModeToggleDialog
 import dev.rushi.apkdownloadhelper.ui.shared.download.CheckingPickedFileState
 import dev.rushi.apkdownloadhelper.ui.shared.download.DownloadingState
 import dev.rushi.apkdownloadhelper.ui.shared.download.FastModeCard
+import dev.rushi.apkdownloadhelper.ui.shared.download.ScanActionBar
 import dev.rushi.apkdownloadhelper.ui.shared.download.ScanAskCard
 import dev.rushi.apkdownloadhelper.ui.shared.download.ScanResultCard
 import dev.rushi.apkdownloadhelper.ui.shared.download.isScanStatus
@@ -104,11 +106,12 @@ import dev.rushi.apkdownloadhelper.ui.shared.scroll.LazyListScrollbar
 import dev.rushi.apkdownloadhelper.ui.shared.settings.VirusTotalQuotaCard
 import dev.rushi.apkdownloadhelper.ui.shared.source.PrimaryAction
 import dev.rushi.apkdownloadhelper.ui.shared.source.SourceBottomBar
-import dev.rushi.apkdownloadhelper.ui.shared.source.SourcePickerDialog
+import dev.rushi.apkdownloadhelper.ui.shared.dialog.SourcePickerDialog
 import dev.rushi.apkdownloadhelper.ui.shared.source.rememberSourcePickerState
 import dev.rushi.apkdownloadhelper.ui.shared.source.sourcePickerItems
 import dev.rushi.apkdownloadhelper.ui.shared.state.ErrorState
 import dev.rushi.apkdownloadhelper.ui.shared.state.LoadingState
+import dev.rushi.apkdownloadhelper.ui.model.FastModeProgress
 import dev.rushi.apkdownloadhelper.ui.theme.AppColors
 import dev.rushi.apkdownloadhelper.ui.theme.AppDefaults
 import dev.rushi.apkdownloadhelper.ui.theme.hazeSourceIfEnabled
@@ -252,6 +255,20 @@ internal fun HelperRequestContent(
 
     var confirmFastModeTarget by remember { mutableStateOf<Boolean?>(null) }
 
+    // Set when the user picks a new Fast Mode source; keeps the Fast Mode card on screen
+    // (instead of the generic shimmer list) until the new source's state arrives.
+    var switchingTo by remember(request.packageName) { mutableStateOf<DownloadSource?>(null) }
+    LaunchedEffect(state) {
+        val target = switchingTo ?: return@LaunchedEffect
+        val settled = when (state) {
+            UiState.Idle, UiState.Loading -> false
+            is UiState.FastMode -> state.progress.done || state.progress.sourceLabel == target.label
+            is UiState.Downloading -> state.candidate.source == target
+            else -> true
+        }
+        if (settled) switchingTo = null
+    }
+
     val context = LocalContext.current
     val density = LocalDensity.current
     val scheme = MaterialTheme.colorScheme
@@ -263,6 +280,9 @@ internal fun HelperRequestContent(
 
     var unfoldedHeaderHeightDp by remember { mutableStateOf(0.dp) }
     var footerHeightDp by remember { mutableStateOf(0.dp) }
+    // Scan / Skip and Proceed / Cancel are pinned like the source bar
+    val scanBarVisible = state is UiState.ScanAsk || state is UiState.ScanResult
+    val hasFooter = primaryAction != null || scanBarVisible
 
     val formatsLocked = state is UiState.Downloading ||
         state is UiState.CheckingPickedFile ||
@@ -314,107 +334,14 @@ internal fun HelperRequestContent(
     pickerState?.let { SourcePickerDialog(state = it) }
 
     confirmFastModeTarget?.let { enableFastMode ->
-        Dialog(
-            onDismissRequest = { confirmFastModeTarget = null },
-            properties = AppDialogProperties
-        ) {
-            DialogSurface(modifier = Modifier.fillMaxWidth(0.90f)) {
-                Column(
-                    modifier = Modifier.padding(DialogContentPadding),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (enableFastMode) scheme.primaryContainer
-                                    else scheme.surfaceVariant.copy(alpha = 0.65f)
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Bolt,
-                                contentDescription = null,
-                                tint = if (enableFastMode) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Text(
-                            text = if (enableFastMode) "Switch to Fast Mode?" else "Turn off Fast Mode?",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = scheme.onSurface
-                        )
-                    }
-
-                    Text(
-                        text = if (enableFastMode) {
-                            "Current background actions will stop and Fast Mode will immediately search enabled sources for this app."
-                        } else {
-                            "Current Fast Mode search or download will stop and switch back to manual source selection."
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = scheme.onSurfaceVariant
-                    )
-
-                    val primaryColor = MaterialTheme.colorScheme.primary
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        val confirmInteraction = remember { MutableInteractionSource() }
-                        Button(
-                            onClick = {
-                                confirmFastModeTarget = null
-                                onSettingsChange(settings.copy(fastMode = enableFastMode))
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                                .pressScale(confirmInteraction),
-                            interactionSource = confirmInteraction,
-                            shape = CircleShape,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = primaryColor.copy(alpha = 0.28f),
-                                contentColor = MaterialTheme.colorScheme.onSurface
-                            )
-                        ) {
-                            Text(
-                                text = if (enableFastMode) "Start Fast Mode" else "Turn off Fast Mode",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        val cancelInteraction = remember { MutableInteractionSource() }
-                        Button(
-                            onClick = { confirmFastModeTarget = null },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                                .pressScale(cancelInteraction),
-                            interactionSource = cancelInteraction,
-                            shape = CircleShape,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = primaryColor.copy(alpha = 0.28f),
-                                contentColor = MaterialTheme.colorScheme.onSurface
-                            )
-                        ) {
-                            Text(
-                                text = "Cancel",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
+        FastModeToggleDialog(
+            enable = enableFastMode,
+            onDismiss = { confirmFastModeTarget = null },
+            onConfirm = {
+                confirmFastModeTarget = null
+                onSettingsChange(settings.copy(fastMode = enableFastMode))
             }
-        }
+        )
     }
 
     Box(
@@ -432,7 +359,7 @@ internal fun HelperRequestContent(
                 top = unfoldedHeaderHeightDp + 12.dp,
                 start = AppDefaults.ContentPadding,
                 end = AppDefaults.ContentPadding,
-                bottom = (if (primaryAction != null) footerHeightDp else 0.dp) + 12.dp
+                bottom = (if (hasFooter) footerHeightDp else 0.dp) + 12.dp
             ),
             verticalArrangement = Arrangement.spacedBy(AppDefaults.ItemSpacing)
         ) {
@@ -542,7 +469,35 @@ internal fun HelperRequestContent(
 
             when (state) {
                 UiState.Idle,
-                UiState.Loading -> item(key = "loading") { LoadingState() }
+                UiState.Loading -> {
+                    val target = switchingTo
+                    if (target != null) {
+                        item(key = "fast_mode") {
+                            FastModeCard(
+                                progress = FastModeProgress(
+                                    sourceLabel = target.label,
+                                    detail = "Switching source…"
+                                ),
+                                availableSources = availableSources,
+                                onCancel = onCancelFastMode,
+                                onPause = {},
+                                onResume = {},
+                                onSwitchSource = {},
+                                onSkipWait = {},
+                                onUseMismatch = {},
+                                onSkipMismatch = {},
+                                onSkipScan = {},
+                                onChooseVersion = {},
+                                canRetryFailedSources = canRetryFailedSources,
+                                onRetryAll = onRetryAll,
+                                onRetryFailedSources = onRetryFailedSources,
+                                onCopyFailureDetails = onCopyFailureDetails
+                            )
+                        }
+                    } else {
+                        item(key = "loading") { LoadingState() }
+                    }
+                }
 
                 is UiState.Ready -> {
                     pickerState?.let { picker ->
@@ -567,11 +522,9 @@ internal fun HelperRequestContent(
                     item(key = "downloading") {
                         DownloadingState(
                             state = state,
-                            availableSources = availableSources,
                             onCancel = onCancelDownload,
                             onPause = onPauseDownload,
                             onResume = onResumeDownload,
-                            onSwitchSource = onSwitchDownloadSource,
                             onSkipWait = onSkipScanWait,
                             onSkipScan = onSkipScan
                         )
@@ -631,7 +584,10 @@ internal fun HelperRequestContent(
                             onCancel = onCancelFastMode,
                             onPause = onPauseDownload,
                             onResume = onResumeDownload,
-                            onSwitchSource = onSwitchDownloadSource,
+                            onSwitchSource = { source ->
+                                switchingTo = source
+                                onSwitchDownloadSource(source)
+                            },
                             onSkipWait = onSkipScanWait,
                             onUseMismatch = onUseFastModeMismatch,
                             onSkipMismatch = onSkipFastModeMismatch,
@@ -672,9 +628,9 @@ internal fun HelperRequestContent(
                 .fillMaxHeight()
                 .padding(
                     top = unfoldedHeaderHeightDp,
-                    bottom = if (primaryAction != null) footerHeightDp else 0.dp
+                    bottom = if (hasFooter) footerHeightDp else 0.dp
                 )
-                .then(if (primaryAction == null) Modifier.navigationBarsPadding() else Modifier)
+                .then(if (!hasFooter) Modifier.navigationBarsPadding() else Modifier)
         )
 
         // 3. Go-to-top FAB
@@ -682,10 +638,10 @@ internal fun HelperRequestContent(
             visible = listState.firstVisibleItemIndex > 1,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .then(if (primaryAction == null) Modifier.navigationBarsPadding() else Modifier)
+                .then(if (!hasFooter) Modifier.navigationBarsPadding() else Modifier)
                 .padding(
                     end = 20.dp,
-                    bottom = (if (primaryAction != null) footerHeightDp else 0.dp) + 12.dp
+                    bottom = (if (hasFooter) footerHeightDp else 0.dp) + 12.dp
                 )
         ) {
             Surface(
@@ -852,7 +808,7 @@ internal fun HelperRequestContent(
         val navBarHeight = with(density) {
             WindowInsets.navigationBars.getBottom(this).toDp()
         }
-        if (primaryAction != null) {
+        if (hasFooter) {
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -879,6 +835,30 @@ internal fun HelperRequestContent(
                 onHeightChanged = { footerHeightDp = it },
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
+        }
+
+        // 7. Pinned scan bar: Skip (left) + Scan (right), then Cancel (left) + Proceed (right)
+        when (val scanState = state) {
+            is UiState.ScanAsk -> ScanActionBar(
+                leftText = "Skip",
+                onLeft = onCancelAfterScan,
+                rightText = "Scan",
+                onRight = onProceedAfterScan,
+                hazeState = pageHaze,
+                onHeightChanged = { footerHeightDp = it },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+            is UiState.ScanResult -> ScanActionBar(
+                leftText = "Cancel",
+                onLeft = onCancelAfterScan,
+                rightText = "Proceed",
+                onRight = onProceedAfterScan,
+                hazeState = pageHaze,
+                rightDestructive = scanState.isMalicious,
+                onHeightChanged = { footerHeightDp = it },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+            else -> Unit
         }
     }
 }

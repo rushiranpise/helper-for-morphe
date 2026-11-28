@@ -9,6 +9,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import dev.rushi.apkdownloadhelper.ui.shared.button.DialogButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,7 +40,9 @@ internal fun ShizukuPackageDialog(
             Column(verticalArrangement = Arrangement.spacedBy(AppDefaults.ItemSpacing)) {
                 Text(
                     text = "Leave blank for the default package. Only change this for a Shizuku fork with a different package name.",
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = value,
@@ -61,9 +64,10 @@ internal fun ShizukuPackageDialog(
                 }
             }
         },
+        stackButtons = true,
         confirmButton = {
-            val saveInteraction = remember { MutableInteractionSource() }
-            TextButton(
+            DialogButton(
+                text = "Save",
                 onClick = {
                     val trimmed = value.trim()
                     if (trimmed.isNotEmpty() && !PACKAGE_PATTERN.matches(trimmed)) {
@@ -72,25 +76,27 @@ internal fun ShizukuPackageDialog(
                         onSave(trimmed)
                     }
                 },
-                interactionSource = saveInteraction,
-                modifier = Modifier.pressScale(saveInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
-            ) { Text("Save") }
+                buttonColor = AppDialogDefaults.confirmButtonContainer(),
+                modifier = Modifier.fillMaxWidth()
+            )
         },
         dismissButton = {
-            Row {
-                val defaultInteraction = remember { MutableInteractionSource() }
-                TextButton(
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                DialogButton(
+                    text = "Use default",
                     onClick = { onSave("") },
-                    interactionSource = defaultInteraction,
-                    modifier = Modifier.pressScale(defaultInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
-                ) { Text("Use default") }
-
-                val cancelInteraction = remember { MutableInteractionSource() }
-                TextButton(
+                    filled = false,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                DialogButton(
+                    text = "Cancel",
                     onClick = onDismiss,
-                    interactionSource = cancelInteraction,
-                    modifier = Modifier.pressScale(cancelInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
-                ) { Text("Cancel") }
+                    filled = false,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     )
@@ -113,29 +119,32 @@ internal fun UpdatePromptDialog(
                 "Helper v${info.version} is available. You have v$currentVersion."
             )
         },
+        stackButtons = true,
         confirmButton = {
-            val viewInteraction = remember { MutableInteractionSource() }
-            TextButton(
+            DialogButton(
+                text = "View update",
                 onClick = onView,
-                interactionSource = viewInteraction,
-                modifier = Modifier.pressScale(viewInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
-            ) { Text("View update") }
+                buttonColor = AppDialogDefaults.confirmButtonContainer(),
+                modifier = Modifier.fillMaxWidth()
+            )
         },
         dismissButton = {
-            Row {
-                val skipInteraction = remember { MutableInteractionSource() }
-                TextButton(
-                    onClick = onSkip,
-                    interactionSource = skipInteraction,
-                    modifier = Modifier.pressScale(skipInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
-                ) { Text("Skip") }
-
-                val laterInteraction = remember { MutableInteractionSource() }
-                TextButton(
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                DialogButton(
+                    text = "Later",
                     onClick = onLater,
-                    interactionSource = laterInteraction,
-                    modifier = Modifier.pressScale(laterInteraction, restCorner = 20.dp, pressedCorner = 10.dp)
-                ) { Text("Later") }
+                    filled = false,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                DialogButton(
+                    text = "Skip",
+                    onClick = onSkip,
+                    filled = false,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     )

@@ -24,6 +24,11 @@ import dev.rushi.apkdownloadhelper.ui.theme.LocalMonochromeTheme
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 
 // ==========================================
 // 1B. MORE CUSTOMIZATION TAB
@@ -64,21 +69,63 @@ internal fun CustomizationTabContent(
         SettingsSection(title = "Find apps layout", icon = Icons.Outlined.ViewList) {
             SettingsGroup {
                 SettingsSwitchItem(
-                    icon = Icons.Outlined.Dns,
-                    title = "Hide stats",
-                    subtitle = "Hide the Sources, Apps, Patches, and Universal counters at the top.",
-                    checked = settings.hideFindAppsStats,
+                    icon = Icons.Outlined.Explore,
+                    title = "Hide find apps tab",
+                    subtitle = "Remove the Find apps tab from the bottom navigation. Requested-patch button and background tracking are paused.",
+                    checked = settings.hideFindAppsTab,
                     onToggle = {
-                        onSettingsChange(settings.copy(hideFindAppsStats = !settings.hideFindAppsStats))
+                        onSettingsChange(settings.copy(hideFindAppsTab = !settings.hideFindAppsTab))
                     }
                 )
+
+                // Animates the sub-options out of existence when the tab is hidden
+                AnimatedVisibility(
+                    visible = !settings.hideFindAppsTab,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Column {
+                        SettingsSwitchItem(
+                            icon = Icons.Outlined.HowToVote,
+                            title = "Hide requested patches page",
+                            subtitle = "Hide the requested-patches button inside the Find apps tab.",
+                            checked = settings.hideRequestsButton,
+                            onToggle = {
+                                onSettingsChange(settings.copy(hideRequestsButton = !settings.hideRequestsButton))
+                            }
+                        )
+                        SettingsSwitchItem(
+                            icon = Icons.Outlined.Dns,
+                            title = "Hide stats",
+                            subtitle = "Hide the Sources, Apps, Patches, and Universal counters at the top.",
+                            checked = settings.hideFindAppsStats,
+                            onToggle = {
+                                onSettingsChange(settings.copy(hideFindAppsStats = !settings.hideFindAppsStats))
+                            }
+                        )
+                        SettingsSwitchItem(
+                            icon = Icons.Outlined.Warning,
+                            title = "Hide disclaimer",
+                            subtitle = "Hide the community patch index disclaimer banner.",
+                            checked = settings.hideCommunityNotice,
+                            onToggle = {
+                                onSettingsChange(settings.copy(hideCommunityNotice = !settings.hideCommunityNotice))
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        SettingsSection(title = "Others", icon = Icons.Outlined.Settings) {
+            SettingsGroup {
                 SettingsSwitchItem(
-                    icon = Icons.Outlined.Warning,
-                    title = "Hide disclaimer",
-                    subtitle = "Hide the community patch index disclaimer banner.",
-                    checked = settings.hideCommunityNotice,
+                    icon = Icons.Outlined.Notifications,
+                    title = "Hide tracking page",
+                    subtitle = "Hide the tracking shortcut in the Helper header and stop background update checks. Tracked apps are kept.",
+                    checked = settings.hideTracking,
                     onToggle = {
-                        onSettingsChange(settings.copy(hideCommunityNotice = !settings.hideCommunityNotice))
+                        onSettingsChange(settings.copy(hideTracking = !settings.hideTracking))
                     }
                 )
 

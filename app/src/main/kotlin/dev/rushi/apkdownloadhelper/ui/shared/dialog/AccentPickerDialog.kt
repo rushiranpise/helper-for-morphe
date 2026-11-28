@@ -41,7 +41,8 @@ import dev.rushi.apkdownloadhelper.ui.theme.toHexString
 internal fun AccentPickerDialog(
     currentColorHex: String,
     onColorSelected: (Color) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    saveButtonColor: Color = AppDialogDefaults.confirmButtonContainer()
 ) {
     val initial = currentColorHex.toAccentColorOrNull() ?: AccentPresets.first()
     // Saved rather than merely remembered, a colour half chosen being worth more
@@ -63,15 +64,16 @@ internal fun AccentPickerDialog(
         onDismiss = onDismiss,
         actions = {
             DialogButton(
-                text = "Save",
-                onClick = { hexInput.toAccentColorOrNull()?.let(onColorSelected) },
-                enabled = hexValid,
-                modifier = Modifier.weight(1f)
-            )
-            DialogButton(
                 text = "Cancel",
                 onClick = onDismiss,
                 filled = false,
+                modifier = Modifier.weight(1f)
+            )
+            DialogButton(
+                text = "Save",
+                onClick = { hexInput.toAccentColorOrNull()?.let(onColorSelected) },
+                enabled = hexValid,
+                buttonColor = saveButtonColor,
                 modifier = Modifier.weight(1f)
             )
         }
