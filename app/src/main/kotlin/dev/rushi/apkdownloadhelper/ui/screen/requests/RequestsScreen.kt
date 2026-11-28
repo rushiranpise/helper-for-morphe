@@ -104,8 +104,13 @@ internal fun RequestsScreen(
 ) {
     val context = LocalContext.current
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val density = LocalDensity.current
     val dark = rememberUpdatedState(isDark)
-    val bottomPadding = rememberUpdatedState(bottomContentPadding.value.roundToInt())
+    var footerHeightDp by remember { mutableStateOf(0.dp) }
+    val effectiveBottomPadding =
+        if (onBack != null) maxOf(bottomContentPadding, footerHeightDp + 24.dp)
+        else bottomContentPadding
+    val bottomPadding = rememberUpdatedState(effectiveBottomPadding)
     var loading by remember { mutableStateOf(true) }
     var failed by remember { mutableStateOf(false) }
     var canGoBack by remember { mutableStateOf(false) }
@@ -164,7 +169,10 @@ internal fun RequestsScreen(
                     hasLoadedOnce = true
                     canGoBack = view.canGoBack()
                     view.evaluateJavascript(
-                        requestsPageScript(dark.value, bottomPadding.value),
+                        requestsPageScript(
+                            dark.value,
+                            with(density) { bottomPadding.value.roundToPx() }
+                        ),
                         null
                     )
                 }
@@ -199,12 +207,15 @@ internal fun RequestsScreen(
         }
     }
 
-    LaunchedEffect(isDark, bottomContentPadding) {
+    LaunchedEffect(isDark, effectiveBottomPadding) {
         webView.setBackgroundColor(
             (if (isDark) DarkPageBackground else LightPageBackground).toArgb()
         )
         webView.evaluateJavascript(
-            requestsPageScript(isDark, bottomContentPadding.value.roundToInt()),
+            requestsPageScript(
+                isDark,
+                with(density) { effectiveBottomPadding.roundToPx() }
+            ),
             null
         )
     }
@@ -212,10 +223,8 @@ internal fun RequestsScreen(
     // The page stays composed while another tab is shown, so only take Back
     // when the board is visible and has somewhere to return to.
     val pageSelected = LocalPagerPageSelected.current
-    val density = LocalDensity.current
     val scheme = MaterialTheme.colorScheme
     var headerHeightDp by remember { mutableStateOf(0.dp) }
-    var footerHeightDp by remember { mutableStateOf(0.dp) }
     BackHandler(enabled = canGoBack || onBack != null) {
         if (canGoBack) {
             webView.goBack()
@@ -323,8 +332,9 @@ internal fun RequestsScreen(
 
 /**
  * Keeps the board's own theme in step with the app, leaves room for the app's
- * bottom bar, and gives the captcha card its natural height. The site's modal
- * otherwise collapses to max-height 0 in a WebView and clips the widget.
+ * bottom bar, raises the board's toast above it, and gives the captcha card
+ * its natural height. The site's modal otherwise collapses to max-height 0 in
+ * a WebView and clips the widget.
  */
 private fun requestsPageScript(dark: Boolean, bottomPaddingPx: Int): String = """
 (function () {
@@ -354,6 +364,10 @@ private fun requestsPageScript(dark: Boolean, bottomPaddingPx: Int): String = ""
       // The app already has its own navigation; the site header only eats
       // vertical space and hides itself on scroll.
       'nav#u3c4db{display:none !important;}' +
+      // The board's toast is fixed to the viewport bottom. Lift it above the
+      // app's close bar so vote confirmations and errors stay readable.
+      '#rq-toast{bottom:${bottomPaddingPx}px !important;' +
+      'z-index:3000 !important;}' +
       // Sticky header and modal blurs are expensive to recomposite per frame.
       '.u3c4db,.u60f3e,.modal-backdrop{backdrop-filter:none !important;' +
       '-webkit-backdrop-filter:none !important;}' +
