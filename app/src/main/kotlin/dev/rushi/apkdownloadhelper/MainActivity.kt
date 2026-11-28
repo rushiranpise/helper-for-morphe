@@ -705,22 +705,15 @@ class MainActivity : ComponentActivity() {
                                     )
                                 },
                                 navigationCovered = {
-                                    showUpdates ||
-                                            activeSettingsCategory != null ||
-                                            showSourcesScreen ||
-                                            showRequestsScreen ||
-                                            showTrackingScreen ||
-                                            selectedArchiveApp != null ||
-                                            selectedStoredApk != null ||
-                                            (request != null && (
-                                                    uiState is UiState.Idle ||
-                                                            uiState is UiState.Loading ||
-                                                            uiState is UiState.Ready ||
-                                                            uiState is UiState.Downloading ||
-                                                            uiState is UiState.FastMode ||
-                                                            uiState is UiState.ScanAsk ||
-                                                            uiState is UiState.ScanResult
-                                                    ))
+                                    request != null && (
+                                        uiState is UiState.Idle ||
+                                            uiState is UiState.Loading ||
+                                            uiState is UiState.Ready ||
+                                            uiState is UiState.Downloading ||
+                                            uiState is UiState.FastMode ||
+                                            uiState is UiState.ScanAsk ||
+                                            uiState is UiState.ScanResult
+                                    )
                                 }
                             )
                         }

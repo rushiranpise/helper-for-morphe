@@ -1,5 +1,9 @@
 package dev.rushi.apkdownloadhelper.ui.screen.home
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -79,20 +83,22 @@ internal fun MainPagerScaffold(
         }
 
         val showBottomChrome = !navigationCovered()
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(navBarHeight + 96.dp)
-                .background(
-                    Brush.verticalGradient(
-                        0.0f to Color.Transparent,
-                        0.48f to MaterialTheme.colorScheme.background.copy(alpha = 0.55f),
-                        0.80f to MaterialTheme.colorScheme.background.copy(alpha = 0.85f),
-                        1.0f to MaterialTheme.colorScheme.background.copy(alpha = 0.96f)
+        if (showBottomChrome) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(navBarHeight + 96.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            0.0f to Color.Transparent,
+                            0.48f to MaterialTheme.colorScheme.background.copy(alpha = 0.55f),
+                            0.80f to MaterialTheme.colorScheme.background.copy(alpha = 0.85f),
+                            1.0f to MaterialTheme.colorScheme.background.copy(alpha = 0.96f)
+                        )
                     )
-                )
-        )
+            )
+        }
 
         AppNavigationBar(
             pagerState = pagerState,
