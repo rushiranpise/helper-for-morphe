@@ -213,7 +213,7 @@ python tools\make_icon.py
 
 ## Release Signing
 
-Release APKs must be signed with a private release certificate. Debug signing is only for local test builds and must not be used for public releases.
+Release APKs must be signed with a private release certificate. When the release signing values are available (CI always provides them), debug APKs are signed with the same certificate so they can update over an installed release build. Local debug builds without those values use the default debug certificate and must not be published.
 
 GitHub Actions expects these repository secrets:
 

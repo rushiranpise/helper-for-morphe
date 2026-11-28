@@ -171,7 +171,7 @@ jobs:
           - [Debug APK](${DEBUG_APK_URL})
           - [Release APK](${RELEASE_APK_URL})
 
-          The release APK is signed with the release key. The debug APK is debug-signed. Links expire after 7 days.
+          Both APKs are signed with the release key. Links expire after 7 days.
 
           Comment \`/build\` again after new commits to refresh these links. [Workflow run](${RUN_URL})
           EOF
