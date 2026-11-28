@@ -1,6 +1,8 @@
 package dev.rushi.apkdownloadhelper
 
+import android.app.ActivityManager
 import android.app.Notification
+import android.content.BroadcastReceiver
 import android.view.View
 import android.widget.RemoteViews
 import android.app.NotificationChannel
@@ -46,6 +48,7 @@ import dev.rushi.apkdownloadhelper.storage.PREFS_NAME
 import dev.rushi.apkdownloadhelper.storage.ScanVerdict
 import dev.rushi.apkdownloadhelper.storage.VirusTotalScanMode
 import dev.rushi.apkdownloadhelper.storage.cacheHandoff
+import dev.rushi.apkdownloadhelper.storage.DOWNLOADS_FOLDER_NAME
 import dev.rushi.apkdownloadhelper.storage.downloadsCopyRelativePath
 import dev.rushi.apkdownloadhelper.storage.prepareDownloadHandoff
 import dev.rushi.apkdownloadhelper.storage.recordHandOff
@@ -123,7 +126,8 @@ internal object DownloadJobManager {
         val epoch: Long = 0,
         // Only Fast Mode asks the user about a version-code mismatch; manual
         // downloads deliver the file as before the check existed.
-        val fastMode: Boolean = false
+        val fastMode: Boolean = false,
+        val callerTaskId: Int = -1
     )
 
     sealed interface Event {
@@ -344,6 +348,13 @@ internal class DownloadService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val stateRefreshRunnable = Runnable { refreshProgressNotification() }
     private val pausedRefreshRunnable = Runnable { refreshPausedProgressNotification() }
+    // Latest non-download panel (scan prompt, scanning, result, hand-off). Re-posted
+    // shortly after each change so an Android rate-limit drop can never leave the
+    // old "Downloading" panel on screen.
+    @Volatile private var phaseCandidate: DownloadCandidate? = null
+    @Volatile private var phasePercent = 100
+    @Volatile private var phaseText: String? = null
+    private val phaseRefreshRunnable = Runnable { refreshPhaseNotification() }
     private var lastNotifyTime = 0L
 
     private val browserUserAgent: String by lazy {
@@ -581,13 +592,10 @@ internal class DownloadService : Service() {
                             DownloadJobManager.emit(
                                 DownloadJobManager.Event.ScanAsk(job.candidate)
                             )
-                            notifySafe(
-                                NOTIFICATION_ID_PROGRESS,
-                                buildProgressNotification(
-                                    job.candidate,
-                                    100,
-                                    "Check ${job.candidate.name} before returning it to Morphe"
-                                )
+                            postPhaseNotification(
+                                job.candidate,
+                                100,
+                                "Check ${job.candidate.name} before returning it to Morphe"
                             )
                             // Don't call handleSuccess yet — wait for SCAN_PROCEED or SCAN_CANCEL.
                         }
@@ -617,6 +625,7 @@ internal class DownloadService : Service() {
                     }
                 } else if (error is VersionCodeMismatchException) {
                     // Keep the file; the UI decides whether to use it anyway.
+                    stopNotificationRefresh()
                     DownloadJobManager.emit(
                         DownloadJobManager.Event.ValidationMismatch(
                             candidate = job.candidate,
@@ -719,7 +728,15 @@ internal class DownloadService : Service() {
             callerPackage = request.callerPackage
         )
         DownloadJobManager.persistPendingResult(result, applicationContext)
-        recordHandOff(request, candidate, file, uri, lastScanVerdict)
+        recordHandOff(
+            request,
+            candidate,
+            file,
+            uri,
+            lastScanVerdict,
+            storage = handoff.location,
+            isCached = !handoff.savedCopy && settings.downloadRetention == dev.rushi.apkdownloadhelper.storage.DownloadRetention.AFTER_HANDOFF
+        )
         lastScanVerdict = null
 
         scheduleHandoffCleanup(file, handoff, settings)
@@ -796,10 +813,7 @@ internal class DownloadService : Service() {
                         DownloadJobManager.emit(
                             DownloadJobManager.Event.Scanning(candidate, scanStatus, percent = pct, etaMs = eta)
                         )
-                        notifySafe(
-                            NOTIFICATION_ID_PROGRESS,
-                            buildProgressNotification(candidate, pct, scanStatus)
-                        )
+                        postPhaseNotification(candidate, pct, scanStatus)
                     }
                 },
                 // Abort promptly when the user cancels OR skips the scan: the
@@ -873,10 +887,7 @@ internal class DownloadService : Service() {
         notifPhase = NotifPhase.SCAN_COMPLETE
         val verdictSummary = lastScanVerdict?.label ?: "Scan complete"
         DownloadJobManager.setPendingScan(DownloadJobManager.PendingScan.Decided(file))
-        notifySafe(
-            NOTIFICATION_ID_PROGRESS,
-            buildProgressNotification(candidate, 100, verdictSummary)
-        )
+        postPhaseNotification(candidate, 100, verdictSummary)
     }
 
     private fun handleFailure(job: DownloadJobManager.DownloadJob, error: Throwable) {
@@ -903,10 +914,7 @@ internal class DownloadService : Service() {
     private fun emitPostDownloadStatus(candidate: DownloadCandidate, status: String) {
         notifPhase = NotifPhase.POST_DOWNLOAD
         DownloadJobManager.emit(DownloadJobManager.Event.PostDownloadStatus(candidate, status))
-        notifySafe(
-            NOTIFICATION_ID_PROGRESS,
-            buildProgressNotification(candidate, 100, status)
-        )
+        postPhaseNotification(candidate, 100, status)
     }
 
     /** Rebuilds the progress notification from the CURRENT state and posts it. */
@@ -957,6 +965,27 @@ internal class DownloadService : Service() {
     private fun stopNotificationRefresh() {
         mainHandler.removeCallbacks(stateRefreshRunnable)
         mainHandler.removeCallbacks(pausedRefreshRunnable)
+        mainHandler.removeCallbacks(phaseRefreshRunnable)
+        phaseCandidate = null
+    }
+
+    private fun postPhaseNotification(candidate: DownloadCandidate, percent: Int, text: String?) {
+        phaseCandidate = candidate
+        phasePercent = percent
+        phaseText = text
+        notifySafe(NOTIFICATION_ID_PROGRESS, buildProgressNotification(candidate, percent, text))
+        mainHandler.removeCallbacks(phaseRefreshRunnable)
+        mainHandler.postDelayed(phaseRefreshRunnable, 400L)
+        mainHandler.postDelayed(phaseRefreshRunnable, 1500L)
+    }
+
+    private fun refreshPhaseNotification() {
+        val candidate = phaseCandidate ?: return
+        if (transferInProgress || DownloadJobManager.activeJob == null) return
+        notifySafe(
+            NOTIFICATION_ID_PROGRESS,
+            buildProgressNotification(candidate, phasePercent, phaseText)
+        )
     }
 
     @Synchronized
@@ -1016,7 +1045,7 @@ internal class DownloadService : Service() {
             downloadFile.fileName
         }
         val safeName = outputName.sanitizeFileName()
-        val outputFile = File(downloadsDir, safeName)
+        val outputFile = downloadsDir.uniqueChild(safeName)
         // Keep the source in the staged name so switching sources can never
         // resume one source's partial bytes with another source's URL.
         val stagedFile = File(
@@ -1030,7 +1059,6 @@ internal class DownloadService : Service() {
             onProgress = { copied, total -> updateDownloadProgress(candidate, copied, total) },
             onConnections = { connections -> currentConnections = connections }
         )
-        if (outputFile.exists()) outputFile.delete()
         if (!stagedFile.renameTo(outputFile)) {
             stagedFile.copyTo(outputFile, overwrite = true)
             stagedFile.delete()
@@ -1071,8 +1099,7 @@ internal class DownloadService : Service() {
         downloadsDir: File,
         maxConnections: Int
     ): File {
-        val outputFile = File(
-            downloadsDir,
+        val outputFile = downloadsDir.uniqueChild(
             "${candidate.packageName}-${candidate.versionName ?: "latest"}-${candidate.source.label}.apks"
                 .sanitizeFileName()
         )
@@ -1173,6 +1200,7 @@ internal class DownloadService : Service() {
         // already in flight may still deliver one more progress callback.
         // Throttled to ~2 posts/sec so the system never sheds a later (more
         // important) Pause/Resume update.
+        if (!transferInProgress) return
         val sinceLastNotify = now - lastNotifyTime
         if (paused) {
             // A read already in flight can still advance after Pause. Keep the Paused
@@ -1288,7 +1316,7 @@ internal class DownloadService : Service() {
             percent.coerceIn(0, 100)
         }
         val activeJob = DownloadJobManager.activeJob
-        val contentIntent = requestContentIntent(activeJob?.requestIntentExtras)
+        val contentIntent = returnToMorpheIntent(activeJob)
         val cancelIntent = PendingIntent.getService(
             this,
             0,
@@ -1408,7 +1436,7 @@ internal class DownloadService : Service() {
                 "${job.candidate.versionDisplay} from ${job.candidate.source.label} · " +
                         "tap to return it to ${result.callerPackage}"
             )
-            .setContentIntent(requestContentIntent(job.requestIntentExtras))
+            .setContentIntent(returnToMorpheIntent(job))
             .setAutoCancel(true)
             .build()
         notifySafe(NOTIFICATION_ID_DONE, notification)
@@ -1426,11 +1454,60 @@ internal class DownloadService : Service() {
             .setContentTitle("Download failed: ${job.candidate.name}")
             .setContentText(message.lineSequence().firstOrNull().orEmpty().take(180))
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-            .setContentIntent(requestContentIntent(job.requestIntentExtras))
+            .setContentIntent(returnToMorpheIntent(job))
             .addAction(0, "Retry", retryIntent)
             .setAutoCancel(true)
             .build()
         notifySafe(NOTIFICATION_ID_DONE, notification)
+    }
+
+    /**
+     * Tapping a notification brings the Morphe task (with the helper screen on top)
+     * to the front. With no known caller task, falls back to launching this app.
+     */
+    private fun returnToMorpheIntent(job: DownloadJobManager.DownloadJob?): PendingIntent {
+        if (job == null || job.callerTaskId == -1) {
+            return requestContentIntent(job?.requestIntentExtras)
+        }
+        return PendingIntent.getBroadcast(
+            this,
+            3,
+            Intent(this, ReturnToRequestReceiver::class.java)
+                .putExtra(ReturnToRequestReceiver.EXTRA_TASK_ID, job.callerTaskId)
+                .putExtra(ReturnToRequestReceiver.EXTRA_CALLER_PACKAGE, job.request.callerPackage),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    class ReturnToRequestReceiver : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            // 1) Bring the existing Morphe task (helper screen on top) to the front.
+            val taskId = intent.getIntExtra(EXTRA_TASK_ID, -1)
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+            if (taskId != -1 && am != null) {
+                val moved = runCatching {
+                    @Suppress("DEPRECATION")
+                    am.moveTaskToFront(taskId, ActivityManager.MOVE_TASK_WITH_HOME)
+                    true
+                }.getOrDefault(false)
+                if (moved) return
+            }
+            // 2) The task is gone: open Morphe itself.
+            // 3) Morphe not launchable: open this app.
+            val callerPackage = intent.getStringExtra(EXTRA_CALLER_PACKAGE)
+            val fallback = (callerPackage
+                ?.takeIf { it.isNotBlank() }
+                ?.let { context.packageManager.getLaunchIntentForPackage(it) }
+                ?: context.packageManager.getLaunchIntentForPackage(context.packageName))
+                ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                ?: return
+            runCatching { context.startActivity(fallback) }
+        }
+
+        companion object {
+            const val EXTRA_TASK_ID = "task_id"
+            const val EXTRA_CALLER_PACKAGE = "caller_package"
+        }
     }
 
     private fun requestContentIntent(extras: Bundle?): PendingIntent {
@@ -1511,7 +1588,7 @@ internal fun Context.copyToDownloads(file: File): Uri {
     } else {
         val downloadsDir = File(
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            "Morphe Helper"
+            DOWNLOADS_FOLDER_NAME
         ).apply { mkdirs() }
         val output = downloadsDir.uniqueChild(file.name)
         file.copyTo(output, overwrite = false)

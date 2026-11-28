@@ -74,28 +74,25 @@ internal fun MainPagerScaffold(
             CompositionLocalProvider(
                 LocalPagerPageSelected provides (pagerState.currentPage == pageIndex)
             ) {
-                val bottomInset = if (navigationCovered()) 0.dp else barHeight
-                content(visiblePages[pageIndex], bottomInset)
+                content(visiblePages[pageIndex], barHeight)
             }
         }
 
         val showBottomChrome = !navigationCovered()
-        if (showBottomChrome) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(navBarHeight + 96.dp)
-                    .background(
-                        Brush.verticalGradient(
-                            0.0f to Color.Transparent,
-                            0.48f to MaterialTheme.colorScheme.background.copy(alpha = 0.55f),
-                            0.80f to MaterialTheme.colorScheme.background.copy(alpha = 0.85f),
-                            1.0f to MaterialTheme.colorScheme.background.copy(alpha = 0.96f)
-                        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(navBarHeight + 96.dp)
+                .background(
+                    Brush.verticalGradient(
+                        0.0f to Color.Transparent,
+                        0.48f to MaterialTheme.colorScheme.background.copy(alpha = 0.55f),
+                        0.80f to MaterialTheme.colorScheme.background.copy(alpha = 0.85f),
+                        1.0f to MaterialTheme.colorScheme.background.copy(alpha = 0.96f)
                     )
-            )
-        }
+                )
+        )
 
         AppNavigationBar(
             pagerState = pagerState,

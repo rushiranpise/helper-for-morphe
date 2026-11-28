@@ -1,6 +1,8 @@
 package dev.rushi.apkdownloadhelper.ui.shared.dialog
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -31,6 +33,31 @@ import dev.rushi.apkdownloadhelper.ui.shared.text.fittedTextAutoSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 
+/** A reduced-size version of the filled dialog button, for per-row actions. */
+@Composable
+internal fun SmallDialogButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
+    Box(
+        modifier = modifier
+            .clip(CircleShape)
+            .background(AppDialogDefaults.defaultButtonContainer())
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 7.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.error.copy(alpha = if (enabled) 1f else 0.38f)
+        )
+    }
+}
+
 /**
  * Icon circle pinned to the top edge, then title, message and two buttons centred on the page.
  * Edit this file to restyle every confirm popup.
@@ -52,7 +79,8 @@ internal fun AppConfirmDialog(
     confirmButtonColor: Color =
         if (destructiveConfirm) AppDialogDefaults.defaultButtonContainer()
         else AppDialogDefaults.confirmButtonContainer(),
-    confirmButtonContentColor: Color = MaterialTheme.colorScheme.onSurface
+    confirmButtonContentColor: Color = MaterialTheme.colorScheme.onSurface,
+    content: (@Composable () -> Unit)? = null
 ) {
     val scheme = MaterialTheme.colorScheme
     DialogWindow(onDismissRequest = onDismiss) {
@@ -94,16 +122,19 @@ internal fun AppConfirmDialog(
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = scheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f, fill = false)
-                        .verticalScroll(rememberScrollState())
-                )
+                if (message.isNotBlank()) {
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = scheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState())
+                    )
+                }
+                content?.invoke()
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(AppDialogDefaults.ButtonSpacing)

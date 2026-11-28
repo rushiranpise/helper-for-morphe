@@ -79,7 +79,12 @@ import dev.rushi.apkdownloadhelper.storage.ScanVerdict
 import dev.rushi.apkdownloadhelper.storage.HelperSettings
 import dev.rushi.apkdownloadhelper.storage.downloadsCopyRelativePath
 import dev.rushi.apkdownloadhelper.storage.externalDownloadsDir
+import dev.rushi.apkdownloadhelper.storage.DownloadLocation
+import dev.rushi.apkdownloadhelper.storage.cleanupDownloads
+import dev.rushi.apkdownloadhelper.storage.customFolderName
+import dev.rushi.apkdownloadhelper.storage.storageLocation
 import dev.rushi.apkdownloadhelper.storage.temporaryDownloadsDir
+import dev.rushi.apkdownloadhelper.storage.untrackCustomDownload
 import dev.rushi.apkdownloadhelper.ui.shared.appcard.AppListCard
 import dev.rushi.apkdownloadhelper.ui.shared.appcard.FindAppCardLoading
 import dev.rushi.apkdownloadhelper.ui.shared.button.DialogButton
@@ -390,39 +395,40 @@ private fun extractAbisFromApkFile(file: File): List<String> = runCatching {
     abis.toList()
 }.getOrDefault(emptyList())
 
-private fun loadAllStoredApkItems(context: Context, settings: HelperSettings): List<StoredApkCardItem> {    val archiveAppsByPkg = runCatching {
+private fun loadAllStoredApkItems(context: Context, settings: HelperSettings): List<StoredApkCardItem> {
+    val archiveAppsByPkg = runCatching {
         MorpheArchive.loadCachedIndex(context)?.apps?.associateBy { it.packageName }
     }.getOrNull().orEmpty()
-    val installedCache = mutableMapOf<String, Boolean>()
-    val historyEntries = DownloadHistoryStore.entries(context)
-    val historyByUri = historyEntries.associateBy { it.uri }
-
-    val seenUris = LinkedHashSet<String>()
+    val seenUris = HashSet<String>()
     val results = mutableListOf<StoredApkCardItem>()
 
-    fun isInstalled(pkg: String): Boolean =
-        installedCache.getOrPut(pkg) {
-            runCatching {
-                context.packageManager.getPackageInfo(pkg, 0) != null
-            }.getOrDefault(false)
+    for (entry in DownloadHistoryStore.entries(context)) {
+        if (!entry.fileName.hasSupportedArchiveExtension()) continue
+        if (!seenUris.add(entry.uri)) continue
+        if (!context.isHistoryUriUsable(entry.uri)) continue
+        val uri = Uri.parse(entry.uri)
+        val size = contentLength(context, uri)
+        if (size <= 0L) continue
+
+        val location = entry.storageLocation()
+        val fullLabel = when {
+            entry.isCached -> "Cached (temporary)"
+            location == DownloadLocation.INTERNAL -> "Internal app storage"
+            location == DownloadLocation.EXTERNAL -> "Downloads/helper-for-morphe"
+            else -> dev.rushi.apkdownloadhelper.storage.customFolderRelativePath(
+                context,
+                uri,
+                settings.downloadCustomTreeUri
+            ) ?: "Custom folder"
+        }
+        val shortLabel = when {
+            entry.isCached -> "Cached"
+            location == DownloadLocation.INTERNAL -> "Internal storage"
+            location == DownloadLocation.EXTERNAL -> "Downloads folder"
+            else -> "Custom folder"
         }
 
-    fun addCandidate(
-        uri: Uri,
-        fileName: String,
-        sizeBytes: Long,
-        timestamp: Long,
-        locationLabel: String,
-        localFile: File? = null
-    ) {
-        val uriKey = uri.toString()
-        if (!fileName.hasSupportedArchiveExtension()) return
-        if (fileName.endsWith(".part", ignoreCase = true)) return
-        if (!seenUris.add(uriKey)) return
-
-        val history = historyByUri[uriKey]
-        // Saved at download time. Only older history entries fall back to inspecting the file.
-        val saved = history?.details
+        val saved = entry.details
         val parsedMeta = if (saved != null) {
             ResolvedArchiveDetails(
                 packageName = saved.packageName,
@@ -433,218 +439,63 @@ private fun loadAllStoredApkItems(context: Context, settings: HelperSettings): L
                 abis = saved.abis.orEmpty()
             )
         } else {
-            inspectArchiveUri(context, uri, fileName, localFile)
+            inspectArchiveUri(context, uri, entry.fileName, null)
         }
-        val isPrivate = localFile?.absolutePath?.let { p ->
-            p.startsWith(context.cacheDir.absolutePath) ||
-                p.startsWith(context.filesDir.absolutePath) ||
-                context.getExternalFilesDir(null)?.absolutePath?.let { p.startsWith(it) } == true
-        } ?: (uri.authority == "${BuildConfig.APPLICATION_ID}.files")
-
-        val pkg = history?.packageName?.takeIf { it.isNotBlank() }
+        val pkg = entry.packageName.takeIf { it.isNotBlank() }
             ?: parsedMeta.packageName?.takeIf { it.isNotBlank() }
-            ?: fileName.substringBefore('-').substringBefore('_').substringBeforeLast('.')
+            ?: entry.fileName.substringBefore('-').substringBefore('_').substringBeforeLast('.')
         val baseArchive = archiveAppsByPkg[pkg]
-        val resolvedName = history?.appName?.takeIf { it.isNotBlank() }
+        val resolvedName = entry.appName.takeIf { it.isNotBlank() }
             ?: parsedMeta.appName?.takeIf { it.isNotBlank() }
             ?: baseArchive?.name?.takeIf { it.isNotBlank() }
             ?: pkg
         val installedPkgInfo = runCatching { context.packageManager.getPackageInfo(pkg, 0) }.getOrNull()
-        val version = history?.versionName?.takeIf { it.isNotBlank() }
+        val version = entry.versionName?.takeIf { it.isNotBlank() }
             ?: parsedMeta.versionName?.takeIf { it.isNotBlank() }
             ?: installedPkgInfo?.versionName?.takeIf { it.isNotBlank() }
-        val sourceOrLocation = history?.sourceName?.takeIf { it.isNotBlank() } ?: locationLabel
-        val storageDisplay = when {
-            uriKey.contains("/cache/", ignoreCase = true) || locationLabel.equals("Cache", ignoreCase = true) -> "App Cache"
-            uriKey.contains("media/external/downloads", ignoreCase = true) || locationLabel.equals("Downloads", ignoreCase = true) -> "Downloads / Morphe Helper"
-            uriKey.startsWith("content://com.android.externalstorage", ignoreCase = true) || locationLabel.equals("Custom", ignoreCase = true) -> "Custom Folder"
-            else -> locationLabel
-        }
-        val effectiveTimestamp = history?.timestamp ?: timestamp
-        val extKind = fileName.substringAfterLast('.', "").lowercase(Locale.US)
+        val extKind = entry.fileName.substringAfterLast('.', "").lowercase(Locale.US)
         val kind = extKind.takeIf { it in SUPPORTED_ARCHIVE_EXTENSIONS }
-            ?: history?.fileKind?.takeIf { it.isNotBlank() && !it.equals("web", ignoreCase = true) }
+            ?: entry.fileKind.takeIf { it.isNotBlank() && !it.equals("web", ignoreCase = true) }
             ?: "apk"
-
         val app = baseArchive?.copy(name = resolvedName) ?: ArchiveApp(
             packageName = pkg,
             name = resolvedName,
             versions = listOfNotNull(version)
         )
 
-        val subtitle = listOfNotNull(
-            formatHistoryTimestamp(effectiveTimestamp),
-            sourceOrLocation,
-            sizeBytes.takeIf { it > 0L }?.formatBytes()
-        ).joinToString(" · ")
-
         results.add(
             StoredApkCardItem(
-                id = uriKey,
+                id = entry.uri,
                 uri = uri,
-                fileName = fileName,
+                fileName = entry.fileName,
                 fileKind = kind,
                 versionName = version,
                 versionCode = parsedMeta.versionCode,
-                sourceName = sourceOrLocation,
-                locationLabel = storageDisplay,
-                sizeBytes = sizeBytes,
-                timestamp = effectiveTimestamp,
+                sourceName = entry.sourceName,
+                locationLabel = fullLabel,
+                sizeBytes = size,
+                timestamp = entry.timestamp,
                 app = app,
                 installed = installedPkgInfo != null,
-                subtitleText = subtitle,
+                subtitleText = listOf(
+                    formatHistoryTimestamp(entry.timestamp),
+                    shortLabel,
+                    size.formatBytes()
+                ).joinToString(" \u00b7 "),
                 abis = parsedMeta.abis,
                 minSdkVersion = parsedMeta.minSdkVersion,
-                obbSummary = history?.obbContents?.summary,
-                scanVerdict = history?.scanVerdict,
-                isPrivate = isPrivate
+                obbSummary = entry.obbContents?.summary,
+                scanVerdict = entry.scanVerdict,
+                isPrivate = location == DownloadLocation.INTERNAL
             )
         )
     }
-
-    // 1. Usable entries recorded in DownloadHistoryStore
-    for (entry in historyEntries) {
-        if (!context.isHistoryUriUsable(entry.uri)) continue
-        val uri = Uri.parse(entry.uri)
-        val localFile = if (entry.uri.startsWith("file://")) {
-            uri.path?.let(::File)
-        } else null
-        val size = localFile?.length() ?: runCatching {
-            context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: 0L
-        }.getOrDefault(0L)
-        addCandidate(
-            uri = uri,
-            fileName = entry.fileName,
-            sizeBytes = size,
-            timestamp = entry.timestamp,
-            locationLabel = entry.sourceName,
-            localFile = localFile
-        )
-    }
-
-    // 2. Internal cache downloads directory
-    context.temporaryDownloadsDir().listFiles()?.forEach { file ->
-        if (file.isFile && file.length() > 0L && file.name.hasSupportedArchiveExtension()) {
-            val uri = runCatching {
-                FileProvider.getUriForFile(context, "${BuildConfig.APPLICATION_ID}.files", file)
-            }.getOrNull() ?: Uri.fromFile(file)
-            addCandidate(
-                uri = uri,
-                fileName = file.name,
-                sizeBytes = file.length(),
-                timestamp = file.lastModified(),
-                locationLabel = "Cache",
-                localFile = file
-            )
-        }
-    }
-
-    // 3. External app files/downloads directory
-    context.externalDownloadsDir()?.listFiles()?.forEach { file ->
-        if (file.isFile && file.length() > 0L && file.name.hasSupportedArchiveExtension()) {
-            val uri = runCatching {
-                FileProvider.getUriForFile(context, "${BuildConfig.APPLICATION_ID}.files", file)
-            }.getOrNull() ?: Uri.fromFile(file)
-            addCandidate(
-                uri = uri,
-                fileName = file.name,
-                sizeBytes = file.length(),
-                timestamp = file.lastModified(),
-                locationLabel = "External",
-                localFile = file
-            )
-        }
-    }
-
-    // 4. Public Downloads/Morphe Helper directory
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        runCatching {
-            val projection = arrayOf(
-                MediaStore.Downloads._ID,
-                MediaStore.Downloads.DISPLAY_NAME,
-                MediaStore.Downloads.SIZE,
-                MediaStore.Downloads.DATE_MODIFIED
-            )
-            context.contentResolver.query(
-                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                projection,
-                "${MediaStore.Downloads.RELATIVE_PATH} LIKE ?",
-                arrayOf("${downloadsCopyRelativePath()}%"),
-                "${MediaStore.Downloads.DATE_MODIFIED} DESC"
-            )?.use { cursor ->
-                val idCol = cursor.getColumnIndexOrThrow(MediaStore.Downloads._ID)
-                val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Downloads.DISPLAY_NAME)
-                val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Downloads.SIZE)
-                val dateCol = cursor.getColumnIndexOrThrow(MediaStore.Downloads.DATE_MODIFIED)
-                while (cursor.moveToNext()) {
-                    val id = cursor.getLong(idCol)
-                    val name = cursor.getString(nameCol) ?: continue
-                    val size = cursor.getLong(sizeCol)
-                    val modifiedMs = cursor.getLong(dateCol) * 1000L
-                    val uri = ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id)
-                    addCandidate(
-                        uri = uri,
-                        fileName = name,
-                        sizeBytes = size,
-                        timestamp = modifiedMs,
-                        locationLabel = "Downloads"
-                    )
-                }
-            }
-        }
-    } else {
-        @Suppress("DEPRECATION")
-        val legacyDir = File(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            "Morphe Helper"
-        )
-        legacyDir.listFiles()?.forEach { file ->
-            if (file.isFile && file.length() > 0L && file.name.hasSupportedArchiveExtension()) {
-                val uri = runCatching {
-                    FileProvider.getUriForFile(context, "${BuildConfig.APPLICATION_ID}.files", file)
-                }.getOrNull() ?: Uri.fromFile(file)
-                addCandidate(
-                    uri = uri,
-                    fileName = file.name,
-                    sizeBytes = file.length(),
-                    timestamp = file.lastModified(),
-                    locationLabel = "Downloads",
-                    localFile = file
-                )
-            }
-        }
-    }
-
-    // 5. Custom SAF folder (if configured)
-    val customTree = settings.downloadCustomTreeUri
-    if (customTree.isNotBlank()) {
-        runCatching {
-            val root = DocumentFile.fromTreeUri(context, Uri.parse(customTree))
-            root?.listFiles()?.forEach { doc ->
-                val name = doc.name ?: return@forEach
-                if (doc.isFile && doc.exists() && name.hasSupportedArchiveExtension()) {
-                    addCandidate(
-                        uri = doc.uri,
-                        fileName = name,
-                        sizeBytes = doc.length().coerceAtLeast(0L),
-                        timestamp = doc.lastModified(),
-                        locationLabel = "Custom"
-                    )
-                }
-            }
-        }
-    }
-
     return results.sortedByDescending { it.timestamp }
 }
 
 internal fun deleteStoredApkFromEverywhere(context: Context, item: StoredApkCardItem): Boolean {
-    // Capture the selected file's identity before deleting it. Copies are only
-    // removed when their bytes match; a same-named unrelated archive is kept.
-    val selectedSize = item.sizeBytes.takeIf { it > 0L } ?: contentLength(context, item.uri)
-    val selectedHash = sha256OfUri(context, item.uri)
-
-    // 1. Delete the selected file itself.
+    // Delete only the exact selected URI so identical files in other storage
+    // locations (or duplicate downloads in the same location) remain untouched.
     runCatching {
         if (item.uri.scheme == "content") {
             context.contentResolver.delete(item.uri, null, null)
@@ -652,85 +503,15 @@ internal fun deleteStoredApkFromEverywhere(context: Context, item: StoredApkCard
             item.uri.path?.let { File(it).delete() }
         }
     }
-    runCatching {
-        DocumentFile.fromSingleUri(context, item.uri)?.delete()
-    }
-
-    // 2. Verified copies in the app's cache and external files directories.
-    if (selectedHash != null) {
-        deleteVerifiedCopy(
-            File(context.temporaryDownloadsDir(), item.fileName),
-            selectedSize,
-            selectedHash
-        )
-        context.externalDownloadsDir()?.let { dir ->
-            deleteVerifiedCopy(File(dir, item.fileName), selectedSize, selectedHash)
-        }
-
-        // 3. Verified copies in public Downloads/Morphe Helper.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            runCatching {
-                val projection = arrayOf(
-                    MediaStore.Downloads._ID,
-                    MediaStore.Downloads.DISPLAY_NAME,
-                    MediaStore.Downloads.SIZE
-                )
-                context.contentResolver.query(
-                    MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                    projection,
-                    "${MediaStore.Downloads.RELATIVE_PATH} LIKE ? AND ${MediaStore.Downloads.DISPLAY_NAME}=?",
-                    arrayOf("${downloadsCopyRelativePath()}%", item.fileName),
-                    null
-                )?.use { cursor ->
-                    val idCol = cursor.getColumnIndexOrThrow(MediaStore.Downloads._ID)
-                    val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Downloads.SIZE)
-                    while (cursor.moveToNext()) {
-                        if (selectedSize > 0L && cursor.getLong(sizeCol) != selectedSize) continue
-                        val copyUri = ContentUris.withAppendedId(
-                            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                            cursor.getLong(idCol)
-                        )
-                        if (sha256OfUri(context, copyUri) == selectedHash) {
-                            runCatching { context.contentResolver.delete(copyUri, null, null) }
-                        }
-                    }
-                }
-            }
+    if (uriExists(context, item.uri)) {
+        runCatching {
+            DocumentFile.fromSingleUri(context, item.uri)?.delete()
         }
     }
+    runCatching { context.untrackCustomDownload(item.uri) }
 
     // Report success only when the selected file is actually gone.
     return !uriExists(context, item.uri)
-}
-
-private fun deleteVerifiedCopy(file: File, expectedSize: Long, expectedHash: String) {
-    if (!file.isFile) return
-    if (expectedSize > 0L && file.length() != expectedSize) return
-    if (sha256OfFile(file) != expectedHash) return
-    runCatching { file.delete() }
-}
-
-private fun sha256OfFile(file: File): String? = runCatching {
-    file.inputStream().use(::sha256OfStream)
-}.getOrNull()
-
-private fun sha256OfUri(context: Context, uri: Uri): String? = runCatching {
-    val stream = when {
-        uri.scheme == "file" -> uri.path?.let { File(it).inputStream() }
-        else -> context.contentResolver.openInputStream(uri)
-    } ?: return null
-    stream.use(::sha256OfStream)
-}.getOrNull()
-
-private fun sha256OfStream(input: InputStream): String {
-    val digest = MessageDigest.getInstance("SHA-256")
-    val buffer = ByteArray(8192)
-    while (true) {
-        val read = input.read(buffer)
-        if (read <= 0) break
-        digest.update(buffer, 0, read)
-    }
-    return digest.digest().joinToString("") { "%02x".format(it) }
 }
 
 private fun contentLength(context: Context, uri: Uri): Long = runCatching {
@@ -742,8 +523,8 @@ private fun contentLength(context: Context, uri: Uri): Long = runCatching {
 
 private fun uriExists(context: Context, uri: Uri): Boolean {
     if (uri.scheme == "file") return uri.path?.let { File(it).exists() } == true
-    val document = DocumentFile.fromSingleUri(context, uri)
-    if (document != null) return document.exists()
+    // FileProvider answers metadata queries for deleted files, so DocumentFile.exists()
+    // reported "still there". Opening the stream fails for a missing file.
     return runCatching {
         context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { true } ?: false
     }.getOrDefault(false)
@@ -785,8 +566,14 @@ internal fun HelperStandaloneContent(
         selectedIds = emptySet()
     }
 
-    LaunchedEffect(historyRevision, settings.downloadCustomTreeUri, settings.downloadLocation) {
+    LaunchedEffect(
+        historyRevision,
+        settings.downloadCustomTreeUri,
+        settings.downloadLocation
+    ) {
         val loaded = withContext(Dispatchers.IO) {
+            // Apply the Keep downloads timer to internal, Downloads and custom copies first.
+            runCatching { context.cleanupDownloads(settings) }
             loadAllStoredApkItems(context, settings)
         }
         storedItems = loaded

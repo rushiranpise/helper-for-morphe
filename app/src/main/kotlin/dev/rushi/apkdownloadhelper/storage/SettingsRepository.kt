@@ -97,7 +97,7 @@ internal val DEFAULT_SOURCE_ORDER: List<DownloadSource> =
         DownloadSource.entries.filterNot { it in PREFERRED_DEFAULT_SOURCE_ORDER }
 
 internal data class HelperSettings(
-    val downloadLocation: DownloadLocation = DownloadLocation.TEMPORARY,
+    val downloadLocation: DownloadLocation = DownloadLocation.INTERNAL,
     val downloadRetention: DownloadRetention = DownloadRetention.KEEP,
     val downloadCustomTreeUri: String = "",
     /** APKMirror only: pick a density-specific row instead of nodpi. */
@@ -267,21 +267,17 @@ internal enum class DownloadLocation(
     val title: String,
     val description: String
 ) {
-    TEMPORARY(
+    INTERNAL(
         title = "Internal app storage",
-        description = "Keep the hand-off file in Helper's private storage."
+       description = "Private to Helper. Follows your Keep downloads timer."
     ),
     EXTERNAL(
-        title = "App external storage",
-        description = "Save a copy in the app's external files folder."
-    ),
-    DOWNLOADS(
-        title = "Downloads",
-        description = "Save a visible copy in your Downloads folder."
+        title = "External storage",
+        description = "Visible copy in Downloads/helper-for-morphe."
     ),
     CUSTOM(
         title = "Custom folder",
-        description = "Save a copy in a folder you choose with the system picker."
+        description = "A folder you choose with the system picker."
     )
 }
 
@@ -292,25 +288,25 @@ internal enum class DownloadRetention(
 ) {
     KEEP(
         title = "Keep forever",
-        description = "Keep downloads until you clear storage."
+        description = "Keep saved copies until you clear storage."
     ),
     AFTER_HANDOFF(
         title = "After hand-off",
-        description = "Skip the saved copy and remove the temporary file after a short delay."
+        description = "Don't save a copy. The temporary file is removed shortly after hand-off."
     ),
     HOUR_1(
         title = "1 hour",
-        description = "Delete cache and saved copies after one hour.",
+        description = "Delete downloads from every location after 1 hour.",
         durationMillis = 60L * 60L * 1000L
     ),
     HOUR_24(
         title = "24 hours",
-        description = "Delete cache and saved copies after 24 hours.",
+        description = "Delete downloads from every location after 24 hours.",
         durationMillis = 24L * 60L * 60L * 1000L
     ),
     DAY_7(
         title = "7 days",
-        description = "Delete cache and saved copies after 7 days.",
+        description = "Delete downloads from every location after 7 days.",
         durationMillis = 7L * 24L * 60L * 60L * 1000L
     )
 }
@@ -376,10 +372,11 @@ internal enum class NetworkPolicy(
 internal fun Context.loadHelperSettings(): HelperSettings {
     val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     val settings = HelperSettings(
-        downloadLocation = enumValueOrDefault(
-            prefs.getString("download_location", null),
-            DownloadLocation.TEMPORARY
-        ),
+        downloadLocation = when (prefs.getString("download_location", null)) {
+            "EXTERNAL", "DOWNLOADS" -> DownloadLocation.EXTERNAL
+            "CUSTOM" -> DownloadLocation.CUSTOM
+            else -> DownloadLocation.INTERNAL
+        },
         downloadRetention = enumValueOrDefault(
             prefs.getString("download_retention", null),
             DownloadRetention.KEEP
@@ -603,8 +600,10 @@ internal fun Context.clearTemporaryDownloads(): Long {
 }
 
 /** Path of the visible copy folder inside Downloads. */
+internal const val DOWNLOADS_FOLDER_NAME = "helper-for-morphe"
+
 internal fun downloadsCopyRelativePath(): String =
-    "${Environment.DIRECTORY_DOWNLOADS}/Morphe Helper"
+    "${Environment.DIRECTORY_DOWNLOADS}/$DOWNLOADS_FOLDER_NAME"
 
 /** Total size of the visible copies saved to Downloads. */
 internal fun Context.downloadsCopySize(): Long {
@@ -626,7 +625,7 @@ internal fun Context.downloadsCopySize(): Long {
     }
     val dir = File(
         Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-        "Morphe Helper"
+        DOWNLOADS_FOLDER_NAME
     )
     return dir.listFiles()?.filter { it.isFile }?.sumOf { it.length() } ?: 0L
 }
@@ -661,7 +660,7 @@ internal fun Context.clearDownloadsCopies(): Long {
     }
     val dir = File(
         Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-        "Morphe Helper"
+        DOWNLOADS_FOLDER_NAME
     )
     val files = dir.listFiles()?.filter { it.isFile }.orEmpty()
     return files.sumOf { file ->

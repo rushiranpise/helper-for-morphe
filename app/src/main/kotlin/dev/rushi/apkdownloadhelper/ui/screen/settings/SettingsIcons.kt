@@ -9,9 +9,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import dev.rushi.apkdownloadhelper.storage.*
 
 internal fun DownloadLocation.icon(): ImageVector = when (this) {
-    DownloadLocation.TEMPORARY -> Icons.Outlined.SdStorage
-    DownloadLocation.EXTERNAL -> Icons.Outlined.PhoneAndroid
-    DownloadLocation.DOWNLOADS -> Icons.Outlined.SaveAlt
+    DownloadLocation.INTERNAL -> Icons.Outlined.SdStorage
+    DownloadLocation.EXTERNAL -> Icons.Outlined.SaveAlt
     DownloadLocation.CUSTOM -> Icons.Outlined.FolderOpen
 }
 

@@ -75,10 +75,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import dev.rushi.apkdownloadhelper.ui.shared.button.BottomCloseBar
-import dev.rushi.apkdownloadhelper.ui.theme.AppColors
-import dev.rushi.apkdownloadhelper.ui.theme.glassFill
-import dev.rushi.apkdownloadhelper.ui.theme.pressScale
-import dev.rushi.apkdownloadhelper.ui.theme.rememberMorphePillShape
+import dev.chrisbanes.haze.HazeState
+import dev.rushi.apkdownloadhelper.ui.theme.hazeSourceIfEnabled
 
 private const val REQUESTS_HOST = "morphe-patches.software"
 private const val REQUESTS_URL = "https://$REQUESTS_HOST/requests"
@@ -107,9 +105,11 @@ internal fun RequestsScreen(
     val density = LocalDensity.current
     val dark = rememberUpdatedState(isDark)
     var footerHeightDp by remember { mutableStateOf(0.dp) }
-    val effectiveBottomPadding =
-        if (onBack != null) maxOf(bottomContentPadding, footerHeightDp + 24.dp)
-        else bottomContentPadding
+    // With a Close bar, the page ends above it instead of running underneath,
+    // so the page itself only needs a small gap at its own bottom.
+    val navBottom = with(density) { WindowInsets.navigationBars.getBottom(this).toDp() }
+    val reservedBottom = if (onBack != null) navBottom + 48.dp + 24.dp else 0.dp
+    val effectiveBottomPadding = if (onBack != null) 16.dp else bottomContentPadding
     val bottomPadding = rememberUpdatedState(effectiveBottomPadding)
     var loading by remember { mutableStateOf(true) }
     var failed by remember { mutableStateOf(false) }
@@ -171,7 +171,7 @@ internal fun RequestsScreen(
                     view.evaluateJavascript(
                         requestsPageScript(
                             dark.value,
-                            with(density) { bottomPadding.value.roundToPx() }
+                            bottomPadding.value.value.roundToInt()
                         ),
                         null
                     )
@@ -214,7 +214,7 @@ internal fun RequestsScreen(
         webView.evaluateJavascript(
             requestsPageScript(
                 isDark,
-                with(density) { effectiveBottomPadding.roundToPx() }
+                effectiveBottomPadding.value.roundToInt()
             ),
             null
         )
@@ -224,6 +224,7 @@ internal fun RequestsScreen(
     // when the board is visible and has somewhere to return to.
     val pageSelected = LocalPagerPageSelected.current
     val scheme = MaterialTheme.colorScheme
+    val pageHaze = remember { HazeState() }
     var headerHeightDp by remember { mutableStateOf(0.dp) }
     BackHandler(enabled = canGoBack || onBack != null) {
         if (canGoBack) {
@@ -238,22 +239,52 @@ internal fun RequestsScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
+        // Plain background layer: the only thing the Close bar blurs. The page
+        // itself is never captured, so no black spots.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .hazeSourceIfEnabled(pageHaze)
+        )
+
         AndroidView(
             factory = { webView },
             modifier = Modifier
                 .fillMaxSize()
                 .clipToBounds()
                 .statusBarsPadding()
+                .padding(bottom = reservedBottom)
         )
 
         if (loading && !failed && !hasLoadedOnce) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
         }
 
+        // Fade between the end of the page and the Close button.
+        if (onBack != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = reservedBottom)
+                    .fillMaxWidth()
+                    .heightIn(min = 36.dp, max = 36.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                androidx.compose.ui.graphics.Color.Transparent,
+                                MaterialTheme.colorScheme.background
+                            )
+                        )
+                    )
+            )
+        }
+
         // Scrim + Close pill (only shown when a back handler is wired up)
         if (onBack != null) {
             BottomCloseBar(
                 onClose = onBack,
+                hazeState = pageHaze,
                 showBackground = true,
                 onHeightChanged = { footerHeightDp = it },
                 modifier = Modifier.align(Alignment.BottomCenter)

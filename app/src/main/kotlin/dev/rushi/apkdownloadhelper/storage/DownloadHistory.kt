@@ -38,8 +38,21 @@ internal data class DownloadHistoryEntry(
     /** Expansion data found inside the handed-off container, when it carried any. */
     val obbContents: ObbContents? = null,
     /** Everything the details page needs, saved once at download time. */
-    val details: StoredDetails? = null
+    val details: StoredDetails? = null,
+    /** [DownloadLocation] name the file was saved to; null on older entries. */
+    val storage: String? = null,
+    /** True when saved only as a temporary cache file in "After hand-off" mode. */
+    val isCached: Boolean = false
 )
+
+internal fun DownloadHistoryEntry.storageLocation(): DownloadLocation =
+    storage?.let { name -> DownloadLocation.entries.firstOrNull { it.name == name } }
+        ?: when {
+            uri.contains("media/external/downloads") -> DownloadLocation.EXTERNAL
+            uri.startsWith("content://com.android.externalstorage") ||
+                uri.contains("/tree/") -> DownloadLocation.CUSTOM
+            else -> DownloadLocation.INTERNAL
+        }
 
 internal data class StoredDetails(
     val packageName: String? = null,
@@ -119,7 +132,9 @@ internal fun Context.recordHandOff(
     candidate: DownloadCandidate,
     file: File,
     uri: Uri,
-    scanVerdict: ScanVerdict? = null
+    scanVerdict: ScanVerdict? = null,
+    storage: DownloadLocation? = null,
+    isCached: Boolean = false
 ) {
     val obb = obbContentsIn(file)
     val details = runCatching {
@@ -151,6 +166,10 @@ internal fun Context.recordHandOff(
                 "Android/obb/${candidate.packageName}, which this app cannot write."
         )
     }
+    val actualFileName = runCatching {
+        androidx.documentfile.provider.DocumentFile.fromSingleUri(this, uri)?.name
+    }.getOrNull()?.takeIf { it.isNotBlank() } ?: file.name
+
     DownloadHistoryStore.add(
         this,
         DownloadHistoryEntry(
@@ -159,12 +178,14 @@ internal fun Context.recordHandOff(
             packageName = candidate.packageName,
             versionName = candidate.versionName,
             sourceName = candidate.source.label,
-            fileName = file.name,
+            fileName = actualFileName,
             fileKind = candidate.fileKind,
             uri = uri.toString(),
             scanVerdict = scanVerdict,
             obbContents = obb,
-            details = details
+            details = details,
+            storage = storage?.name,
+            isCached = isCached
         )
     )
 }
