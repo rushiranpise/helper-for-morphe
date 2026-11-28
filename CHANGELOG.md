@@ -6,6 +6,37 @@ matches the tag (see `tools/release-notes.sh`), so a new version needs a section
 before it is tagged. Commit subjects are only used as a fallback when a section is
 missing.
 
+## 7.1.0 - 2026-11-28
+
+Full-screen Requests and Tracking, richer download notifications, and safer stored-file cleanup.
+
+### New
+
+- **Full-screen Requests and Tracking**: both open as dedicated pages with a floating close button instead of leaving the bottom navigation on screen. Closing one restores the underlying Find apps tab and scroll position.
+- **Requests shortcut in Find apps**: open the community request board without leaving the app.
+- **Live download notifications**: progress notifications now show speed and ETA. Tap one to return to the active request, and paused downloads keep their notification time up to date.
+- **Release-signed debug APKs**: CI debug builds now use the release certificate, so a debug APK can update over an installed release build.
+
+### Fixed
+
+- Requests vote confirmations and errors now appear above the app's close bar instead of behind it.
+- The close bar no longer covers the last row in Find apps and Tracking; its measured height now includes the navigation-bar inset.
+- Removed the Requests WebView blur source that could crash, and gave the close bar its own background.
+- Stored APK cleanup only deletes files whose size and SHA-256 match the selected copy, and reports per-file failures. APK files shared as content URIs are inspected correctly.
+- Exporting a file cleans up its temporary directory, and the delete action runs off the main thread and reports failure.
+- The hidden Find apps tab no longer triggers a background index fetch, and the Tracking worker rechecks the hidden settings after fetching.
+- The pager is no longer kept composed behind full-screen pages, so the underlying Find apps state and focus are preserved correctly.
+- The confirmation dialog scrolls its message, the reuse-offer dialog resets when its options change, selected settings are announced correctly, and scan cards use the "Not flagged" label.
+
+### Changed
+
+- Download history mutations are serialized so entries cannot be lost to concurrent writes.
+- Temporary export folders are created per export and removed after use.
+
+### Contributors
+
+- [thegodfather-hub](https://github.com/thegodfather-hub): reported the Requests toast overlap (#69).
+
 ## 7.0.1 - 2026-11-25
 
 A fresh install no longer crashes on first launch.

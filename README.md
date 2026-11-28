@@ -114,7 +114,7 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
 
 ### Download & handoff
 
-- **Live speed + ETA** in both the progress notification and the in-app card (`45% · 5.9 MB/s · 0:52 left`), smoothed so readings stay stable.
+- **Live speed + ETA** in both the progress notification and the in-app card (`45% · 5.9 MB/s · 0:52 left`), smoothed so readings stay stable. Tapping a progress notification returns to the active request, and paused downloads keep their notification time current.
 - **Segmented downloads** with 2 to 32 parallel connections, pause/resume, and source switching that keeps the version you picked.
 - **Custom download folders and retention**: save to a folder you choose and clean files up after 1 hour, 24 hours, 7 days, or keep them until you clear storage.
 - Download progress is followed by distinct **extracting / scanning** phases with their own percent bars instead of sitting at a stuck 100%.
@@ -127,15 +127,16 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
 - A **live community patch index** with an archive dashboard showing app and patch totals. The last index is cached on disk for an instant launch, refreshed from the morphe-archive JSON in the background, and still available offline.
 - Searchable app list with real installed-app icons, Play Store icons for apps that are not installed, per-app **bundle count**, install-state filters (All / Installed / Not installed), **favourites** that survive refreshes, and sort options (A-Z, Z-A, recently added, recently updated, most bundles).
 - **Fast search**: a precomputed index across app names, packages, bundles, patch names and descriptions powers weighted results, with a short typing debounce and the work kept off the UI thread.
+- A **Requests** shortcut in the header opens the community patch request board without leaving the app.
 - Each app opens a redesigned detail screen with a compact version picker, patches grouped **per bundle** in collapsible lists, "Add to Morphe" actions that deep-link into the manager, and an Open in Play Store shortcut.
 - The dashboard and warning scroll with the list, and the scrollbar sits in the right margin so the cards stay centred.
 - Includes the community disclaimer: the index is community-maintained, bundles are not individually verified, and neither Morphe nor this app's developer is responsible for third-party patches.
 
 ### Patch requests
 
-- The community board from [morphe-patches.software/requests](https://morphe-patches.software/requests) opens inside the app with its Apps, Patches and Done tabs, search and sort.
-- Vote for the patches missing from an app by category, with the current vote count on each choice. The site's own human check appears when it needs one.
-- The board follows the app's light or dark theme, and the reload button refreshes a stale list without restarting the app.
+- The community board from [morphe-patches.software/requests](https://morphe-patches.software/requests) opens full-screen from the Requests button in Find apps. Search, filters, the app panel and vote controls work as they do on the web.
+- Vote for the patches missing from an app by category, with the current vote count on each choice. The site's own human check appears when it needs one, and vote confirmations or errors now appear above the app's close bar.
+- A floating close button returns to Find apps, and the board follows the app's light or dark theme. The reload button refreshes a stale list without restarting the app.
 
 ### Tracked apps
 
@@ -143,6 +144,7 @@ With VirusTotal enabled the file is also scanned, and the verdict is recorded in
 - **Follow new versions and patches.** The background check runs every six hours while anything is tracked and posts one grouped notification for changes. Badges stay on the app until you open it, and a separate notification baseline prevents repeats.
 - **Track future packages.** Enter a package that is not in the Morphe index yet. It waits in a removable **Waiting for index** card; when the package appears, Helper notifies you and starts tracking it normally.
 - **Control what is tracked.** The Tracking tab keeps tracked apps and pending packages together, and stopping the last tracked package stops the background work.
+- **Full-screen tracking**: the Tracking page uses the same floating close bar as the request board, and closing it restores the underlying Find apps tab and scroll position.
 
 ### Settings, appearance & logs
 
@@ -243,8 +245,9 @@ The CSV/JSON output reports whether each source matched the requested version, o
 
 ## Contributors
 
-Thanks to the people who sent pull requests for this release:
+Thanks to the people who contributed to this release:
 
+- [thegodfather-hub](https://github.com/thegodfather-hub): reported the Requests toast overlap (#69).
 - [darkbyteprojects](https://github.com/darkbyteprojects): Settings and Helper screen redesigns (#53, #55).
 - [Akash-Sriram](https://github.com/Akash-Sriram): search caching, captcha cookie handling, split packaging, instant tabs and search badges (#54, #56, #57).
 - [parchito](https://github.com/parchito): resolver build-code handling (#59).
