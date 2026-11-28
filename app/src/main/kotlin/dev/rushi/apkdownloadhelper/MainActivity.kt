@@ -3340,9 +3340,9 @@ class MainActivity : ComponentActivity() {
                 history.packageName == request.packageName &&
                     request.matchesRequestedVersion(history.versionName, null)
             }
-            // The same file may be recorded twice (cache copy + Downloads
-            // copy); show each distinct file once, newest record first.
-            .distinctBy { it.fileName }
+            // Keep distinct URIs across storage locations (Internal, Downloads, Custom)
+            // so the user can choose which location's copy to hand off.
+            .distinctBy { it.uri }
             .filter { entry -> historyFileExists(entry) }
             .map { entry -> ReuseOption(entry, historyFileSize(entry)) }
         if (existing.isNotEmpty()) reuseOffer = existing

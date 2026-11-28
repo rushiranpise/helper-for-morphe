@@ -2,7 +2,16 @@ package dev.rushi.apkdownloadhelper.ui.shared.dialog
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.rememberTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -90,25 +99,57 @@ internal fun DialogLayerHost(content: @Composable () -> Unit) {
     }
 }
 
+private val MorpheDialogEnter =
+    fadeIn(tween(220, easing = LinearOutSlowInEasing)) +
+        scaleIn(initialScale = 0.95f, animationSpec = tween(220, easing = FastOutSlowInEasing))
+
+private val MorpheDialogExit =
+    fadeOut(tween(220, easing = LinearOutSlowInEasing)) +
+        scaleOut(targetScale = 0.95f, animationSpec = tween(220, easing = LinearOutSlowInEasing))
+
 @Composable
 private fun DialogEntryHost(entry: DialogEntry, layer: DialogLayerState) {
     val state = entry.state
+    val transition = rememberTransition(state, label = "morphe_dialog")
     BackHandler(enabled = state.targetState) { if (entry.dismissOnBack) entry.onDismiss() }
     // Drop the entry once its exit animation has finished
     LaunchedEffect(state.currentState, state.targetState) {
         if (!state.currentState && !state.targetState) layer.entries.remove(entry)
     }
-    AnimatedVisibility(
-        visibleState = state,
-        enter = AppAnimations.pushEnter,
-        exit = AppAnimations.pushExit,
-        modifier = Modifier.fillMaxSize()
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(Unit) { detectTapGestures { } }
     ) {
-        DialogPage(
-            topBar = entry.topBar,
-            bottomBar = entry.bottomBar,
-            bottomReserve = entry.bottomReserve
-        ) { entry.content() }
+        // Opaque from the first frame so nothing behind flashes during transitions,
+        // and faded out smoothly as the dialog leaves (matching Morphe Manager's DialogSurface).
+        transition.AnimatedVisibility(
+            visible = { it },
+            enter = EnterTransition.None,
+            exit = fadeOut(tween(220, easing = LinearOutSlowInEasing)),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+            )
+        }
+
+        transition.AnimatedVisibility(
+            visible = { it },
+            enter = MorpheDialogEnter,
+            exit = MorpheDialogExit,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            DialogPage(
+                topBar = entry.topBar,
+                bottomBar = entry.bottomBar,
+                bottomReserve = entry.bottomReserve,
+                drawBackground = false
+            ) { entry.content() }
+        }
     }
 }
 
@@ -123,6 +164,7 @@ internal fun DialogPage(
     topBar: (@Composable BoxScope.() -> Unit)? = null,
     bottomBar: (@Composable BoxScope.() -> Unit)? = null,
     bottomReserve: Dp = 0.dp,
+    drawBackground: Boolean = true,
     content: @Composable () -> Unit
 ) {
     // With a pinned bottom bar, it (not the page) covers the navigation bar area
@@ -134,7 +176,10 @@ internal fun DialogPage(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .then(
+                if (drawBackground) Modifier.background(MaterialTheme.colorScheme.background)
+                else Modifier
+            )
             .pointerInput(Unit) { detectTapGestures { } }
     ) {
         Box(
