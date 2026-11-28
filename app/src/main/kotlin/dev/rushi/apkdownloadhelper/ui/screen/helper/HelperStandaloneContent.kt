@@ -98,6 +98,8 @@ import dev.rushi.apkdownloadhelper.ui.util.formatBytes
 import dev.rushi.apkdownloadhelper.updater.ArchiveApp
 import dev.rushi.apkdownloadhelper.updater.MorpheArchive
 import java.io.File
+import java.io.InputStream
+import java.security.MessageDigest
 import java.util.Locale
 import java.util.zip.ZipInputStream
 import kotlinx.coroutines.Dispatchers
@@ -246,7 +248,30 @@ private fun inspectArchiveUri(
         )
     }
 
-    // 2. Content URI or split archive (.apkm, .apks, .xapk) via stream
+    // 2. Single APK behind a content URI: copy it out so the normal APK reader
+    // can parse its package and version, then delete the temporary copy.
+    if (ext == "apk" && localFile == null) {
+        return runCatching {
+            val tmp = File.createTempFile("inspect_", ".apk", context.cacheDir)
+            try {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    tmp.outputStream().use { output -> input.copyTo(output) }
+                } ?: error("Could not open the APK")
+                val meta = context.readDownloadedApkMetadata(tmp)
+                ResolvedArchiveDetails(
+                    packageName = meta?.packageName,
+                    versionName = meta?.versionName,
+                    versionCode = meta?.versionCode,
+                    minSdkVersion = meta?.minSdkVersion,
+                    abis = extractAbisFromApkFile(tmp)
+                )
+            } finally {
+                tmp.delete()
+            }
+        }.getOrDefault(ResolvedArchiveDetails())
+    }
+
+    // 3. Split archive (.apkm, .apks, .xapk) via stream
     return runCatching {
         val input = if (localFile != null && localFile.isFile) {
             localFile.inputStream()
@@ -312,7 +337,12 @@ private fun inspectArchiveUri(
                             "x86_64" in lower -> abis.add("x86_64")
                             "x86" in lower -> abis.add("x86")
                         }
-                        if (verName == null && (lower == "base.apk" || lower == "$pkg.apk")) {
+                        if (verName == null && (
+                                lower == "base.apk" ||
+                                    lower == "$pkg.apk" ||
+                                    lower.endsWith("base-master.apk")
+                                )
+                        ) {
                             val tmp = File.createTempFile("inspect_", ".apk", context.cacheDir)
                             try {
                                 tmp.outputStream().use { out -> zis.copyTo(out) }
@@ -366,10 +396,8 @@ private fun loadAllStoredApkItems(context: Context, settings: HelperSettings): L
     val installedCache = mutableMapOf<String, Boolean>()
     val historyEntries = DownloadHistoryStore.entries(context)
     val historyByUri = historyEntries.associateBy { it.uri }
-    val historyByName = historyEntries.associateBy { it.fileName }
 
     val seenUris = LinkedHashSet<String>()
-    val seenNames = HashSet<String>()
     val results = mutableListOf<StoredApkCardItem>()
 
     fun isInstalled(pkg: String): Boolean =
@@ -391,10 +419,8 @@ private fun loadAllStoredApkItems(context: Context, settings: HelperSettings): L
         if (!fileName.hasSupportedArchiveExtension()) return
         if (fileName.endsWith(".part", ignoreCase = true)) return
         if (!seenUris.add(uriKey)) return
-        // Avoid showing duplicate copies of the exact same downloaded file across cache & Downloads
-        if (!seenNames.add(fileName.lowercase(Locale.US))) return
 
-        val history = historyByUri[uriKey] ?: historyByName[fileName]
+        val history = historyByUri[uriKey]
         // Saved at download time. Only older history entries fall back to inspecting the file.
         val saved = history?.details
         val parsedMeta = if (saved != null) {
@@ -612,8 +638,13 @@ private fun loadAllStoredApkItems(context: Context, settings: HelperSettings): L
     return results.sortedByDescending { it.timestamp }
 }
 
-internal fun deleteStoredApkFromEverywhere(context: Context, item: StoredApkCardItem) {
-    // 1. Delete via ContentResolver or direct File path
+internal fun deleteStoredApkFromEverywhere(context: Context, item: StoredApkCardItem): Boolean {
+    // Capture the selected file's identity before deleting it. Copies are only
+    // removed when their bytes match; a same-named unrelated archive is kept.
+    val selectedSize = item.sizeBytes.takeIf { it > 0L } ?: contentLength(context, item.uri)
+    val selectedHash = sha256OfUri(context, item.uri)
+
+    // 1. Delete the selected file itself.
     runCatching {
         if (item.uri.scheme == "content") {
             context.contentResolver.delete(item.uri, null, null)
@@ -621,21 +652,101 @@ internal fun deleteStoredApkFromEverywhere(context: Context, item: StoredApkCard
             item.uri.path?.let { File(it).delete() }
         }
     }
-    // 2. Also remove any matching filename copies in cache/external/legacy Downloads so no orphan remains
-    runCatching { File(context.temporaryDownloadsDir(), item.fileName).delete() }
-    runCatching { context.externalDownloadsDir()?.let { File(it, item.fileName).delete() } }
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        runCatching {
-            context.contentResolver.delete(
-                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                "${MediaStore.Downloads.RELATIVE_PATH} LIKE ? AND ${MediaStore.Downloads.DISPLAY_NAME}=?",
-                arrayOf("${downloadsCopyRelativePath()}%", item.fileName)
-            )
-        }
-    }
     runCatching {
         DocumentFile.fromSingleUri(context, item.uri)?.delete()
     }
+
+    // 2. Verified copies in the app's cache and external files directories.
+    if (selectedHash != null) {
+        deleteVerifiedCopy(
+            File(context.temporaryDownloadsDir(), item.fileName),
+            selectedSize,
+            selectedHash
+        )
+        context.externalDownloadsDir()?.let { dir ->
+            deleteVerifiedCopy(File(dir, item.fileName), selectedSize, selectedHash)
+        }
+
+        // 3. Verified copies in public Downloads/Morphe Helper.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            runCatching {
+                val projection = arrayOf(
+                    MediaStore.Downloads._ID,
+                    MediaStore.Downloads.DISPLAY_NAME,
+                    MediaStore.Downloads.SIZE
+                )
+                context.contentResolver.query(
+                    MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                    projection,
+                    "${MediaStore.Downloads.RELATIVE_PATH} LIKE ? AND ${MediaStore.Downloads.DISPLAY_NAME}=?",
+                    arrayOf("${downloadsCopyRelativePath()}%", item.fileName),
+                    null
+                )?.use { cursor ->
+                    val idCol = cursor.getColumnIndexOrThrow(MediaStore.Downloads._ID)
+                    val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Downloads.SIZE)
+                    while (cursor.moveToNext()) {
+                        if (selectedSize > 0L && cursor.getLong(sizeCol) != selectedSize) continue
+                        val copyUri = ContentUris.withAppendedId(
+                            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                            cursor.getLong(idCol)
+                        )
+                        if (sha256OfUri(context, copyUri) == selectedHash) {
+                            runCatching { context.contentResolver.delete(copyUri, null, null) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Report success only when the selected file is actually gone.
+    return !uriExists(context, item.uri)
+}
+
+private fun deleteVerifiedCopy(file: File, expectedSize: Long, expectedHash: String) {
+    if (!file.isFile) return
+    if (expectedSize > 0L && file.length() != expectedSize) return
+    if (sha256OfFile(file) != expectedHash) return
+    runCatching { file.delete() }
+}
+
+private fun sha256OfFile(file: File): String? = runCatching {
+    file.inputStream().use(::sha256OfStream)
+}.getOrNull()
+
+private fun sha256OfUri(context: Context, uri: Uri): String? = runCatching {
+    val stream = when {
+        uri.scheme == "file" -> uri.path?.let { File(it).inputStream() }
+        else -> context.contentResolver.openInputStream(uri)
+    } ?: return null
+    stream.use(::sha256OfStream)
+}.getOrNull()
+
+private fun sha256OfStream(input: InputStream): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    val buffer = ByteArray(8192)
+    while (true) {
+        val read = input.read(buffer)
+        if (read <= 0) break
+        digest.update(buffer, 0, read)
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
+}
+
+private fun contentLength(context: Context, uri: Uri): Long = runCatching {
+    when {
+        uri.scheme == "file" -> uri.path?.let { File(it).length() } ?: 0L
+        else -> context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: 0L
+    }
+}.getOrDefault(0L)
+
+private fun uriExists(context: Context, uri: Uri): Boolean {
+    if (uri.scheme == "file") return uri.path?.let { File(it).exists() } == true
+    val document = DocumentFile.fromSingleUri(context, uri)
+    if (document != null) return document.exists()
+    return runCatching {
+        context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { true } ?: false
+    }.getOrDefault(false)
 }
 
 //==================================================
@@ -725,20 +836,26 @@ internal fun HelperStandaloneContent(
         if (toDelete.isEmpty()) return
         selectedIds = emptySet()
         scope.launch {
-            withContext(Dispatchers.IO) {
-                toDelete.forEach { deleteStoredApkFromEverywhere(context, it) }
+            val results = withContext(Dispatchers.IO) {
+                toDelete.map { item -> item to deleteStoredApkFromEverywhere(context, item) }
             }
-            DownloadHistoryStore.removeByUris(
-                context = context,
-                uris = toDelete.map { it.id }.toSet(),
-                fileNames = toDelete.map { it.fileName }.toSet()
-            )
-            storedItems = storedItems?.filterNot { target -> toDelete.any { it.id == target.id } }
-            Toast.makeText(
-                context,
-                if (toDelete.size == 1) "Deleted ${toDelete.single().fileName}" else "Deleted ${toDelete.size} files",
-                Toast.LENGTH_SHORT
-            ).show()
+            val deleted = results.filter { it.second }.map { it.first }
+            val failed = results.filterNot { it.second }.map { it.first }
+            if (deleted.isNotEmpty()) {
+                DownloadHistoryStore.removeByUris(
+                    context = context,
+                    uris = deleted.map { it.id }.toSet()
+                )
+            }
+            storedItems = storedItems?.filterNot { target -> deleted.any { it.id == target.id } }
+            val message = when {
+                failed.isEmpty() && deleted.size == 1 -> "Deleted ${deleted.single().fileName}"
+                failed.isEmpty() -> "Deleted ${deleted.size} files"
+                deleted.isEmpty() && failed.size == 1 -> "Could not delete ${failed.single().fileName}"
+                deleted.isEmpty() -> "Could not delete ${failed.size} files"
+                else -> "Deleted ${deleted.size} files. Could not delete ${failed.size}."
+            }
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
     }
 

@@ -173,6 +173,7 @@ internal fun AppBrowserScreen(
     val searchFocusRequester = remember { FocusRequester() }
     val density = LocalDensity.current
     var headerHeightDp by remember { mutableStateOf(0.dp) }
+    var closeBarHeightDp by remember { mutableStateOf(0.dp) }
     val headerHaze = remember { HazeState() }
 
     val isScrolled by remember(listState) {
@@ -469,7 +470,7 @@ internal fun AppBrowserScreen(
                 top = headerHeightDp + 10.dp,
                 start = AppDefaults.ContentPadding,
                 end = AppDefaults.ContentPadding,
-                bottom = bottomContentPadding
+                bottom = if (onBack != null) closeBarHeightDp + 24.dp else bottomContentPadding
             )
         ) {
             // Always show Disclaimer, Filter, and Sort immediately
@@ -787,6 +788,7 @@ internal fun AppBrowserScreen(
                 onClose = onBack,
                 hazeState = headerHaze,
                 showBackground = true,
+                onHeightChanged = { closeBarHeightDp = it },
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
         }

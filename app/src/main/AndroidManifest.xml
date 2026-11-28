@@ -49,10 +49,6 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <receiver
-            android:name=".ReturnToRequestReceiver"
-            android:exported="false" />
-
         <activity
             android:name=".MainActivity"
             android:exported="true"

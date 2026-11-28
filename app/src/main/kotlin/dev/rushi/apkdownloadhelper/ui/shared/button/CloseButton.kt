@@ -44,6 +44,9 @@ internal fun BottomCloseBar(
 ) {
     val density = LocalDensity.current
     val colors = MaterialTheme.colorScheme
+    val navBarHeight = with(density) {
+        WindowInsets.navigationBars.getBottom(this).toDp()
+    }
 
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -57,9 +60,6 @@ internal fun BottomCloseBar(
     Box(modifier = modifier.fillMaxWidth()) {
         // Optional scrim gradient — same stop values used everywhere in the app
         if (showBackground) {
-            val navBarHeight = with(density) {
-                WindowInsets.navigationBars.getBottom(this).toDp()
-            }
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -85,7 +85,10 @@ internal fun BottomCloseBar(
                     else Modifier.fillMaxWidth()
                 )
                 .onSizeChanged { size ->
-                    onHeightChanged?.invoke(with(density) { size.height.toDp() })
+                    val contentHeight = with(density) { size.height.toDp() }
+                    onHeightChanged?.invoke(
+                        if (showBackground) contentHeight + navBarHeight + 24.dp else contentHeight
+                    )
                 }
                 .then(
                     if (showBackground) {

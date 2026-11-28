@@ -65,6 +65,13 @@ class TrackingCheckWorker(
             return Result.retry()
         }
 
+        // Settings can change while the index request is in flight. Do not post
+        // notifications or advance the baseline after either feature is hidden.
+        val latestSettings = applicationContext.loadHelperSettings()
+        if (latestSettings.hideFindAppsTab || latestSettings.hideTracking) {
+            return Result.success()
+        }
+
         val apps = index.apps.associateBy { trackingPackageKey(it.packageName) }
         val seen = TrackingStore.loadSnapshots(context, tracked)
         val notified = TrackingStore.loadNotifiedSnapshots(context, tracked)

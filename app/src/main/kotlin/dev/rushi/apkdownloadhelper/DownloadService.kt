@@ -1,6 +1,5 @@
 package dev.rushi.apkdownloadhelper
 
-import android.app.ActivityManager
 import android.app.Notification
 import android.view.View
 import android.widget.RemoteViews
@@ -8,7 +7,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.BroadcastReceiver
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -125,8 +123,7 @@ internal object DownloadJobManager {
         val epoch: Long = 0,
         // Only Fast Mode asks the user about a version-code mismatch; manual
         // downloads deliver the file as before the check existed.
-        val fastMode: Boolean = false,
-        val callerTaskId: Int = -1
+        val fastMode: Boolean = false
     )
 
     sealed interface Event {
@@ -346,17 +343,7 @@ internal class DownloadService : Service() {
     // so the final notification always matches reality.
     private val mainHandler = Handler(Looper.getMainLooper())
     private val stateRefreshRunnable = Runnable { refreshProgressNotification() }
-    private val pausedRefreshRunnable = Runnable {
-        if (paused && notifCopied != notifPostedCopied) {
-            notifPostedCopied = notifCopied
-            lastPostedPercent = latestPercent
-            lastNotifyTime = SystemClock.elapsedRealtime()
-            val job = DownloadJobManager.activeJob
-            if (job != null) {
-                notifySafe(NOTIFICATION_ID_PROGRESS, buildProgressNotification(job.candidate, latestPercent))
-            }
-        }
-    }
+    private val pausedRefreshRunnable = Runnable { refreshPausedProgressNotification() }
     private var lastNotifyTime = 0L
 
     private val browserUserAgent: String by lazy {
@@ -665,9 +652,7 @@ internal class DownloadService : Service() {
         } else {
             downloadSplitArchive(candidate, files, downloadsDir, maxConnections)
         }
-        transferInProgress = false
-        paused = false
-        stopNotificationRefresh()
+        markTransferFinished()
         emitPostDownloadStatus(
             candidate,
             if (lastShaVerified) "SHA-256 verified \u2713 \u00b7 validating file…" else "Validating downloaded file…"
@@ -700,9 +685,7 @@ internal class DownloadService : Service() {
     }
 
     private fun handleSuccess(job: DownloadJobManager.DownloadJob, file: File) {
-        paused = false
-        transferInProgress = false
-        stopNotificationRefresh()
+        markTransferFinished()
         val request = job.request
         val candidate = job.candidate
         val settings = job.settings
@@ -748,8 +731,7 @@ internal class DownloadService : Service() {
     }
 
     private suspend fun scanAndHandoff(job: DownloadJobManager.DownloadJob, file: File) {
-        paused = false
-        transferInProgress = false
+        markTransferFinished()
         notifPhase = NotifPhase.SCANNING
         val candidate = job.candidate
         val settings = job.settings
@@ -900,9 +882,7 @@ internal class DownloadService : Service() {
     private fun handleFailure(job: DownloadJobManager.DownloadJob, error: Throwable) {
         val message = downloadFailureMessage(job.candidate, error)
         Log.w(TAG, "Download failed for ${job.candidate.packageName}", error)
-        paused = false
-        transferInProgress = false
-        stopNotificationRefresh()
+        markTransferFinished()
         DownloadJobManager.emit(DownloadJobManager.Event.Failed(job.candidate, message, job.epoch))
         notifyFailure(job, message)
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -910,9 +890,7 @@ internal class DownloadService : Service() {
     }
 
     private fun handleCancelled(job: DownloadJobManager.DownloadJob) {
-        paused = false
-        transferInProgress = false
-        stopNotificationRefresh()
+        markTransferFinished()
         DownloadJobManager.emit(DownloadJobManager.Event.Cancelled(job.candidate, job.epoch))
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -943,6 +921,29 @@ internal class DownloadService : Service() {
             NOTIFICATION_ID_PROGRESS,
             buildProgressNotification(job.candidate, latestPercent)
         )
+    }
+
+    /** Coalesced trailing refresh for a throttled progress update while paused. */
+    @Synchronized
+    private fun refreshPausedProgressNotification() {
+        if (!paused || !transferInProgress) return
+        if (notifCopied == notifPostedCopied) return
+        val job = DownloadJobManager.activeJob ?: return
+        notifPostedCopied = notifCopied
+        lastPostedPercent = latestPercent
+        lastNotifyTime = SystemClock.elapsedRealtime()
+        notifySafe(
+            NOTIFICATION_ID_PROGRESS,
+            buildProgressNotification(job.candidate, latestPercent)
+        )
+    }
+
+    /** Ends a transfer under the same monitor as the notification refreshes. */
+    @Synchronized
+    private fun markTransferFinished() {
+        paused = false
+        transferInProgress = false
+        stopNotificationRefresh()
     }
 
     /** Post a pause/resume change now, then re-post so a rate-limit drop cannot stick. */
@@ -989,9 +990,7 @@ internal class DownloadService : Service() {
     private fun cancelDownload() {
         val wasJobActive = downloadJob?.isActive == true
         val job = DownloadJobManager.activeJob
-        paused = false
-        transferInProgress = false
-        stopNotificationRefresh()
+        markTransferFinished()
         downloader.cancelCurrent()
         downloadJob?.cancel()
         scanAbortRequested = true
@@ -1264,7 +1263,19 @@ internal class DownloadService : Service() {
             } else {
                 formatSize(notifCopied)
             }
-            if (paused) "Paused at $sizes" else sizes
+            if (paused) {
+                "Paused at $sizes"
+            } else {
+                buildList {
+                    add(sizes)
+                    val speed = formatSpeed(currentSpeedBytesPerSec)
+                    if (speed.isNotEmpty()) add(speed)
+                    if (currentSpeedBytesPerSec > 0.0 && notifTotal > notifCopied) {
+                        val etaMs = ((notifTotal - notifCopied) / currentSpeedBytesPerSec * 1000.0).toLong()
+                        add("ETA ${formatEta(etaMs)}")
+                    }
+                }.joinToString(" · ")
+            }
         } else null
         val barMax = if (showBytes) 1000 else 100
         val barValue = if (showBytes) {
@@ -1277,17 +1288,7 @@ internal class DownloadService : Service() {
             percent.coerceIn(0, 100)
         }
         val activeJob = DownloadJobManager.activeJob
-        val contentIntent = if (transferInProgress && activeJob != null && activeJob.callerTaskId != -1) {
-            PendingIntent.getBroadcast(
-                this,
-                3,
-                Intent(this, ReturnToRequestReceiver::class.java)
-                    .putExtra(ReturnToRequestReceiver.EXTRA_TASK_ID, activeJob.callerTaskId),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-        } else {
-            requestContentIntent(activeJob?.requestIntentExtras)
-        }
+        val contentIntent = requestContentIntent(activeJob?.requestIntentExtras)
         val cancelIntent = PendingIntent.getService(
             this,
             0,
@@ -1443,29 +1444,6 @@ internal class DownloadService : Service() {
             launch,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-    }
-
-    class ReturnToRequestReceiver : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            val taskId = intent.getIntExtra(EXTRA_TASK_ID, -1)
-            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-            if (taskId != -1 && am != null) {
-                val moved = runCatching {
-                    @Suppress("DEPRECATION")
-                    am.moveTaskToFront(taskId, ActivityManager.MOVE_TASK_WITH_HOME)
-                    true
-                }.getOrDefault(false)
-                if (moved) return
-            }
-            val fallback = context.packageManager.getLaunchIntentForPackage(context.packageName)
-                ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                ?: return
-            context.startActivity(fallback)
-        }
-
-        companion object {
-            const val EXTRA_TASK_ID = "task_id"
-        }
     }
 
     private fun notifySafe(id: Int, notification: Notification) {

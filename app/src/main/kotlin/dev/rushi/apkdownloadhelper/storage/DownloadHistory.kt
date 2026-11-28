@@ -62,6 +62,7 @@ internal object DownloadHistoryStore {
         )
         .create()
     private val entriesType: Type = object : TypeToken<List<DownloadHistoryEntry>>() {}.type
+    private val mutationLock = Any()
 
     /** Incremented whenever entries are added, removed, or cleared so UIs stay in sync. */
     var revision by mutableIntStateOf(0)
@@ -81,28 +82,34 @@ internal object DownloadHistoryStore {
     }
 
     fun add(context: Context, entry: DownloadHistoryEntry) {
-        val updated = (listOf(entry) + entries(context)).take(MAX_ENTRIES)
-        context.getSharedPreferences(PREFS_HISTORY, Context.MODE_PRIVATE)
-            .edit()
-            .putString(KEY_ENTRIES, gson.toJson(updated))
-            .apply()
+        synchronized(mutationLock) {
+            val updated = (listOf(entry) + entries(context)).take(MAX_ENTRIES)
+            context.getSharedPreferences(PREFS_HISTORY, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_ENTRIES, gson.toJson(updated))
+                .apply()
+        }
         revision++
     }
 
     fun removeByUris(context: Context, uris: Set<String>, fileNames: Set<String> = emptySet()) {
         if (uris.isEmpty() && fileNames.isEmpty()) return
-        val updated = entries(context).filterNot {
-            it.uri in uris || (fileNames.isNotEmpty() && it.fileName in fileNames)
+        synchronized(mutationLock) {
+            val updated = entries(context).filterNot {
+                it.uri in uris || (fileNames.isNotEmpty() && it.fileName in fileNames)
+            }
+            context.getSharedPreferences(PREFS_HISTORY, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_ENTRIES, gson.toJson(updated))
+                .apply()
         }
-        context.getSharedPreferences(PREFS_HISTORY, Context.MODE_PRIVATE)
-            .edit()
-            .putString(KEY_ENTRIES, gson.toJson(updated))
-            .apply()
         revision++
     }
 
     fun clear(context: Context) {
-        context.getSharedPreferences(PREFS_HISTORY, Context.MODE_PRIVATE).edit().clear().apply()
+        synchronized(mutationLock) {
+            context.getSharedPreferences(PREFS_HISTORY, Context.MODE_PRIVATE).edit().clear().apply()
+        }
         revision++
     }
 }
@@ -117,15 +124,22 @@ internal fun Context.recordHandOff(
     val obb = obbContentsIn(file)
     val details = runCatching {
         val d = inspectArchiveFile(this, file)
-        StoredDetails(
-            packageName = d.packageName,
-            appName = d.appName,
-            versionName = d.versionName,
-            versionCode = d.versionCode,
-            minSdkVersion = d.minSdkVersion,
-            abis = d.abis,
-            sizeBytes = file.length()
-        )
+        if (d.packageName.isNullOrBlank() && d.appName.isNullOrBlank() &&
+            d.versionName.isNullOrBlank() && d.versionCode == null &&
+            d.minSdkVersion == null && d.abis.isEmpty()
+        ) {
+            null
+        } else {
+            StoredDetails(
+                packageName = d.packageName,
+                appName = d.appName,
+                versionName = d.versionName,
+                versionCode = d.versionCode,
+                minSdkVersion = d.minSdkVersion,
+                abis = d.abis,
+                sizeBytes = file.length()
+            )
+        }
     }.getOrNull()
     if (obb != null) {
         // Worth a log line of its own: a game that will not start is otherwise

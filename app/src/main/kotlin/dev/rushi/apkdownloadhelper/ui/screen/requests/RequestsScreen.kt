@@ -74,11 +74,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import dev.chrisbanes.haze.HazeState
 import dev.rushi.apkdownloadhelper.ui.shared.button.BottomCloseBar
 import dev.rushi.apkdownloadhelper.ui.theme.AppColors
 import dev.rushi.apkdownloadhelper.ui.theme.glassFill
-import dev.rushi.apkdownloadhelper.ui.theme.hazeSourceIfEnabled
 import dev.rushi.apkdownloadhelper.ui.theme.pressScale
 import dev.rushi.apkdownloadhelper.ui.theme.rememberMorphePillShape
 
@@ -216,7 +214,6 @@ internal fun RequestsScreen(
     val pageSelected = LocalPagerPageSelected.current
     val density = LocalDensity.current
     val scheme = MaterialTheme.colorScheme
-    val pageHaze = remember { HazeState() }
     var headerHeightDp by remember { mutableStateOf(0.dp) }
     var footerHeightDp by remember { mutableStateOf(0.dp) }
     BackHandler(enabled = canGoBack || onBack != null) {
@@ -236,7 +233,6 @@ internal fun RequestsScreen(
             factory = { webView },
             modifier = Modifier
                 .fillMaxSize()
-                .hazeSourceIfEnabled(pageHaze)
                 .clipToBounds()
                 .statusBarsPadding()
         )
@@ -249,7 +245,6 @@ internal fun RequestsScreen(
         if (onBack != null) {
             BottomCloseBar(
                 onClose = onBack,
-                hazeState = pageHaze,
                 showBackground = true,
                 onHeightChanged = { footerHeightDp = it },
                 modifier = Modifier.align(Alignment.BottomCenter)

@@ -34,16 +34,15 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
@@ -179,7 +178,9 @@ import dev.rushi.apkdownloadhelper.updater.UpdateInfo
 import dev.rushi.apkdownloadhelper.updater.UpdateManager
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.Cache
@@ -192,6 +193,7 @@ import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.LocalRippleConfiguration
@@ -404,6 +406,7 @@ class MainActivity : ComponentActivity() {
     private var activeDownloadCandidate: DownloadCandidate? = null
     private var pendingSwitchTarget: DownloadCandidate? = null
     private var pendingSwitchOption: CandidateOption? = null
+    private var pendingSwitchJob: Job? = null
     private var switchCandidatePrompt by mutableStateOf<SwitchCandidatePrompt?>(null)
 
     // Non-null while the in-app browser is open for a candidate whose source
@@ -488,11 +491,14 @@ class MainActivity : ComponentActivity() {
                 updatePrompt = prompt
             }
             // Refresh and persist the archive index cache in the background so local opens
-            // and Tracking mode already have up-to-date data on disk.
-            runCatching {
-                dev.rushi.apkdownloadhelper.updater.MorpheArchive.fetchIndex(
-                    context = applicationContext
-                )
+            // and Tracking mode already have up-to-date data on disk. When Find apps is
+            // hidden, helpers read the disk cache through loadCachedIndex instead.
+            if (!helperSettings.hideFindAppsTab) {
+                runCatching {
+                    dev.rushi.apkdownloadhelper.updater.MorpheArchive.fetchIndex(
+                        context = applicationContext
+                    )
+                }
             }
         }
         startRequestLog(request)
@@ -535,6 +541,7 @@ class MainActivity : ComponentActivity() {
             if (selectedStoredApk != null) {
                 lastSelectedStoredApk = selectedStoredApk
             }
+            val pagerStateHolder = rememberSaveableStateHolder()
 
             // --- FIX: Holds the category on screen during the exit animation ---
             var lastActiveCategory by remember { mutableStateOf<SettingsCategory?>(null) }
@@ -598,20 +605,14 @@ class MainActivity : ComponentActivity() {
                             onChallengeTimeout = ::onBrowserChallengeTimeout
                         )
                     } else {
-                        val backgroundModifier =
-                            if (showUpdates || activeSettingsCategory != null || showSourcesScreen || showRequestsScreen || showTrackingScreen || selectedArchiveApp != null || selectedStoredApk != null) {
-                                Modifier
-                                    .focusProperties { canFocus = false }
-                                    .clearAndSetSemantics {}
-                            } else {
-                                Modifier
-                            }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .then(backgroundModifier)
-                        ) {
-                            HomePagerScreen(
+                        val overlayVisible =
+                            showUpdates || activeSettingsCategory != null || showSourcesScreen ||
+                                showRequestsScreen || showTrackingScreen ||
+                                selectedArchiveApp != null || selectedStoredApk != null
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            if (!overlayVisible) {
+                                pagerStateHolder.SaveableStateProvider("home-pager") {
+                                    HomePagerScreen(
                                 requestResetToken = requestResetToken,
                                 hideFindApps = helperSettings.hideFindAppsTab,
                                 animatedBackground = helperSettings.animatedBackground,
@@ -718,6 +719,8 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
+                }
+            }
 
                     val offer = reuseOffer
                     if (offer != null) {
@@ -915,7 +918,7 @@ class MainActivity : ComponentActivity() {
                                     onExportFile = { target ->
                                         lifecycleScope.launch(Dispatchers.IO) {
                                             val result = runCatching {
-                                                val dir = File(cacheDir, "export_tmp").apply { mkdirs() }
+                                                val dir = File(cacheDir, "export_tmp/${UUID.randomUUID()}").apply { mkdirs() }
                                                 val tmp = File(dir, target.fileName)
                                                 try {
                                                     contentResolver.openInputStream(target.uri)?.use { input ->
@@ -923,7 +926,7 @@ class MainActivity : ComponentActivity() {
                                                     } ?: error("Could not read the file")
                                                     copyToDownloads(tmp)
                                                 } finally {
-                                                    runCatching { tmp.delete() }
+                                                    runCatching { dir.deleteRecursively() }
                                                 }
                                             }
                                             withContext(Dispatchers.Main) {
@@ -948,18 +951,29 @@ class MainActivity : ComponentActivity() {
                                         }
                                     },
                                     onDeleteFile = { target ->
-                                        deleteStoredApkFromEverywhere(applicationContext, target)
-                                        DownloadHistoryStore.removeByUris(
-                                            context = applicationContext,
-                                            uris = setOf(target.id),
-                                            fileNames = setOf(target.fileName)
-                                        )
-                                        selectedStoredApk = null
-                                        Toast.makeText(
-                                            this@MainActivity,
-                                            "Deleted ${target.fileName}",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                        lifecycleScope.launch {
+                                            val deleted = withContext(Dispatchers.IO) {
+                                                deleteStoredApkFromEverywhere(applicationContext, target)
+                                            }
+                                            if (deleted) {
+                                                DownloadHistoryStore.removeByUris(
+                                                    context = applicationContext,
+                                                    uris = setOf(target.id)
+                                                )
+                                                selectedStoredApk = null
+                                                Toast.makeText(
+                                                    this@MainActivity,
+                                                    "Deleted ${target.fileName}",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            } else {
+                                                Toast.makeText(
+                                                    this@MainActivity,
+                                                    "Could not delete ${target.fileName}",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                        }
                                     },
                                     onBack = { selectedStoredApk = null },
                                     modifier = Modifier.fillMaxSize()
@@ -1522,6 +1536,8 @@ class MainActivity : ComponentActivity() {
         pendingSwitchSource = null
         pendingSwitchTarget = null
         pendingSwitchOption = null
+        pendingSwitchJob?.cancel()
+        pendingSwitchJob = null
         activeDownloadCandidate = null
         switchCandidatePrompt = null
         autoRetryActive = false
@@ -1976,8 +1992,7 @@ class MainActivity : ComponentActivity() {
                 candidate = pending.candidate,
                 settings = pending.settings,
                 requestIntentExtras = intent.getExtras(),
-                fastMode = fastModeActive,
-                callerTaskId = if (callingActivity != null) taskId else -1
+                fastMode = fastModeActive
             )
         )
         startForegroundService(
@@ -2079,10 +2094,12 @@ class MainActivity : ComponentActivity() {
         pendingSwitchOption = null
         appendLog("Resolving ${source.label} for ${option.labelForLogs} again…", LogLevel.Info)
         uiState = UiState.Loading
-        lifecycleScope.launch {
+        pendingSwitchJob?.cancel()
+        pendingSwitchJob = lifecycleScope.launch {
             val outcome = withContext(Dispatchers.IO) {
                 resolveSourceSection(activeRequest, source, option)
             }
+            ensureActive()
             if (outcome.candidates.isEmpty()) {
                 val message = outcome.notFoundMessage
                     ?: outcome.errorMessage
@@ -2099,6 +2116,7 @@ class MainActivity : ComponentActivity() {
             }
             val candidate = matching.singleOrNull()
             if (candidate != null) {
+                ensureActive()
                 appendLog(
                     "Continuing on ${source.label} with ${candidate.versionDisplay} " +
                         "(${candidate.variantLabel ?: candidate.variantTag ?: candidate.fileKind.uppercase(Locale.US)})."
@@ -2113,6 +2131,7 @@ class MainActivity : ComponentActivity() {
                     "No matching variant was found on ${source.label}. Pick a file to continue."
                 else -> "More than one file matched on ${source.label}. Pick the one you want."
             }
+            ensureActive()
             showSwitchCandidatePrompt(outcome.candidates, source, option, detail)
         }
     }
@@ -2395,6 +2414,11 @@ class MainActivity : ComponentActivity() {
 
     private fun cancelFastMode() {
         sourcePrefetch.cancel()
+        pendingSwitchJob?.cancel()
+        pendingSwitchJob = null
+        pendingSwitchSource = null
+        pendingSwitchTarget = null
+        pendingSwitchOption = null
         if (autoRetryActive) {
             appendLog("Retry cancelled  taking over manually.", LogLevel.Warning)
             autoRetryActive = false
